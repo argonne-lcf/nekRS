@@ -891,8 +891,21 @@ c set partitioner options
       else if (index(c_out,'RCB').eq.1) then
          fluid_partitioner=1
          solid_partitioner=1
+      else if (index(c_out,'RIB').eq.1) then
+         fluid_partitioner=2
+         solid_partitioner=2
+      else if (index(c_out,'UNIFORMX').eq.1) then
+         fluid_partitioner=3
+         solid_partitioner=3
+      else if (index(c_out,'UNIFORMY').eq.1) then
+         fluid_partitioner=4
+         solid_partitioner=4
+      else if (index(c_out,'UNIFORMZ').eq.1) then
+         fluid_partitioner=5
+         solid_partitioner=5
       else if (index(c_out,'METIS').eq.1) then
          fluid_partitioner=8
+         solid_partitioner=8
       endif
 
 c set partitioner options
@@ -902,6 +915,14 @@ c set partitioner options
          fluid_partitioner=0
       else if (index(c_out,'RCB').eq.1) then
          fluid_partitioner=1
+      else if (index(c_out,'RIB').eq.1) then
+         solid_partitioner=2
+      else if (index(c_out,'UNIFORMX').eq.1) then
+         fluid_partitioner=3
+      else if (index(c_out,'UNIFORMY').eq.1) then
+         fluid_partitioner=4
+      else if (index(c_out,'UNIFORMZ').eq.1) then
+         fluid_partitioner=5
       else if (index(c_out,'METIS').eq.1) then
          fluid_partitioner=8
       endif
@@ -913,6 +934,14 @@ c set partitioner options
          solid_partitioner=0
       else if (index(c_out,'RCB').eq.1) then
          solid_partitioner=1
+      else if (index(c_out,'RIB').eq.1) then
+         solid_partitioner=2
+      else if (index(c_out,'UNIFORMX').eq.1) then
+         solid_partitioner=3
+      else if (index(c_out,'UNIFORMY').eq.1) then
+         solid_partitioner=4
+      else if (index(c_out,'UNIFORMZ').eq.1) then
+         solid_partitioner=5
       else if (index(c_out,'METIS').eq.1) then
          solid_partitioner=8
       endif

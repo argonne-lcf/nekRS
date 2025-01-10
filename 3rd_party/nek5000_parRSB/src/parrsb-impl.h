@@ -35,6 +35,8 @@ int rcb(struct array *elements, size_t unit_size, int ndim, struct comm *c,
         buffer *bfr);
 int rib(struct array *elements, size_t unit_size, int ndim, struct comm *c,
         buffer *bfr);
+int uniform(struct array *elements, size_t unit_size, int dim, struct comm *c,
+        buffer *bfr);
 
 //------------------------------------------------------------------------------
 // RSB.

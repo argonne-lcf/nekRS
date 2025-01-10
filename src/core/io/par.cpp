@@ -2088,6 +2088,15 @@ void parseGeneralSection(const int rank, setupAide &options, inipp::Ini *ini)
   }
 }
 
+static std::vector<std::string> partitioners {
+  {"rcb+rsb"}, // Ideally this should just be `rsb` for consistency.
+  {"rcb"},
+  {"rib"},
+  {"uniformx"},
+  {"uniformy"},
+  {"uniformz"},
+};
+
 void parseMeshSection(const int rank, setupAide &options, inipp::Ini *ini)
 {
   if (ini->sections.count("mesh")) {
@@ -2126,7 +2135,8 @@ void parseMeshSection(const int rank, setupAide &options, inipp::Ini *ini)
 
     std::string meshPartitioner;
     if (ini->extract("mesh", "partitioner", meshPartitioner)) {
-      if (meshPartitioner != "rcb" && meshPartitioner != "rcb+rsb") {
+      auto it = std::find(partitioners.begin(), partitioners.end(), meshPartitioner);
+      if (it == partitioners.end()) {
         std::ostringstream error;
         error << "Could not parse mesh::partitioner = " << meshPartitioner;
         append_error(error.str());

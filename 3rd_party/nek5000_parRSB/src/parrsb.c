@@ -276,6 +276,9 @@ static void parrsb_part_mesh_v0(int *part, const long long *const vtx,
     case 0: rsb(&elist, nv, options, comms, bfr); break;
     case 1: rcb(&elist, esize, ndim, &ca, bfr); break;
     case 2: rib(&elist, esize, ndim, &ca, bfr); break;
+    case 3:
+    case 4:
+    case 5: uniform(&elist, esize, options->partitioner - 3, &ca, bfr); break;
     default: break;
     }
   }

@@ -1051,9 +1051,17 @@ int setup(int numberActiveFields)
 
   std::string velocitySolver;
 
-  int meshPartType = 0; // RCB+RSB
+  int meshPartType = 0; // RSB
   if (options->compareArgs("MESH PARTITIONER", "rcb")) {
     meshPartType = 1;
+  } else if (options->compareArgs("MESH PARTITIONER", "rib")) {
+    meshPartType = 2;
+  } else if (options->compareArgs("MESH PARTITIONER", "uniformx")) {
+    meshPartType = 3;
+  } else if (options->compareArgs("MESH PARTITIONER", "uniformy")) {
+    meshPartType = 4;
+  } else if (options->compareArgs("MESH PARTITIONER", "uniformz")) {
+    meshPartType = 5;
   }
 
   double meshConTol = 0.2;
