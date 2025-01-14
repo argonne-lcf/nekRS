@@ -916,7 +916,7 @@ c set partitioner options
       else if (index(c_out,'RCB').eq.1) then
          fluid_partitioner=1
       else if (index(c_out,'RIB').eq.1) then
-         solid_partitioner=2
+         fluid_partitioner=2
       else if (index(c_out,'UNIFORMX').eq.1) then
          fluid_partitioner=3
       else if (index(c_out,'UNIFORMY').eq.1) then
