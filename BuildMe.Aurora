@@ -1,0 +1,25 @@
+#!/bin/bash
+set -e -a
+
+: ${ONEAPI_SDK:="oneapi/eng-compiler/2024.07.30.002"}
+
+#... load the necessary modules here ...
+module reload
+module load ${ONEAPI_SDK}
+module load cmake
+module list
+#...
+
+#... set some environment variables
+export CC=mpicc
+export CXX=mpic++
+export FC=mpif77
+export NEKRS_HOME=/lus/flare/projects/catalyst/proj_shared/bramesh/RECHERCHE/codes/NekRS/argonne-lcf/.local/nekrs
+
+OCCA_CXX=icpx
+OCCA_CXXFLAGS="-O3 -g -fdebug-info-for-profiling -gline-tables-only"
+export SYCL_ROOT=${CMPROOT}/linux
+#...
+
+#./build.sh -DCMAKE_INSTALL_PREFIX=$NEKRS_HOME
+./build.sh -DENABLE_HYPRE_GPU=OFF -DENABLE_ADIOS=OFF -DCMAKE_INSTALL_PREFIX=$NEKRS_HOME
