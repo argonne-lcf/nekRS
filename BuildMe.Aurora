@@ -14,7 +14,7 @@ module list
 export CC=mpicc
 export CXX=mpic++
 export FC=mpif77
-export NEKRS_HOME=/lus/flare/projects/catalyst/proj_shared/bramesh/RECHERCHE/codes/NekRS/argonne-lcf/.local/nekrs
+export NEKRS_HOME=/lus/flare/projects/catalyst/world_shared/bramesh/RECHERCHE/codes/NekRS/argonne-lcf/.local/nekrs
 
 OCCA_CXX=icpx
 OCCA_CXXFLAGS="-O3 -g -fdebug-info-for-profiling -gline-tables-only"
