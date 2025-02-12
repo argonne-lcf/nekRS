@@ -155,12 +155,13 @@ namespace occa
       }
 
       // @note: As of SYCL 2020 this will need to change from `CL/sycl.hpp` to `sycl.hpp`
+      //.. RBK Hacks: changed <CL/sycl.hpp> to <sycl/sycl.hpp>
       void dpcppParser::setupHeaders()
       {
         root.addFirst(
             *(new directiveStatement(
                 &root,
-                directiveToken(root.source->origin, "include <CL/sycl.hpp>\n using namespace sycl;\n"))));
+                directiveToken(root.source->origin, "include <sycl/sycl.hpp>\n using namespace sycl;\n"))));
       }
 
       void dpcppParser::addExtensions()

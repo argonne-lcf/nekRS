@@ -407,7 +407,9 @@ else
     dpcppLibFlags = $(call libraryFlagsFor,sycl)
     ifneq (,$(dpcppLibFlags))
 
-      dpcppIncFlags = $(call includeFlagsFor,CL/sycl.hpp)
+      //.. RBK Hacks
+      //.. dpcppIncFlags = $(call includeFlagsFor,CL/sycl.hpp)
+      dpcppIncFlags = $(call includeFlagsFor,sycl/sycl.hpp)
       ifneq (,$(dpcppIncFlags))
         dpcppEnabled = 1
         paths += $(dpcppIncFlags)

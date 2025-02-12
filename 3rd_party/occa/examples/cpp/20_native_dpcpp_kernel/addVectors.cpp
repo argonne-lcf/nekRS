@@ -1,4 +1,6 @@
-#include <CL/sycl.hpp>
+//.. RBK Hacks
+//.. #include <CL/sycl.hpp>
+#include <sycl/sycl.hpp>
 
 extern "C" void addVectors(::sycl::queue *q,
                            ::sycl::nd_range<3> *ndrange, 

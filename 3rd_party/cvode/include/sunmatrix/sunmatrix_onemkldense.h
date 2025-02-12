@@ -19,7 +19,9 @@
 #define _SUNMATRIX_ONEMKLDENSE_H
 
 #include <stdio.h>
-#include <CL/sycl.hpp>
+//.. RBK Hacks
+//.. #include <CL/sycl.hpp>
+#include <sycl/sycl.hpp>
 
 #include <sundials/sundials_matrix.h>
 #include <sundials/sundials_memory.h>
