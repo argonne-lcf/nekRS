@@ -1,0 +1,24 @@
+#!/bin/bash
+set -e -a
+
+#... load the necessary modules here ...
+module restore
+module use /soft/modulefiles
+module load PrgEnv-gnu
+module load nvhpc-mixed/23.9
+module load craype-accel-nvidia80
+module load cudatoolkit-standalone/12.6.1
+module load craype-x86-milan
+module load spack-pe-base cmake
+#...
+
+#... set some environment variables
+export CC=cc
+export CXX=CC
+export FC=ftn
+export NEKRS_HOME=/lus/eagle/projects/catalyst/world-shared/bramesh/Polaris/Experimental/NekRS/.local/nekrs
+#...
+
+#./nrsconfig -DCMAKE_EXE_LINKER_FLAGS=-no-gcc-rpath -DCMAKE_INSTALL_PREFIX=$NEKRS_HOME
+#./build.sh -DENABLE_HYPRE_GPU=ON -DENABLE_ADIOS=ON -DCMAKE_INSTALL_PREFIX=$NEKRS_HOME
+./build.sh -DCMAKE_INSTALL_PREFIX=$NEKRS_HOME
