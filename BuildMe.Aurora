@@ -14,6 +14,8 @@ module list
 export CC=mpicc
 export CXX=mpic++
 export FC=mpif77
+#.. NOTE: change the location of NEKRS_HOME to a directory that you have access to.
+#.. ^^^^
 export NEKRS_HOME=/lus/flare/projects/catalyst/world_shared/bramesh/RECHERCHE/codes/NekRS/argonne-lcf/.local/nekrs
 
 OCCA_CXX=icpx
@@ -22,4 +24,5 @@ export SYCL_ROOT=${CMPROOT}/linux
 #...
 
 #./build.sh -DCMAKE_INSTALL_PREFIX=$NEKRS_HOME
-./build.sh -DENABLE_HYPRE_GPU=OFF -DENABLE_ADIOS=OFF -DCMAKE_INSTALL_PREFIX=$NEKRS_HOME
+#./build.sh -DENABLE_HYPRE_GPU=OFF -DENABLE_ADIOS=OFF -DCMAKE_INSTALL_PREFIX=$NEKRS_HOME
+./build.sh -DENABLE_ADIOS=ON -DCMAKE_INSTALL_PREFIX=$NEKRS_HOME
