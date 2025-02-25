@@ -16,6 +16,8 @@ module load spack-pe-base cmake
 export CC=cc
 export CXX=CC
 export FC=ftn
+#.. NOTE: change the location of NEKRS_HOME to a directory that you have access to.
+#.. ^^^^
 export NEKRS_HOME=/lus/eagle/projects/catalyst/world-shared/bramesh/Polaris/Experimental/NekRS/.local/nekrs
 #...
 
