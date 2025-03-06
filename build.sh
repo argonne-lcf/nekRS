@@ -11,11 +11,11 @@ if [ -z ${CC} ] || [ -z ${CXX}  ] || [ -z ${FC}  ]; then
   read -p         "Press ENTER to continue with CC=$CC CXX=$CXX FC=$FC or ctrl-c to cancel"
 fi
 
-cmd="cmake -S . -B build -Wfatal-errors $@"
+cmd="cmake -DCMAKE_INSTALL_PREFIX=../install -DENABLE_ASCENT=ON -S . -B ../build -Wfatal-errors $@"
 echo $cmd
 eval $cmd
 if [ $? -eq 0 ] && [ ${NRSCONFIG_NOBUILD} -eq 0 ]; then
-  cmd="cmake --build ./build --target install -j8"
+  cmd="cmake --build ../build --target install -j8"
   echo ""
   echo $cmd
   echo -e "\033[32mPlease check the summary above carefully and press ENTER to continue or ctrl-c to cancel\033[m"

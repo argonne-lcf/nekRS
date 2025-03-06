@@ -156,6 +156,7 @@ set(NEKRS_BUILD_FLOAT ON CACHE BOOL "Build dfloat = float version")
 
 set(ENABLE_CPPTRACE OFF CACHE BOOL "Enable cpptrace for stack tracing")
 
+set(ENABLE_ASCENT ON CACHE BOOL "Enable Insitu ASCENT")
 ###############################################################################
 # Set compiler flags                                                          #
 ###############################################################################
@@ -240,6 +241,10 @@ if (ENABLE_ADIOS)
   add_adios()
 endif()
 
+if(ENABLE_ASCENT)
+  include(cmake/ascent.cmake)
+endif()
+
 add_subdirectory(3rd_party/lapack)
 
 include(cmake/nek5000.cmake)
@@ -295,6 +300,15 @@ if (ENABLE_ADIOS)
   endif()
 endif()
 
+if(ENABLE_ASCENT)
+  target_link_libraries(nekrs-lib PUBLIC ascent-lib)
+  if (NEKRS_BUILD_FLOAT)
+    target_link_libraries(nekrs-lib-fp32 PUBLIC ascent-lib)
+  endif()
+
+  message(STATUS "CXX FLAGS: ${CMAKE_CXX_FLAGS}")
+endif()
+
 target_link_libraries(nekrs-bin PRIVATE nekrs-lib)
 if (NEKRS_BUILD_FLOAT)
   target_link_libraries(nekrs-bin-fp32 PRIVATE nekrs-lib-fp32)
@@ -314,6 +328,12 @@ elseif(OCCA_OPENCL_ENABLED)
 else()
   set(BACKEND_DEFAULT "SERIAL" CACHE STRING "Default occa mode")
   set(NEKRS_GPU_MPI OFF CACHE BOOL "Enable GPU aware MPI" FORCE)
+endif()
+
+if(ENABLE_ASCENT)
+  message(NOTICE "ASCENT in situ library enabled")
+else(ENABLE_ASCENT)
+  message(NOTICE "No in situ libraries enabled")
 endif()
 
 if(NEKRS_GPU_MPI)

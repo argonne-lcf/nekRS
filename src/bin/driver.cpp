@@ -63,6 +63,10 @@
 
 #include "driver.hpp"
 
+#ifdef ASCENT_ENABLED
+#include "../insitu/nekrsAscent.hpp"
+#endif
+
 int main(int argc, char** argv)
 {
   const auto timeStart = std::chrono::high_resolution_clock::now();
@@ -297,7 +301,11 @@ int main(int argc, char** argv)
       }
  
       if (checkpointStep) nekrs::writeCheckpoint(timeNew, tStep);
- 
+#ifdef ASCENT_ENABLED
+      // update insitu
+      NekrsAscent::getInstance().run(timeNew, tStep);
+#endif
+
       MPI_Barrier(comm);
       const double elapsedStep = MPI_Wtime() - timeStartStep;
       tSolveStepMin = std::min(elapsedStep, tSolveStepMin);

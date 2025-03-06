@@ -16,6 +16,10 @@
 #include "compileKernels.hpp"
 #include "tavg.hpp"
 
+#ifdef ASCENT_ENABLED
+#include "insitu/nekrsAscent.hpp"
+#endif
+
 // define extern variable from nekrsSys.hpp
 platform_t *platform;
 
@@ -341,6 +345,18 @@ void setup(MPI_Comm commg_in,
   platform->device.printMemoryUsage(platform->comm.mpiComm);
 
   platform->flopCounter->clear();
+
+#ifdef ASCENT_ENABLED
+  // setup insitu
+  int insituInterval;
+  std::string insituMode, insituNekrsAffinity, insituAscentAffinity;
+  platform->options.getArgs("SOLUTION INSITU INTERVAL", insituInterval);
+  platform->options.getArgs("SOLUTION INSITU MODE", insituMode);
+  platform->options.getArgs("SOLUTION INSITU NEKRS AFFINITY", insituNekrsAffinity);
+  platform->options.getArgs("SOLUTION INSITU ASCENT AFFINITY", insituAscentAffinity);
+
+  NekrsAscent::getInstance().setup(nrs, insituInterval, insituMode, insituNekrsAffinity, insituAscentAffinity);
+#endif
 
   if (rank == 0) {
     std::cout << std::endl;
@@ -684,6 +700,10 @@ int finalize()
   int exitValue = nekrs::exitValue();
   if (platform->options.compareArgs("BUILD ONLY", "FALSE")) {
     nrs->finalize();
+
+#ifdef ASCENT_ENABLED
+    NekrsAscent::getInstance().finalize(); // Finalize Ascent
+#endif
 
     tavg::free();
 

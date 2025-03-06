@@ -1,0 +1,32 @@
+#!/bin/bash
+set -e -a
+
+: ${NRSCONFIG_NOBUILD:=0}
+export CC=cc
+export CXX=CC
+export FC=ftn
+
+if [ -z ${CC} ] || [ -z ${CXX}  ] || [ -z ${FC}  ]; then
+  echo -e "\033[31mWARNING: env-var CC, CXX or FC is not set!\033[m"
+  export CC=mpicc
+  export CXX=mpic++
+  export FC=mpif77
+  read -p         "Press ENTER to continue with CC=$CC CXX=$CXX FC=$FC or ctrl-c to cancel" 
+fi
+
+cmd="cmake -S . -B ../build-openmp -Wfatal-errors -DENABLE_ASCENT_TESTING=ON -DCMAKE_INSTALL_PREFIX=../install-openmp -DAscent_DIR=/lus/grand/projects/visualization/mvictoras/ISAV24/ascent/scripts/build_ascent/install/ascent-develop/lib/cmake/ascent $@" 
+echo $cmd
+eval $cmd 
+if [ $? -eq 0 ] && [ ${NRSCONFIG_NOBUILD} -eq 0 ]; then
+  cmd="cmake --build ../build-openmp --target install -j8" 
+  echo ""    
+  echo $cmd   
+  read -p "Press ENTER to continue or ctrl-c to cancel"
+
+  eval $cmd
+  if [ $? -eq 0 ]; then
+    echo ""
+    echo -e "\033[35mHooray! You're all set. The installation is complete.\033[m"
+    echo ""
+  fi
+fi

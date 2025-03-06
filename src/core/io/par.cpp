@@ -132,6 +132,10 @@ static std::vector<std::string> generalKeys = {
     {"subCycling"},
     {"redirectOutputTo"},
     {"writeControl"},
+    {"insituInterval"},
+    {"insituMode"},
+    {"insituNekrsAffinity"},
+    {"insituAscentAffinity"},
     {"checkpointEngine"},
     {"checkpointControl"},
     {"writeInterval"},
@@ -2051,6 +2055,26 @@ void parseGeneralSection(const int rank, setupAide &options, inipp::Ini *ini)
   std::string writeControl;
   if (!ini->extract("general", "writecontrol", writeControl)) {
     ini->extract("general", "checkpointcontrol", writeControl);
+  }
+
+	double insituInterval = 0;
+  ini->extract("general", "insituinterval", insituInterval);
+  options.setArgs("SOLUTION INSITU INTERVAL", std::to_string(insituInterval));
+
+  std::string insituMode;
+  if(ini->extract("general", "insitumode", insituMode)) {
+    checkValidity(rank, {"synchronous", "asynchronous"}, insituMode);
+    options.setArgs("SOLUTION INSITU MODE", insituMode);
+  }
+
+  std::string insituNekrsAffinity;
+  if(ini->extract("general", "insitunekrsaffinity", insituNekrsAffinity)) {
+    options.setArgs("SOLUTION INSITU NEKRS AFFINITY", insituNekrsAffinity);
+  }
+
+  std::string insituAscentAffinity;
+  if(ini->extract("general", "insituascentaffinity", insituAscentAffinity)) {
+    options.setArgs("SOLUTION INSITU ASCENT AFFINITY", insituAscentAffinity);
   }
 
   if (writeControl.size()) {
