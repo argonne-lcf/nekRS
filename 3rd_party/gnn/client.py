@@ -29,16 +29,29 @@ class OnlineClient:
         self.local_rank = int(os.getenv("PALS_LOCAL_RANKID"))
         self.local_size = int(os.getenv("PALS_LOCAL_SIZE"))
 
-        # initialize the client backend
+        # Initialize timers
+        self.timers = self.setup_timers()
+
+        # Initialize the client backend
         clients = ['smartredis', 'adios']
         if self.backend not in clients:
             sys.exit(f'Client {self.backend} not implemented. '\
                      f'Available options are: {clients}')
         self.init_client(cfg)
 
+    def setup_timers(self) -> dict:
+        """Setup timer dictionary to collect time spent on client ops 
+        """
+        timers= {}
+        timers['init'] = []
+        timers['data'] = []
+        timers['meta_data'] = []
+        return timers
+
     def init_client(self, cfg: DictConfig) -> None:
         """Initialize the client based on the specified backend
         """
+        tic = perf_counter()
         if self.backend == 'smartredis':
             self.db_nodes = cfg.client.db_nodes
             SSDB = os.getenv('SSDB')
@@ -68,12 +81,15 @@ class OnlineClient:
             parameters['DataTransport'] = self.transport # options: MPI, WAN, UCX, RDMA
             parameters['OpenTimeoutSecs'] = '600' # number of seconds producer waits on Open() for consumer
             self.client.set_parameters(parameters)
+        self.timers['init'].append(perf_counter()-tic)
 
     def file_exists(self, file_name: str) -> bool:
         """Check if a file (or key) exists
         """
+        tic = perf_counter()
         if self.backend == 'smartredis':
             return self.client.key_exists(file_name)
+        self.timers['meta_data'].append(perf_counter()-tic)
 
     def get_array(self, file_name: Union[str, Dataset]) -> np.ndarray:
         """Get an array frpm staging area / simulation
@@ -104,6 +120,7 @@ class OnlineClient:
                     count += shape[0] % self.size
                 array = stream.read(var_name, [start], [count])
                 stream.end_step()
+        self.timers['data'].append(perf_counter()-tic)
         return array
     
     def put_array(self, file_name: str, array: np.ndarray) -> None:
@@ -115,6 +132,7 @@ class OnlineClient:
     def get_file_list(self, list_name: str) -> list:
         """Get the list of files to read
         """
+        tic = perf_counter()
         if self.backend == 'smartredis':
             # Ensure the list of DataSets is available
             while True:
@@ -127,17 +145,22 @@ class OnlineClient:
             
             # Grab list of datasets
             file_list = self.client.get_datasets_from_list(list_name)
+        self.timers['meta_data'].append(perf_counter()-tic)
         return file_list
     
     def get_file_list_length(self, list_name: str) -> int:
         """Get the length of the file list
         """
+        tic = perf_counter()
         if self.backend == 'smartredis':
-            return self.client.get_list_length(list_name)
+            list_length = self.client.get_list_length(list_name)
+        self.timers['meta_data'].append(perf_counter()-tic)
+        return list_length
         
     def get_graph_data_from_stream(self) -> dict:
         """Get the entire set of graph datasets from a stream
         """
+        tic = perf_counter()
         graph_data = {}
         if self.backend == 'adios':
             while True:
@@ -192,11 +215,13 @@ class OnlineClient:
                 graph_data['halo_unique_mask'] = stream.read('halo_unique_mask', [start], [count])
                 
                 stream.end_step()
+        self.timers['data'].append(perf_counter()-tic)
         return graph_data
 
     def get_train_data_from_stream(self) -> Tuple[np.ndarray,np.ndarray]:
         """Get the solution from a stream
         """
+        tic = perf_counter()
         if self.backend == 'adios':
             with Stream(self.client, 'solutionStream', 'r', self.comm) as stream:
                 stream.begin_step()
@@ -218,12 +243,14 @@ class OnlineClient:
                 inputs = stream.read('in_u', [start], [count]).reshape((-1,3))
 
                 stream.end_step()
+        self.timers['data'].append(perf_counter()-tic)
         return inputs, outputs
 
     def stop_nekRS(self) -> None:
         """Communicate to nekRS to stop running and exit cleanly
         """
         MLrun = 0
+        tic = perf_counter()
         if self.backend == 'smartredis':
             if self.db_nodes == 1:
                 if self.rank % self.local_size == 0:
@@ -239,5 +266,6 @@ class OnlineClient:
             with Stream('check-run.bp', 'w', self.comm) as stream:
                 if self.rank == 0:
                     stream.write("check-run", MLrun)
+        self.timers['meta_data'].append(perf_counter()-tic)
             
 
