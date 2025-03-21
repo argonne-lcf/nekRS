@@ -188,14 +188,19 @@ def train(cfg: DictConfig,
     global_stats = utils.collect_stats(n_nodes_local, local_time, local_throughput)
     if RANK == 0:
         log.info('Performance metrics:')
-        log.info(f'Total number of graph nodes: {global_stats["n_nodes"]}')
-        log.info(f'Total number of iterations: {trainer.iteration-1}')
+        log.info(f'\tTotal number of graph nodes: {global_stats["n_nodes"]}')
+        log.info(f'\tTotal number of iterations: {trainer.iteration-1}')
         min_val, max_val, avg_val = utils.min_max_avg(global_stats["time"][0])
-        log.info(f'Step time [sec]: min={min_val:.4g}, max={max_val:.4g}, mean={avg_val:.4g}')
+        log.info(f'\tStep time [sec]: min={min_val:.4g}, max={max_val:.4g}, mean={avg_val:.4g}')
         min_val, max_val, avg_val = utils.min_max_avg(global_stats["throughput"][0])
-        log.info(f'Step throughput [million nodes / sec]: min={min_val:.4g}, max={max_val:.4g}, mean={avg_val:.4g}')
-        min_val, max_val, avg_val = utils.min_max_avg(global_stats["glob_throughput"][0])
-        log.info(f'Parallel throughput [million nodes / sec]: min={min_val:.4g}, max={max_val:.4g}, mean={avg_val:.4g}')
+        log.info(f'\tStep throughput [million nodes / sec]: min={min_val:.4g}, max={max_val:.4g}, mean={avg_val:.4g}')
+        min_val, max_val, avg_val = utils.min_max_avg(global_stats["glob_throughput"])
+        log.info(f'\tParallel throughput [million nodes / sec]: min={min_val:.4g}, max={max_val:.4g}, mean={avg_val:.4g}')
+    if cfg.online:
+        gather_transfer_time = COMM.gather(trainer.online_timers['trainDataTime'], root=0)
+        if RANK == 0:
+            min_val, max_val, avg_val = utils.min_max_avg(gather_transfer_time[0])
+            log.info(f'\tTransfer time [sec]: min={min_val:.4g}, max={max_val:.4g}, mean={avg_val:.4g}')
     
     # Print FOM
     gnn_fom = (global_stats["n_nodes"] / 1.0e6) * (trainer.iteration-1) / sum(local_time)
@@ -204,11 +209,13 @@ def train(cfg: DictConfig,
         data_transfer_fom = trainer.online_timers['trainDataThroughput']
         data_transfer_fom_gather = COMM.gather(data_transfer_fom, root=0)
     if RANK == 0:
-        min_val, max_val, avg_val = utils.min_max_avg(gnn_fom_gather[0])
-        log.info(f'/nTrain FOM [million graph nodes x train steps / train time]: min={min_val:.4g}, max={max_val:.4g}, mean={avg_val:.4g}')
+        log.info('FOM:')
+        min_val, max_val, avg_val = utils.min_max_avg(gnn_fom_gather)
+        log.info(f'\tFOM_train [million graph nodes x train steps / train time]: min={min_val:.4g}, max={max_val:.4g}, mean={avg_val:.4g}')
         if cfg.online:
             min_val, max_val, avg_val = utils.min_max_avg(data_transfer_fom_gather[0])
-            log.info(f'/nTransfer FOM [MB / transfer time]: min={min_val:.4g}, max={max_val:.4g}, mean={avg_val:.4g}')
+            unit = 1.0e9 # GB
+            log.info(f'\tFOM_transfer [GB / transfer time]: min={min_val/unit:.4g}, max={max_val/unit:.4g}, mean={avg_val/unit:.4g}')
 
 
 @hydra.main(version_base=None, config_path='./conf', config_name='config')

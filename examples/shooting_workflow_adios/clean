@@ -4,5 +4,5 @@ rm -rf _pyg
 rm affinity_* config.yaml run.sh
 rm -r outputs logs saved_models
 rm turbChannel.par turbChannel.box
-rm -r *.bp
+rm -r *.bp *.sst
 

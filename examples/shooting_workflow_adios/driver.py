@@ -5,7 +5,8 @@ from omegaconf import DictConfig, OmegaConf
 import hydra
 import subprocess
 from time import sleep
-from typing import Optional
+from typing import Optional, Tuple
+from statistics import harmonic_mean
 
 
 class ShootingWorkflow():
@@ -211,14 +212,71 @@ class ShootingWorkflow():
         """Runner function for the workflow responsible for alternating
         between fine-tuning and inference and deploying the components
         """
-        # Start the workflow loop
-        #while True:
         # Fine-tune model
         self.fineTune()
 
-        # Roll-out model
+        # Roll-out model and shoot solution forward
         self.rollout()
-        
+    
+    def compute_fom_nekrs(self) -> float:
+        """Compute the nekRS FOM from reading input and log files
+        """
+        with open('./logs/nekrs_0.out','r') as fh:
+            for l in fh:
+                if 'runtime statistics' in l:
+                    nekrs_steps = int(l.split('(')[-1].split(' ')[0].split('=')[-1])
+                if ' solve ' in l:
+                    nekrs_time = float(l.split('solve')[-1].split('s')[0].strip())
+        with open('./turbChannel.box','r') as fh:
+            for l in fh:
+                if 'nelx' in l:
+                    elms = l.split()
+        elms = elms[:3]
+        elms = [int(item)*-1 for item in elms]
+        with open('./turbChannel.par','r') as fh:
+            for l in fh:
+                if 'polynomialOrder' in l:
+                    p = int(l.split()[-1].strip())
+        num_nodes = elms[0] * elms[1] * elms[2] * (p+1)**3 / 1.0e6
+        return num_nodes * nekrs_steps / nekrs_time
+    
+    def compute_fom_train(self) -> Tuple[float,float]:
+        """Compute the triaing and transfer FOM from reading log files
+        """
+        with open('./logs/train_0.out','r') as fh:
+            for l in fh:
+                if 'FOM_train' in l:
+                    fom_train = float(l.split(']:')[-1].split(',')[-1].split('=')[-1])
+                if 'FOM_transfer' in l:
+                    fom_transfer = float(l.split(']:')[-1].split(',')[-1].split('=')[-1])
+        return fom_train, fom_transfer
+    
+    def compute_fom_inference(self) -> float:
+        """Compute the inference FOM from reading log files
+        """
+        with open('./logs/infer_0.out','r') as fh:
+            for l in fh:
+                if 'FOM_inference' in l:
+                    fom_inference = float(l.split(']:')[-1].split(',')[-1].split('=')[-1])
+        return fom_inference
+    
+    def compute_fom(self) -> None:
+        """Compute the workflow FOM for the fine tuning and shooting stages
+        """
+        fom_nekrs = self.compute_fom_nekrs()
+        fom_train, fom_transfer = self.compute_fom_train()
+        fom_inference = self.compute_fom_inference()
+        print('\n\nWorkflow FOM:')
+        print(f'\tFOM_nekrs [million mesh nodes x nekRS steps / nekRS time] = {fom_nekrs:.4g}')
+        print(f'\tFOM_train [million graph nodes x train steps / train time] = {fom_train:.4g}')
+        print(f'\tFOM_transfer [MB / transfer time] = {fom_transfer:.4g}')
+        print(f'\tFOM_inference [million graph nodes x inference steps / inference time] = {fom_inference:.4g}')
+        fom_finetune = harmonic_mean([fom_nekrs,fom_train,fom_transfer])
+        print(f'\tFOM_finetune = {fom_finetune:.4g}')
+        fom_shoot = fom_inference / fom_nekrs
+        print(f'\tFOM_shoot = {fom_shoot:.4g}')
+        print('\n',flush=True)
+                    
 
 ## Main function
 @hydra.main(version_base=None, config_path="./", config_name="config")
@@ -228,6 +286,9 @@ def main(cfg: DictConfig):
 
     # Run the workflow
     workflow.runner()
+
+    # Compute and print the FOM
+    workflow.compute_fom()
 
     # Quit
     print("Quitting")

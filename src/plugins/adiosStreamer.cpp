@@ -107,7 +107,7 @@ int adios_client_t::check_run()
 void adios_client_t::checkpoint()
 {
     if (_rank == 0)
-        printf("\nWriting checkpoint ...\n");
+        printf("\nWriting checkpoint for GNN inference ...\n");
     std::string fname = "checkpoint.bp";
     unsigned long num_dim = _nrs->mesh->dim;
     unsigned long field_offset = _nrs->fieldOffset;

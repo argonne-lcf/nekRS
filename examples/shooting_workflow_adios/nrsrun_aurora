@@ -20,11 +20,26 @@ set -e
 : ${VENV_PATH:=""}
 #--------------------------------------
 
-cp turbChannel.par.safe turbChannel.par
+#--------------------------------------
+# Copy the .par file
+cp ${1}.par.safe ${1}.par
 
+#--------------------------------------
+# Update the .box file to increase the mesh size linearly with the number of nodes
+NX=$(( 18*SIM_NODES ))
+NZ=$(( 10*SIM_NODES ))
+cp ${1}_1node.box ${1}.box
+sed -i "s/NX/${NX}/g" ${1}.box
+sed -i "s/NZ/${NZ}/g" ${1}.box
+
+#--------------------------------------
+# Run genbox from Nek5000 to generate the .re2 mesh file
+/flare/datascience/balin/Nek/Nek5000/bin/genbox ${1}.box ${1}
+
+#--------------------------------------
+# Setup the case
 source $NEKRS_HOME/bin/nrsqsub_utils
 setup $# 1
-
 chk_case $TOTAL_RANKS
 
 #--------------------------------------
@@ -138,14 +153,6 @@ echo "[ML]" >> $PFILE
 echo "adiosEngine = SST" >> $PFILE
 echo "adiosTransport = WAN" >> $PFILE
 echo "adiosStream = sync" >> $PFILE
-
-#--------------------------------------
-# Update the .box file to increase the mesh size linearly with the number of nodes
-NX=$(( 36*SIM_NODES ))
-NZ=$(( 18*SIM_NODES ))
-cp ${case}_1node.box ${case}.box
-sed -i "s/NX/${NX}/g" ${case}.box
-sed -i "s/NZ/${NZ}/g" ${case}.box
 
 #--------------------------------------
 # Generate the run script

@@ -1090,7 +1090,7 @@ void nrs_t::printRunStat(int step)
   const double tElapsedTime = platform->timer.query("elapsed", "DEVICE:MAX");
 
   if (rank == 0) {
-    std::cout << "\n>>> runtime statistics (step= " << step << "  totalElapsed= " << tElapsedTime << "s"
+    std::cout << "\n>>> runtime statistics (step=" << step << "  totalElapsed=" << tElapsedTime << "s"
               << "):\n";
   }
 

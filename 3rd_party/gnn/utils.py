@@ -135,14 +135,8 @@ def collect_stats(n_nodes_local: int, local_time: list, local_throughput: list) 
     else:
         global_time = None
         global_throughput = None
-    COMM.Reduce(np.array(local_time),
-                         global_time, 
-                         op=MPI.SUM, root=0
-    )
-    COMM.Reduce(np.array(local_throughput),
-                         global_throughput, 
-                         op=MPI.SUM, root=0
-    )
+    global_time = COMM.reduce(np.array(local_time), op=MPI.SUM, root=0)
+    global_throughput = COMM.reduce(np.array(local_throughput), op=MPI.SUM, root=0)
     return {'n_nodes':n_nodes_global, 
             'time':gather_time, 
             'throughput':gather_throughput, 
@@ -159,6 +153,8 @@ def min_max_avg(data: Union[list, np.ndarray]) -> Tuple[float,float,float]:
         min_val = np.amin(data)
         max_val = np.amax(data)
         avg_val = np.mean(data)
+    else:
+        min_val = max_val = avg_val = 0.
     return min_val, max_val, avg_val
 
 
