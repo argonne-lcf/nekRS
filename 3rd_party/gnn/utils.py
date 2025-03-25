@@ -130,17 +130,30 @@ def collect_stats(n_nodes_local: int, local_time: list, local_throughput: list) 
     gather_time = COMM.gather(local_time, root=0)
     gather_throughput = COMM.gather(local_throughput, root=0)
     if RANK == 0:
-        global_time = np.zeros(len(local_time))
         global_throughput = np.zeros(len(local_throughput))
     else:
         global_time = None
         global_throughput = None
-    global_time = COMM.reduce(np.array(local_time), op=MPI.SUM, root=0)
     global_throughput = COMM.reduce(np.array(local_throughput), op=MPI.SUM, root=0)
     return {'n_nodes':n_nodes_global, 
             'time':gather_time, 
             'throughput':gather_throughput, 
-            'glob_time':global_time,
+            'glob_throughput':global_throughput
+            }
+
+def collect_online_stats(local_time: list, local_throughput: list) -> dict:
+    gather_time = COMM.gather(local_time, root=0)
+    gather_time_tot = COMM.gather([sum(local_time)], root=0)
+    gather_throughput = COMM.gather(local_throughput, root=0)
+    if RANK == 0:
+        global_throughput = np.zeros(len(local_throughput))
+    else:
+        global_throughput = None
+    global_throughput = COMM.reduce(np.array(local_throughput), op=MPI.SUM, root=0)
+    return { 
+            'time':gather_time, 
+            'tot_time':gather_time_tot,
+            'throughput':gather_throughput, 
             'glob_throughput':global_throughput
             }
 

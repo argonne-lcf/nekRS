@@ -51,6 +51,7 @@ Tensor = torch.Tensor
 TORCH_FLOAT_DTYPE = torch.float32
 NP_FLOAT_DTYPE = np.float32
 SMALL = 1e-12
+GB_SIZE = 1024**3
 
 try:
     import mpi4py
@@ -882,11 +883,11 @@ class Trainer:
                         {'x': data_x_i, 'y':data_y_i}
                 )
         elif self.cfg.online and self.cfg.client.backend == 'adios':
-            tic = time.time()
-            data_x_i, data_y_i = self.client.get_train_data_from_stream()
-            self.online_timers['trainDataTime'].append(time.time()-tic)
+            data_x_i, data_y_i, ttime = self.client.get_train_data_from_stream()
+            self.online_timers['trainDataTime'].append(ttime)
+            self.online_timers['trainDataSize'].append((data_x_i.nbytes+data_y_i.nbytes)/GB_SIZE)
             self.online_timers['trainDataThroughput'].append(
-                        (data_x_i.nbytes+data_y_i.nbytes)/(time.time()-tic)
+                        self.online_timers['trainDataSize'][-1]/(ttime)
             )
             data_x_i = self.prepare_snapshot_data(data_x_i)
             data_y_i = self.prepare_snapshot_data(data_y_i)
@@ -1127,11 +1128,11 @@ class Trainer:
                     data_y_i = self.prepare_snapshot_data(data_y_i)
                     self.data_list.append({'x': data_x_i, 'y': data_y_i})
         elif self.cfg.client.backend == 'adios':
-            tic = time.time()
-            data_x_i, data_y_i = self.client.get_train_data_from_stream()
-            self.online_timers['trainDataTime'].append(time.time()-tic)
+            data_x_i, data_y_i, ttime = self.client.get_train_data_from_stream()
+            self.online_timers['trainDataTime'].append(ttime)
+            self.online_timers['trainDataSize'].append((data_x_i.nbytes+data_y_i.nbytes)/GB_SIZE)
             self.online_timers['trainDataThroughput'].append(
-                        (data_x_i.nbytes+data_y_i.nbytes)/(time.time()-tic)
+                        self.online_timers['trainDataSize'][-1]/(ttime)
             )
             data_x_i = self.prepare_snapshot_data(data_x_i)
             data_y_i = self.prepare_snapshot_data(data_y_i)
@@ -1186,6 +1187,7 @@ class Trainer:
         timers = {}
         timers['metaData'] = []
         timers['trainDataTime'] = []
+        timers['trainDataSize'] = []
         timers['trainDataThroughput'] = []
         return timers
 

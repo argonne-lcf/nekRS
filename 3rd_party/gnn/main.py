@@ -44,6 +44,7 @@ if WITH_DDP:
     RANK = COMM.Get_rank()
     LOCAL_RANK = int(os.getenv("PALS_LOCAL_RANKID"))
     LOCAL_SIZE = int(os.getenv("PALS_LOCAL_SIZE"))
+    HOST_NAME = MPI.Get_processor_name()
 
     try:
         WITH_CUDA = torch.cuda.is_available()
@@ -193,35 +194,39 @@ def train(cfg: DictConfig,
         min_val, max_val, avg_val = utils.min_max_avg(global_stats["time"][0])
         log.info(f'\tStep time [sec]: min={min_val:.4g}, max={max_val:.4g}, mean={avg_val:.4g}')
         min_val, max_val, avg_val = utils.min_max_avg(global_stats["throughput"][0])
-        log.info(f'\tStep throughput [million nodes / sec]: min={min_val:.4g}, max={max_val:.4g}, mean={avg_val:.4g}')
+        log.info(f'\tLocal step throughput [million nodes / sec]: min={min_val:.4g}, max={max_val:.4g}, mean={avg_val:.4g}')
         min_val, max_val, avg_val = utils.min_max_avg(global_stats["glob_throughput"])
-        log.info(f'\tParallel throughput [million nodes / sec]: min={min_val:.4g}, max={max_val:.4g}, mean={avg_val:.4g}')
+        log.info(f'\tParallel step throughput [million nodes / sec]: min={min_val:.4g}, max={max_val:.4g}, mean={avg_val:.4g}')
     if cfg.online:
-        gather_transfer_time = COMM.gather(trainer.online_timers['trainDataTime'], root=0)
+        glob_online_stats = utils.collect_online_stats(trainer.online_timers['trainDataTime'],trainer.online_timers['trainDataThroughput'])
         if RANK == 0:
-            min_val, max_val, avg_val = utils.min_max_avg(gather_transfer_time[0])
-            log.info(f'\tTransfer time [sec]: min={min_val:.4g}, max={max_val:.4g}, mean={avg_val:.4g}')
+            min_val, max_val, avg_val = utils.min_max_avg(glob_online_stats["time"][0])
+            log.info(f'\tTransfer time per stream [sec]: min={min_val:.4g}, max={max_val:.4g}, mean={avg_val:.4g}')
+            min_val, max_val, avg_val = utils.min_max_avg(glob_online_stats["tot_time"][0])
+            log.info(f'\tTotal transfer time [sec]: min={min_val:.4g}, max={max_val:.4g}, mean={avg_val:.4g}')
+            min_val, max_val, avg_val = utils.min_max_avg(glob_online_stats["throughput"][0])
+            log.info(f'\tLocal transfer throughput [GB / sec]: min={min_val:.4g}, max={max_val:.4g}, mean={avg_val:.4g}')
+            min_val, max_val, avg_val = utils.min_max_avg(glob_online_stats["glob_throughput"])
+            log.info(f'\tParallel transfer throughput [GB / sec]: min={min_val:.4g}, max={max_val:.4g}, mean={avg_val:.4g}')
     
     # Print FOM
     gnn_fom = (global_stats["n_nodes"] / 1.0e6) * (trainer.iteration-1) / sum(local_time)
     gnn_fom_gather = COMM.gather(gnn_fom, root=0)
     if cfg.online:
-        data_transfer_fom = trainer.online_timers['trainDataThroughput']
-        data_transfer_fom_gather = COMM.gather(data_transfer_fom, root=0)
+        data_transfer_fom = glob_online_stats["glob_throughput"]
     if RANK == 0:
         log.info('FOM:')
         min_val, max_val, avg_val = utils.min_max_avg(gnn_fom_gather)
         log.info(f'\tFOM_train [million graph nodes x train steps / train time]: min={min_val:.4g}, max={max_val:.4g}, mean={avg_val:.4g}')
         if cfg.online:
-            min_val, max_val, avg_val = utils.min_max_avg(data_transfer_fom_gather[0])
-            unit = 1.0e9 # GB
-            log.info(f'\tFOM_transfer [GB / transfer time]: min={min_val/unit:.4g}, max={max_val/unit:.4g}, mean={avg_val/unit:.4g}')
+            min_val, max_val, avg_val = utils.min_max_avg(data_transfer_fom)
+            log.info(f'\tFOM_transfer [TB / transfer time]: min={min_val/1024:.4g}, max={max_val/1024:.4g}, mean={avg_val/1024:.4g}')
 
 
 @hydra.main(version_base=None, config_path='./conf', config_name='config')
 def main(cfg: DictConfig) -> None:
     if cfg.verbose:
-        log.info(f'Hello from rank {RANK}/{SIZE}, local rank {LOCAL_RANK}, on device {DEVICE}:{DEVICE_ID+cfg.device_skip} out of {N_DEVICES}.')
+        log.info(f'Hello from rank {RANK}/{SIZE}, local rank {LOCAL_RANK}, on node {HOST_NAME} and device {DEVICE}:{DEVICE_ID+cfg.device_skip} out of {N_DEVICES}.')
     
     if RANK == 0:
         log.info('\n~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~')

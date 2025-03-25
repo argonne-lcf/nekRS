@@ -13,7 +13,7 @@ except ModuleNotFoundError:
 
 # Import ADIOS2
 try:
-    from adios2 import Stream, Adios, bindings
+    from adios2 import Stream, Adios
 except ModuleNotFoundError:
     pass
 
@@ -232,7 +232,10 @@ class OnlineClient:
                 start = count * self.rank
                 if self.rank == self.size - 1:
                     count += shape[0] % self.size
-                outputs = stream.read('out_u', [start], [count]).reshape((-1,3))
+                ticc = perf_counter()
+                outputs = stream.read('out_u', [start], [count])
+                transfer_time = perf_counter() - ticc
+                outputs = outputs.reshape((-1,3))
 
                 arr = stream.inquire_variable('in_u')
                 shape = arr.shape()
@@ -240,11 +243,14 @@ class OnlineClient:
                 start = count * self.rank
                 if self.rank == self.size - 1:
                     count += shape[0] % self.size
-                inputs = stream.read('in_u', [start], [count]).reshape((-1,3))
+                ticc = perf_counter()
+                inputs = stream.read('in_u', [start], [count])
+                transfer_time += perf_counter() - ticc
+                inputs = inputs.reshape((-1,3))
 
                 stream.end_step()
         self.timers['data'].append(perf_counter()-tic)
-        return inputs, outputs
+        return inputs, outputs, transfer_time
 
     def stop_nekRS(self) -> None:
         """Communicate to nekRS to stop running and exit cleanly
@@ -265,7 +271,7 @@ class OnlineClient:
         elif self.backend == 'adios':
             with Stream('check-run.bp', 'w', self.comm) as stream:
                 if self.rank == 0:
-                    stream.write("check-run", MLrun)
+                    stream.write("check-run", np.int32([MLrun]))
         self.timers['meta_data'].append(perf_counter()-tic)
             
 

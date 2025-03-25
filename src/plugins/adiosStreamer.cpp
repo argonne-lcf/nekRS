@@ -1,4 +1,6 @@
 #include <filesystem>
+#include <thread>
+#include <chrono>
 #include "adiosStreamer.hpp"
 
 // Initialize the ADIOS2 client
@@ -63,7 +65,7 @@ adios_client_t::~adios_client_t()
 // check if nekRS should quit
 int adios_client_t::check_run()
 {
-    hlong exit_val;
+    dlong exit_val = 1;
     int exists;
     std::string fname = "check-run.bp";
 
@@ -81,18 +83,16 @@ int adios_client_t::check_run()
 
     // Read check-run file if exists
     if (exists) {
+        std::this_thread::sleep_for(std::chrono::milliseconds(500));
         adios2::Engine reader = _write_io.Open(fname, adios2::Mode::Read);
         reader.BeginStep();
-        adios2::Variable<hlong> var = _write_io.InquireVariable<hlong>("check-run");
+        adios2::Variable<dlong> var = _write_io.InquireVariable<dlong>("check-run");
         if (_rank == 0 and var) {
             reader.Get(var, &exit_val);
         }
         reader.EndStep();
         reader.Close();
         MPI_Bcast(&exit_val, 1, MPI_INT, 0, _comm);
-
-    } else {
-        exit_val = 1;
     }
 
     if (exit_val == 0 && _rank == 0) {

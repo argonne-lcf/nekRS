@@ -45,6 +45,7 @@ if WITH_DDP:
     RANK = COMM.Get_rank()
     LOCAL_RANK = int(os.getenv("PALS_LOCAL_RANKID"))
     LOCAL_SIZE = int(os.getenv("PALS_LOCAL_SIZE"))
+    HOST_NAME = MPI.Get_processor_name()
 
     try:
         WITH_CUDA = torch.cuda.is_available()
@@ -274,7 +275,7 @@ def inference_rollout(cfg: DictConfig,
 @hydra.main(version_base=None, config_path='./conf', config_name='config')
 def main(cfg: DictConfig) -> None:
     if cfg.verbose:
-        log.info(f'Hello from rank {RANK}/{SIZE}, local rank {LOCAL_RANK}, on device {DEVICE}:{DEVICE_ID} out of {N_DEVICES}.')
+        log.info(f'Hello from rank {RANK}/{SIZE}, local rank {LOCAL_RANK}, on node {HOST_NAME} and device {DEVICE}:{DEVICE_ID+cfg.device_skip} out of {N_DEVICES}.')
     
     if RANK == 0:
         log.info('\n~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~')

@@ -4,9 +4,12 @@ set -a
 SYSTEM="aurora"
 DEPLOYMENT="clustered"
 NEKRS_HOME="/flare/datascience/balin/Nek/nekRSv24/exe/nekrsv24"
+WORK_DIR=$PWD
 VENV_PATH=""
 PROJ_ID="datascience"
-QUEUE="debug"
+QUEUE="debug-scaling"
+NODES=4
+TIME=1:00
 
 if [ ${SYSTEM} == "aurora" ]; then
   module load frameworks
@@ -30,25 +33,23 @@ echo "    system: ${SYSTEM}"
 echo "    deployment: ${DEPLOYMENT}"
 echo
 
-script_name=nrsrun_${SYSTEM}
+script_name=nrsqsub_${SYSTEM}
 if [ ${DEPLOYMENT} == "colocated" ]; then
-  NODES=`cat $PBS_NODEFILE | wc -l`
-  NEKRS_HOME=$NEKRS_HOME \
+  NEKRS_HOME=$NEKRS_HOME WORK_DIR=$WORK_DIR \
   PROJ_ID=$PROJ_ID \
   QUEUE=$QUEUE \
   DEPLOYMENT=$DEPLOYMENT \
   VENV_PATH=$VENV_PATH \
   SIM_NODES=$NODES TRAIN_NODES=$NODES \
-  ./${script_name} turbChannel $NODES 00:30
+  ./${script_name} turbChannel $NODES $TIME
 elif [ ${DEPLOYMENT} == "clustered" ]; then
-  NODES=`cat $PBS_NODEFILE | wc -l`
   echo "Running on $NODES total nodes"
   echo "Enter the number of simulation nodes"
   read SIM_NODES
   echo "and trainer nodes to use"
   read TRAIN_NODES
   CPU_BIND_LIST="1:8:16:24:32:40:53:60:68:76:84:92"
-  NEKRS_HOME=$NEKRS_HOME \
+  NEKRS_HOME=$NEKRS_HOME WORK_DIR=$WORK_DIR \
   PROJ_ID=$PROJ_ID \
   QUEUE=$QUEUE \
   DEPLOYMENT=$DEPLOYMENT \
@@ -56,7 +57,7 @@ elif [ ${DEPLOYMENT} == "clustered" ]; then
   SIM_NODES=$SIM_NODES TRAIN_NODES=$TRAIN_NODES \
   SIM_CPU_BIND_LIST=$CPU_BIND_LIST TRAIN_CPU_BIND_LIST=$CPU_BIND_LIST \
   SIM_RANKS_PER_NODE=12 TRAIN_RANKS_PER_NODE=12 \
-  ./${script_name} turbChannel $NODES 00:30
+  ./${script_name} turbChannel $NODES $TIME
 else
   echo Please select between clustered and colocated deployment of the workflow
 fi
