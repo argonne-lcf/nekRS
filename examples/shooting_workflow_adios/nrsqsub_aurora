@@ -128,7 +128,7 @@ echo "# Simulation config" >> $CFILE
 echo "sim:" >> $CFILE
 echo "    executable: \"${NEKRS_HOME}/bin/nekrs\"" >> $CFILE
 echo "    arguments: \"--setup ${case}.par --backend ${NEKRS_BACKEND} --device-id 0\"" >> $CFILE
-echo "    affinity: \"./${SAFF_FILE}\"" >> $CFILE
+echo "    affinity: \"${SAFF_FILE}\"" >> $CFILE
 echo "" >> $CFILE
 echo "# Trainer config" >> $CFILE
 echo "train:" >> $CFILE
