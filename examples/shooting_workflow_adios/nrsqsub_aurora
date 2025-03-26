@@ -172,7 +172,7 @@ echo "#PBS -q debug-scaling" >>$SFILE
 echo "#PBS -k doe" >>$SFILE
 echo "#PBS -j oe" >>$SFILE
 
-echo -e "\ncd $PBS_O_WORKDIR" >> $SFILE
+echo -e "\ncd \$PBS_O_WORKDIR" >> $SFILE
 echo "export TZ='/usr/share/zoneinfo/US/Central'" >> $SFILE
 
 echo -e "\necho Jobid: \$PBS_JOBID" >>$SFILE
