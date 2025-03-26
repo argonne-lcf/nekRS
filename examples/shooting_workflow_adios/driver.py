@@ -227,6 +227,8 @@ class ShootingWorkflow():
                     nekrs_steps = int(l.split('(')[-1].split(' ')[0].split('=')[-1])
                 if ' solve ' in l:
                     nekrs_time = float(l.split('solve')[-1].split('s')[0].strip())
+                if ' udfExecuteStep ' in l:
+                    udf_time = float(l.split('udfExecuteStep')[-1].split('s')[0].strip())
         with open('./turbChannel.box','r') as fh:
             for l in fh:
                 if 'nelx' in l:
@@ -238,7 +240,7 @@ class ShootingWorkflow():
                 if 'polynomialOrder' in l:
                     p = int(l.split()[-1].strip())
         num_nodes = elms[0] * elms[1] * elms[2] * (p+1)**3 / 1.0e6
-        return num_nodes * nekrs_steps / nekrs_time
+        return num_nodes * nekrs_steps / (nekrs_time - udf_time)
     
     def compute_fom_train(self) -> Tuple[float,float]:
         """Compute the triaing and transfer FOM from reading log files

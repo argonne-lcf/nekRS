@@ -91,7 +91,7 @@ class OnlineClient:
             return self.client.key_exists(file_name)
         self.timers['meta_data'].append(perf_counter()-tic)
 
-    def get_array(self, file_name: Union[str, Dataset]) -> np.ndarray:
+    def get_array(self, file_name) -> np.ndarray:
         """Get an array frpm staging area / simulation
         """
         tic = perf_counter()

@@ -2,7 +2,7 @@
 set -a
 
 SYSTEM="aurora"
-DEPLOYMENT="clustered"
+DEPLOYMENT="colocated"
 NEKRS_HOME="/flare/datascience/balin/Nek/nekRSv24/exe/nekrsv24"
 VENV_PATH=""
 PROJ_ID="datascience"

@@ -1087,6 +1087,7 @@ void nrs_t::printRunStat(int step)
   double gsTime = ogsTime(/* reportHostTime */ true);
   MPI_Allreduce(MPI_IN_PLACE, &gsTime, 1, MPI_DOUBLE, MPI_MAX, comm_);
 
+  // Total elapsed time (more than just solve)
   const double tElapsedTime = platform->timer.query("elapsed", "DEVICE:MAX");
 
   if (rank == 0) {
@@ -1106,10 +1107,12 @@ void nrs_t::printRunStat(int step)
               << "calls\n";
   }
 
-  const double tElapsedTimeSolve = platform->timer.query("elapsedStepSum", "DEVICE:MAX");
-  platform->timer.printStatSetElapsedTimeSolve(tElapsedTimeSolve);
+  // Setup time
   const double tSetup = platform->timer.query("setup", "DEVICE:MAX");
 
+  // Total solve time (iuncluding UDF_ExecuteStep)
+  const double tElapsedTimeSolve = platform->timer.query("elapsedStepSum", "DEVICE:MAX");
+  platform->timer.printStatSetElapsedTimeSolve(tElapsedTimeSolve);
   const double tMinSolveStep = platform->timer.query("minSolveStep", "DEVICE:MAX");
   const double tMaxSolveStep = platform->timer.query("maxSolveStep", "DEVICE:MAX");
 
@@ -1145,6 +1148,9 @@ void nrs_t::printRunStat(int step)
     return tag.find("neknek_t::") != std::string::npos && tag.find("localEvalKernel") != std::string::npos;
   };
 
+  const double tudf = platform->timer.query("udfExecuteStep", "HOST:MAX");
+  platform->timer.printStatEntry("  udfExecuteStep                 ", tudf, tudf);
+
   platform->timer.printStatEntry("    checkpointing       ",
                                  "checkpointing",
                                  "DEVICE:MAX",
@@ -1153,7 +1159,7 @@ void nrs_t::printRunStat(int step)
                                  "udfExecuteStep",
                                  "DEVICE:MAX",
                                  tElapsedTimeSolve);
-  const double tudf = platform->timer.query("udfExecuteStep", "DEVICE:MAX");
+  //const double tudf = platform->timer.query("udfExecuteStep", "DEVICE:MAX");
   platform->timer.printStatEntry("      lpm integrate     ", "lpm_t::integrate", "DEVICE:MAX", tudf);
   const double tlpm = platform->timer.query("lpm_t::integrate", "DEVICE:MAX");
   platform->timer.printStatEntry("        userRHS         ", "lpm_t::integrate::userRHS", "DEVICE:MAX", tlpm);

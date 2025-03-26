@@ -136,7 +136,7 @@ echo "    executable: \"${NEKRS_HOME}/3rd_party/gnn/main.py\"" >> $CFILE
 #echo "    affinity: \"./${TAFF_FILE}\"" >> $CFILE
 echo "    affinity: \"\"" >> $CFILE
 if [ ${DEPLOYMENT} == "colocated"  ]; then
-  echo "    arguments: \"device_skip=${SIM_RANKS_PER_NODE} backend=ccl halo_swap_mode=all_to_all_opt online=True client.backend=adios consistency=True time_dependency=time_dependent verbose=True\"" >> $CFILE
+  echo "    arguments: \"device_skip=${SIM_RANKS_PER_NODE} backend=ccl halo_swap_mode=all_to_all_opt online=True client.backend=adios client.adios_transport=RDMA consistency=True time_dependency=time_dependent verbose=True\"" >> $CFILE
 elif [ ${DEPLOYMENT} == "clustered"  ]; then
   echo "    arguments: \"backend=ccl halo_swap_mode=all_to_all_opt online=True client.backend=adios consistency=True time_dependency=time_dependent verbose=True\"" >> $CFILE
 fi
@@ -154,7 +154,7 @@ PFILE=${case}.par
 echo "" >> $PFILE
 echo "[ML]" >> $PFILE
 echo "adiosEngine = SST" >> $PFILE
-echo "adiosTransport = WAN" >> $PFILE
+echo "adiosTransport = RDMA" >> $PFILE
 echo "adiosStream = sync" >> $PFILE
 
 #--------------------------------------
@@ -189,13 +189,11 @@ echo "export NEKRS_GPU_MPI=$NEKRS_GPU_MPI" >>$SFILE
 
 echo "export OCCA_DPCPP_COMPILER_FLAGS=\"$OCCA_DPCPP_COMPILER_FLAGS\"" >> $SFILE
 
-# Workaround for MPICH 52.2 see https://docs.alcf.anl.gov/aurora/known-issues/
-#echo "unset MPIR_CVAR_CH4_COLL_SELECTION_TUNING_JSON_FILE" >> $SFILE
-#echo "unset MPIR_CVAR_COLL_SELECTION_TUNING_JSON_FILE" >> $SFILE
-#echo "unset MPIR_CVAR_CH4_POSIX_COLL_SELECTION_TUNING_JSON_FILE" >> $SFILE
-
 # Cray MPI libfabric defaults
 echo -e "\n# MPI vars" >>$SFILE
+echo "unset MPIR_CVAR_CH4_COLL_SELECTION_TUNING_JSON_FILE" >> $SFILE
+echo "unset MPIR_CVAR_COLL_SELECTION_TUNING_JSON_FILE" >> $SFILE
+echo "unset MPIR_CVAR_CH4_POSIX_COLL_SELECTION_TUNING_JSON_FILE" >> $SFILE
 echo "export FI_CXI_RDZV_THRESHOLD=16384" >> $SFILE
 echo "export FI_CXI_RDZV_EAGER_SIZE=2048" >> $SFILE
 echo "export FI_CXI_DEFAULT_CQ_SIZE=131072" >> $SFILE
@@ -212,6 +210,16 @@ echo "export FI_CXI_REQ_BUF_MIN_POSTED=6" >> $SFILE
 echo "export FI_CXI_RX_MATCH_MODE=hybrid" >> $SFILE # required by parRSB
 
 echo -e "\n# oneCCL vars" >>$SFILE
+echo "export CCL_PROCESS_LAUNCHER=pmix" >>$SFILE
+echo "export CCL_ATL_TRANSPORT=mpi" >>$SFILE
+echo "export CCL_ALLREDUCE_SCALEOUT=direct:0-1048576;rabenseifner:1048577-max" >>$SFILE
+echo "export CCL_BCAST=double_tree" >>$SFILE
+echo "export CCL_KVS_MODE=mpi" >>$SFILE
+echo "export CCL_CONFIGURATION_PATH=\"\"" >>$SFILE
+echo "export CCL_CONFIGURATION=cpu_gpu_dpcpp" >>$SFILE
+echo "export CCL_KVS_CONNECTION_TIMEOUT=600" >>$SFILE
+echo "export CCL_ZE_CACHE_OPEN_IPC_HANDLES_THRESHOLD=1024" >>$SFILE
+echo "export CCL_KVS_USE_MPI_RANKS=1" >>$SFILE
 echo "export CCL_ALLTOALLV_MONOLITHIC_KERNEL=0" >> $SFILE
 
 echo -e "\n# ADIOS2 vars" >>$SFILE
