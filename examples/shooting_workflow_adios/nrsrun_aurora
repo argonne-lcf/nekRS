@@ -31,9 +31,15 @@ SIM_PROCS=$(( SIM_NODES * SIM_RANKS_PER_NODE ))
 #NZ=$(( 10*SIM_NODES ))
 NX=$(( 13 ))
 NZ=$(( 2*SIM_PROCS ))
+if [[ "$SIM_NODES" -gt 1 ]]; then
+    LZ=$SIM_NODES
+else
+    LZ=1
+fi
 cp ${1}_aurora.box ${1}.box
 sed -i "s/NX/${NX}/g" ${1}.box
 sed -i "s/NZ/${NZ}/g" ${1}.box
+sed -i "s/LZ/${LZ}/g" ${1}.box
 
 #--------------------------------------
 # Run genbox from Nek5000 to generate the .re2 mesh file
