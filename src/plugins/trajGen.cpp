@@ -224,7 +224,7 @@ void trajGen_t::trajGenWriteADIOS(adios_client_t* client,
     }
 
     if (send_data) {
-        if (rank == 0 and verbose) {
+        if (rank == 0) {
             printf("[TRAJ WRITE ADIOS] -- Writing data at tstep %d and physical time %g \n", tstep, time);
         }
         adios2::Engine solWriter = client->_stream_io.Open("solutionStream", adios2::Mode::Write);
@@ -238,7 +238,7 @@ void trajGen_t::trajGenWriteADIOS(adios_client_t* client,
         solWriter.EndStep();
         solWriter.Close();
         MPI_Barrier(comm);
-        if (rank == 0 and verbose) {
+        if (rank == 0) {
             printf("[TRAJ WRITE ADIOS] -- Done writing data\n");
         }
     }

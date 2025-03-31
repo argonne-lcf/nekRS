@@ -564,10 +564,31 @@ class Trainer:
             graph_data = self.client.get_graph_data_from_stream()
             self.Np = graph_data['Np']
             pos = graph_data['pos']
+            #np.savetxt(f'./pos_{RANK}.txt',pos)
+            #pos_ref = np.fromfile(f"/flare/datascience/balin/Nek/nekRSv24/nekRS/examples/tgv_gnn_traj_offline/ref/gnn_outputs_poly_7/pos_node_rank_{RANK}_size_{SIZE}.bin", dtype=np.float64).reshape((-1,3))
+            #assert np.allclose(pos,pos_ref)
+            
             gli = graph_data['global_ids']
-            ei = graph_data['edge_index']
+            #gli_ref = np.fromfile(f"/flare/datascience/balin/Nek/nekRSv24/nekRS/examples/tgv_gnn_traj_offline/ref/gnn_outputs_poly_7/global_ids_rank_{RANK}_size_{SIZE}.bin",dtype=np.int64).reshape((-1,1))
+            #print(gli[:5],gli_ref[:5])
+            #assert np.allclose(gli,gli_ref)
+            
             local_unique_mask = graph_data['local_unique_mask']
+            #umask_ref = np.fromfile(f"/flare/datascience/balin/Nek/nekRSv24/nekRS/examples/tgv_gnn_traj_offline/ref/gnn_outputs_poly_7/local_unique_mask_rank_{RANK}_size_{SIZE}.bin",dtype=np.int32)
+            #assert np.allclose(local_unique_mask,umask_ref)
+            #np.savetxt(f'./umask_{RANK}.txt',local_unique_mask.reshape(-1,1))
+            
             halo_unique_mask = graph_data['halo_unique_mask']
+            #hmask_ref = np.fromfile(f"/flare/datascience/balin/Nek/nekRSv24/nekRS/examples/tgv_gnn_traj_offline/ref/gnn_outputs_poly_7/halo_unique_mask_rank_{RANK}_size_{SIZE}.bin",dtype=np.int32)
+            #assert np.allclose(halo_unique_mask,hmask_ref)
+            
+            ei = graph_data['edge_index']
+            ei = ei.astype(np.int64)
+            #np.savetxt(f'./ei_{RANK}.txt',ei.T)
+            #ei_ref = np.fromfile(f"/flare/datascience/balin/Nek/nekRSv24/nekRS/examples/tgv_gnn_traj_offline/ref/gnn_outputs_poly_7/edge_index_rank_{RANK}_size_{SIZE}.bin", dtype=np.int32).reshape((-1,2)).T
+            #ei_ref = ei_ref.astype(np.int64)
+            #print(ei[:,:5],ei_ref[:,:5])
+            #assert np.allclose(ei,ei_ref)
         else:
             path_to_pos_full = main_path + 'pos_node_rank_%d_size_%d' %(RANK,SIZE)
             path_to_ei = main_path + 'edge_index_rank_%d_size_%d' %(RANK,SIZE)
@@ -883,17 +904,19 @@ class Trainer:
                         {'x': data_x_i, 'y':data_y_i}
                 )
         elif self.cfg.online and self.cfg.client.backend == 'adios':
-            data_x_i, data_y_i, ttime = self.client.get_train_data_from_stream()
-            self.online_timers['trainDataTime'].append(ttime)
-            self.online_timers['trainDataSize'].append((data_x_i.nbytes+data_y_i.nbytes)/GB_SIZE)
-            self.online_timers['trainDataThroughput'].append(
-                        self.online_timers['trainDataSize'][-1]/(ttime)
-            )
-            data_x_i = self.prepare_snapshot_data(data_x_i)
-            data_y_i = self.prepare_snapshot_data(data_y_i)
-            self.data_list.append(
-                    {'x': data_x_i, 'y':data_y_i}
-            )
+            iter = 5 if self.cfg.target_loss != 0 else 1
+            for i in range(iter):
+                data_x_i, data_y_i, ttime = self.client.get_train_data_from_stream()
+                self.online_timers['trainDataTime'].append(ttime)
+                self.online_timers['trainDataSize'].append((data_x_i.nbytes+data_y_i.nbytes)/GB_SIZE)
+                self.online_timers['trainDataThroughput'].append(
+                            self.online_timers['trainDataSize'][-1]/(ttime)
+                )
+                data_x_i = self.prepare_snapshot_data(data_x_i)
+                data_y_i = self.prepare_snapshot_data(data_y_i)
+                self.data_list.append(
+                        {'x': data_x_i, 'y':data_y_i}
+                )
 
         # split into train/validation
         data = {'train': [], 'validation': []}

@@ -165,53 +165,47 @@ class OnlineClient:
         if self.backend == 'adios':
             while True:
                 if os.path.exists('./graph.bp'):
+                    sleep(1)
                     break
                 else:
-                    sleep(1)
+                    sleep(2)
             #with Stream(self.client, 'graphStream', 'r', self.comm) as stream:
             with Stream('graph.bp', 'r', self.comm) as stream:
                 stream.begin_step()
                 
                 graph_data['Np'] = int(stream.read('Np'))
 
+                arr = stream.inquire_variable('N')
+                N = stream.read('N', [self.rank], [1])
+                self.N_list = self.comm.allgather(N)
+
+                arr = stream.inquire_variable('num_edges')
+                num_edges = stream.read('num_edges', [self.rank], [1])
+                self.num_edges_list = self.comm.allgather(num_edges)
+
                 arr = stream.inquire_variable('pos_node')
-                shape = arr.shape()
-                count = int(shape[0] / self.size)
-                start = count * self.rank
-                if self.rank == self.size - 1:
-                    count += shape[0] % self.size
-                graph_data['pos'] = stream.read('pos_node', [start], [count]).reshape((-1,3))
+                count = N * 3
+                start = sum(self.N_list[:self.rank]) * 3
+                graph_data['pos'] = stream.read('pos_node', [start], [count]).reshape((-1,3),order='F')
 
                 arr = stream.inquire_variable('edge_index')
-                shape = arr.shape()
-                count = int(shape[0] / self.size)
-                start = count * self.rank
-                if self.rank == self.size - 1:
-                    count += shape[0] % self.size
-                graph_data['edge_index'] = stream.read('edge_index', [start], [count]).reshape((-1,2)).T
+                count = num_edges * 2
+                start = sum(self.num_edges_list[:self.rank]) * 2
+                graph_data['edge_index'] = stream.read('edge_index', [start], [count]).reshape((-1,2),order='F').T
 
                 arr = stream.inquire_variable('global_ids')
-                shape = arr.shape()
-                count = int(shape[0] / self.size)
-                start = count * self.rank
-                if self.rank == self.size - 1:
-                    count += shape[0] % self.size
-                graph_data['global_ids'] = stream.read('global_ids', [start], [count]).reshape((-1,1))
+                count = N
+                start = sum(self.N_list[:self.rank])
+                graph_data['global_ids'] = stream.read('global_ids', [start], [count])
 
                 arr = stream.inquire_variable('local_unique_mask')
-                shape = arr.shape()
-                count = int(shape[0] / self.size)
-                start = count * self.rank
-                if self.rank == self.size - 1:
-                    count += shape[0] % self.size
+                count = N
+                start = sum(self.N_list[:self.rank])
                 graph_data['local_unique_mask'] = stream.read('local_unique_mask', [start], [count])
 
                 arr = stream.inquire_variable('halo_unique_mask')
-                shape = arr.shape()
-                count = int(shape[0] / self.size)
-                start = count * self.rank
-                if self.rank == self.size - 1:
-                    count += shape[0] % self.size
+                count = N
+                start = sum(self.N_list[:self.rank])
                 graph_data['halo_unique_mask'] = stream.read('halo_unique_mask', [start], [count])
                 
                 stream.end_step()
@@ -227,26 +221,20 @@ class OnlineClient:
                 stream.begin_step()
 
                 arr = stream.inquire_variable('out_u')
-                shape = arr.shape()
-                count = int(shape[0] / self.size)
-                start = count * self.rank
-                if self.rank == self.size - 1:
-                    count += shape[0] % self.size
+                count = self.N_list[self.rank] * 3
+                start = sum(self.N_list[:self.rank]) * 3
                 ticc = perf_counter()
                 outputs = stream.read('out_u', [start], [count])
                 transfer_time = perf_counter() - ticc
-                outputs = outputs.reshape((-1,3))
+                outputs = outputs.reshape((-1,3),order='F')
 
                 arr = stream.inquire_variable('in_u')
-                shape = arr.shape()
-                count = int(shape[0] / self.size)
-                start = count * self.rank
-                if self.rank == self.size - 1:
-                    count += shape[0] % self.size
+                count = self.N_list[self.rank] * 3
+                start = sum(self.N_list[:self.rank]) * 3
                 ticc = perf_counter()
                 inputs = stream.read('in_u', [start], [count])
                 transfer_time += perf_counter() - ticc
-                inputs = inputs.reshape((-1,3))
+                inputs = inputs.reshape((-1,3),order='F')
 
                 stream.end_step()
         self.timers['data'].append(perf_counter()-tic)

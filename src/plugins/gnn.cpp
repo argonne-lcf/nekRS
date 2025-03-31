@@ -248,12 +248,16 @@ void gnn_t::gnnWriteADIOS(adios_client_t* client)
     auto globInts = client->_write_io.DefineVariable<hlong>("global_ids", {_size * _N}, {_rank * _N}, {_N});
     auto edgeInts = client->_write_io.DefineVariable<dlong>("edge_index", {_size * 2 * _num_edges}, {_rank * 2 * _num_edges}, {2 * _num_edges});
     auto NpInts = client->_write_io.DefineVariable<dlong>("Np", {1}, {1}, {1});
+    auto NInts = client->_write_io.DefineVariable<dlong>("N", {_size}, {_rank}, {1});
+    auto numedgesInts = client->_write_io.DefineVariable<dlong>("num_edges", {_size}, {_rank}, {1});
 
     // Write the graph data
     //adios2::Engine graphWriter = client->_stream_io.Open("graphStream", adios2::Mode::Write);
     adios2::Engine graphWriter = client->_write_io.Open("graph.bp", adios2::Mode::Write);
     graphWriter.BeginStep();
 
+    graphWriter.Put<dlong>(NInts, N);
+    graphWriter.Put<dlong>(numedgesInts, static_cast<dlong>(_num_edges));
     graphWriter.Put<dfloat>(posFloats, pos_node);
     graphWriter.Put<dlong>(locInts, local_unique_mask);
     graphWriter.Put<dlong>(haloInts, halo_unique_mask);
@@ -393,7 +397,7 @@ void gnn_t::get_node_masks()
         //     if (verbose) printf("[RANK %d] --- Local ID: %d \t Global ID: %d \t New ID: %d \n", 
         //             rank, localNodes[i].localId, localNodes[i].baseId, localNodes[i].newId);
         // }
-        std::cout << "[RANK  " << rank << "] -- NlocalGather: " << NlocalGather << std::endl;
+        if (verbose) std::cout << "[RANK  " << rank << "] -- NlocalGather: " << NlocalGather << std::endl;
    
         // ~~~~ get the mask to move from coincident to non-coincident representation.
         // first, sort based on local ids
