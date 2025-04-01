@@ -209,18 +209,30 @@ void trajGen_t::trajGenWriteADIOS(adios_client_t* client,
         first_step = false;
         previous_U = new dfloat[num_dim * field_offset]();
 
-        unsigned long _size = size;
-        unsigned long _rank = rank;
-        unsigned long _num_dim = num_dim;
-        unsigned long _field_offset = field_offset;
+        // Get global size of data
+        int global;
+        MPI_Allreduce(&field_offset, &global, 1, MPI_INT, MPI_SUM, comm);
+        client->_field_offset = field_offset;
+        client->_global_field_offset = global;
+
+        // Gather size of data
+        int* gathered = new int[size];
+        int offset = 0;
+        MPI_Allgather(&field_offset, 1, MPI_INT, gathered, 1, MPI_INT, MPI_COMM_WORLD);
+        for (int i=0; i<rank; i++) {
+            offset += gathered[i];
+        }
+        client->_offset_field_offset = offset;
+
+        // Define ADIOS variables
         client->uIn = client->_stream_io.DefineVariable<dfloat>("in_u", 
-                                                        {_size * _field_offset * _num_dim}, 
-                                                        {_rank * _field_offset * _num_dim}, 
-                                                        {_field_offset * _num_dim});
+                                                        {client->_global_field_offset * client->_num_dim}, // global dim
+                                                        {client->_offset_field_offset * client->_num_dim}, // starting offset in global dim
+                                                        {client->_field_offset * client->_num_dim}); // local size
         client->uOut = client->_stream_io.DefineVariable<dfloat>("out_u", 
-                                                        {_size * _field_offset * _num_dim}, 
-                                                        {_rank * _field_offset * _num_dim}, 
-                                                        {_field_offset * _num_dim});
+                                                        {client->_global_field_offset * client->_num_dim}, // global dim
+                                                        {client->_offset_field_offset * client->_num_dim}, // starting offset in global dim
+                                                        {client->_field_offset * client->_num_dim}); // local size
     }
 
     if (send_data) {

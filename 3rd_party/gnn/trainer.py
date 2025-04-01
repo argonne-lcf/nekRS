@@ -565,30 +565,17 @@ class Trainer:
             self.Np = graph_data['Np']
             pos = graph_data['pos']
             #np.savetxt(f'./pos_{RANK}.txt',pos)
-            #pos_ref = np.fromfile(f"/flare/datascience/balin/Nek/nekRSv24/nekRS/examples/tgv_gnn_traj_offline/ref/gnn_outputs_poly_7/pos_node_rank_{RANK}_size_{SIZE}.bin", dtype=np.float64).reshape((-1,3))
-            #assert np.allclose(pos,pos_ref)
             
             gli = graph_data['global_ids']
-            #gli_ref = np.fromfile(f"/flare/datascience/balin/Nek/nekRSv24/nekRS/examples/tgv_gnn_traj_offline/ref/gnn_outputs_poly_7/global_ids_rank_{RANK}_size_{SIZE}.bin",dtype=np.int64).reshape((-1,1))
-            #print(gli[:5],gli_ref[:5])
-            #assert np.allclose(gli,gli_ref)
             
             local_unique_mask = graph_data['local_unique_mask']
-            #umask_ref = np.fromfile(f"/flare/datascience/balin/Nek/nekRSv24/nekRS/examples/tgv_gnn_traj_offline/ref/gnn_outputs_poly_7/local_unique_mask_rank_{RANK}_size_{SIZE}.bin",dtype=np.int32)
-            #assert np.allclose(local_unique_mask,umask_ref)
             #np.savetxt(f'./umask_{RANK}.txt',local_unique_mask.reshape(-1,1))
             
             halo_unique_mask = graph_data['halo_unique_mask']
-            #hmask_ref = np.fromfile(f"/flare/datascience/balin/Nek/nekRSv24/nekRS/examples/tgv_gnn_traj_offline/ref/gnn_outputs_poly_7/halo_unique_mask_rank_{RANK}_size_{SIZE}.bin",dtype=np.int32)
-            #assert np.allclose(halo_unique_mask,hmask_ref)
             
             ei = graph_data['edge_index']
             ei = ei.astype(np.int64)
             #np.savetxt(f'./ei_{RANK}.txt',ei.T)
-            #ei_ref = np.fromfile(f"/flare/datascience/balin/Nek/nekRSv24/nekRS/examples/tgv_gnn_traj_offline/ref/gnn_outputs_poly_7/edge_index_rank_{RANK}_size_{SIZE}.bin", dtype=np.int32).reshape((-1,2)).T
-            #ei_ref = ei_ref.astype(np.int64)
-            #print(ei[:,:5],ei_ref[:,:5])
-            #assert np.allclose(ei,ei_ref)
         else:
             path_to_pos_full = main_path + 'pos_node_rank_%d_size_%d' %(RANK,SIZE)
             path_to_ei = main_path + 'edge_index_rank_%d_size_%d' %(RANK,SIZE)
@@ -605,6 +592,7 @@ class Trainer:
             if self.cfg.verbose: log.info('[RANK %d]: Loading positions and global node index' %(RANK))
             #pos = np.fromfile(self.cfg.gnn_outputs_path+'/'+path_to_pos_full + ".bin", dtype=np.float64).reshape((-1,3))
             pos = self.load_data(path_to_pos_full, extension='.bin').reshape((-1,3))
+            #np.savetxt(f'./pos_{RANK}.txt',pos)
 
             # Global node index
             #gli = np.fromfile(self.cfg.gnn_outputs_path+'/'+path_to_glob_ids + ".bin", dtype=np.int64).reshape((-1,1))
@@ -616,12 +604,14 @@ class Trainer:
             ei = self.load_data(path_to_ei, dtype=np.int32, extension='.bin') 
             if not self.cfg.online:
                 ei = ei.reshape((-1,2)).T
-            ei = ei.astype(np.int64) # sb: int64 for edge_index 
+            ei = ei.astype(np.int64) # sb: int64 for edge_index
+            #np.savetxt(f'./ei_{RANK}.txt',ei.T) 
 
             # Local unique mask
             if self.cfg.verbose: log.info('[RANK %d]: Loading local unique mask' %(RANK))
             #local_unique_mask = np.fromfile(self.cfg.gnn_outputs_path+'/'+path_to_unique_local + ".bin", dtype=np.int32)
             local_unique_mask = self.load_data(path_to_unique_local,dtype=np.int32,extension='.bin')
+            #np.savetxt(f'./umask_{RANK}.txt',local_unique_mask.reshape(-1,1))
 
             # Halo unique mask
             halo_unique_mask = np.array([])

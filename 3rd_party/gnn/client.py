@@ -169,6 +169,7 @@ class OnlineClient:
                     break
                 else:
                     sleep(2)
+
             #with Stream(self.client, 'graphStream', 'r', self.comm) as stream:
             with Stream('graph.bp', 'r', self.comm) as stream:
                 stream.begin_step()
@@ -215,6 +216,7 @@ class OnlineClient:
     def get_train_data_from_stream(self) -> Tuple[np.ndarray,np.ndarray]:
         """Get the solution from a stream
         """
+        self.comm.Barrier()
         tic = perf_counter()
         if self.backend == 'adios':
             with Stream(self.client, 'solutionStream', 'r', self.comm) as stream:
@@ -223,6 +225,10 @@ class OnlineClient:
                 arr = stream.inquire_variable('out_u')
                 count = self.N_list[self.rank] * 3
                 start = sum(self.N_list[:self.rank]) * 3
+                # stream.read() gets data now, Mode.Sync is default 
+                # see 
+                #   - https://github.com/ornladios/ADIOS2/blob/67f771b7a2f88ce59b6808cc4356159d86255f1d/python/adios2/stream.py#L331
+                #   - https://github.com/ornladios/ADIOS2/blob/67f771b7a2f88ce59b6808cc4356159d86255f1d/python/adios2/engine.py#L123)
                 ticc = perf_counter()
                 outputs = stream.read('out_u', [start], [count])
                 transfer_time = perf_counter() - ticc
