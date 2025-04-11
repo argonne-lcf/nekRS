@@ -121,8 +121,8 @@ if [ $2 -gt 0 ]; then
   fi
 
   time_fmt=`echo $time|tr ":" " "|awk '{print NF}'`
-  if [ "$time_fmt" -ne "2" ]; then
-    echo "ERROR: <time> is not in the format <hh:mm>"
+  if [ "$time_fmt" -ne "3" ]; then
+    echo "ERROR: <time> is not in the format <hh:mm:ss>"
     echo $time
     exit 1
   fi

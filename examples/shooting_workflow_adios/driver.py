@@ -34,7 +34,8 @@ class ShootingWorkflow():
                            'process': None,
                            'status': 'not running'}
         self.run_dir = os.getcwd()
-        self.log_dir = os.path.join(self.run_dir,'logs')
+        jobid = os.getenv("PBS_JOBID").split('.')[0]
+        self.log_dir = os.path.join(self.run_dir,f'logs_{jobid}')
         if not os.path.exists(self.log_dir):
             os.mkdir(self.log_dir)
 
@@ -221,7 +222,7 @@ class ShootingWorkflow():
     def compute_fom_nekrs(self) -> float:
         """Compute the nekRS FOM from reading input and log files
         """
-        with open('./logs/nekrs_0.out','r') as fh:
+        with open(f'{self.log_dir}/nekrs_0.out','r') as fh:
             for l in fh:
                 if 'runtime statistics' in l:
                     nekrs_steps = int(l.split('(')[-1].split(' ')[0].split('=')[-1])
@@ -229,13 +230,13 @@ class ShootingWorkflow():
                     nekrs_time = float(l.split('solve')[-1].split('s')[0].strip())
                 if ' udfExecuteStep ' in l:
                     udf_time = float(l.split('udfExecuteStep')[-1].split('s')[0].strip())
-        with open('./turbChannel.box','r') as fh:
+        with open(f'{self.run_dir}/turbChannel.box','r') as fh:
             for l in fh:
                 if 'nelx' in l:
                     elms = l.split()
         elms = elms[:3]
         elms = [int(item)*-1 for item in elms]
-        with open('./turbChannel.par','r') as fh:
+        with open(f'{self.run_dir}/turbChannel.par','r') as fh:
             for l in fh:
                 if 'polynomialOrder' in l:
                     p = int(l.split()[-1].strip())
@@ -245,7 +246,7 @@ class ShootingWorkflow():
     def compute_fom_train(self) -> Tuple[float,float]:
         """Compute the triaing and transfer FOM from reading log files
         """
-        with open('./logs/train_0.out','r') as fh:
+        with open(f'{self.log_dir}/train_0.out','r') as fh:
             for l in fh:
                 if 'FOM_train' in l:
                     fom_train = float(l.split(']:')[-1].split(',')[-1].split('=')[-1])
@@ -256,7 +257,7 @@ class ShootingWorkflow():
     def compute_fom_inference(self) -> float:
         """Compute the inference FOM from reading log files
         """
-        with open('./logs/infer_0.out','r') as fh:
+        with open(f'{self.log_dir}/infer_0.out','r') as fh:
             for l in fh:
                 if 'FOM_inference' in l:
                     fom_inference = float(l.split(']:')[-1].split(',')[-1].split('=')[-1])

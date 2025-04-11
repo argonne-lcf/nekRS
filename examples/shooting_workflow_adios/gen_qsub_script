@@ -9,7 +9,7 @@ VENV_PATH=""
 PROJ_ID="datascience"
 QUEUE="debug-scaling"
 NODES=4
-TIME=1:00
+TIME="1:00:00"
 
 if [ ${SYSTEM} == "aurora" ]; then
   module load frameworks

@@ -105,8 +105,8 @@ echo "# Run config" >> $CFILE
 echo "run_args:" >> $CFILE
 echo "    nodes: ${qnodes}" >> $CFILE
 if [ ${DEPLOYMENT} == "colocated"  ]; then
-  SIM_NODES=$nodes
-  TRAIN_NODES=$nodes
+  SIM_NODES=$NODES
+  TRAIN_NODES=$NODES
   SIM_PROCS=$(( SIM_NODES * SIM_RANKS_PER_NODE ))
   TRAIN_PROCS=$(( TRAIN_NODES * TRAIN_RANKS_PER_NODE ))
   echo "    sim_nodes: ${SIM_NODES}" >> $CFILE
@@ -142,9 +142,9 @@ echo "    executable: \"${NEKRS_HOME}/3rd_party/gnn/main.py\"" >> $CFILE
 #echo "    affinity: \"./${TAFF_FILE}\"" >> $CFILE
 echo "    affinity: \"\"" >> $CFILE
 if [ ${DEPLOYMENT} == "colocated"  ]; then
-  echo "    arguments: \"device_skip=${SIM_RANKS_PER_NODE} backend=ccl halo_swap_mode=all_to_all_opt online=True client.backend=adios client.adios_transport=RDMA consistency=True time_dependency=time_dependent verbose=True\"" >> $CFILE
+  echo "    arguments: \"device_skip=${SIM_RANKS_PER_NODE} backend=ccl halo_swap_mode=all_to_all_opt online=True client.backend=adios client.adios_transport=RDMA consistency=True time_dependency=time_dependent verbose=False\"" >> $CFILE
 elif [ ${DEPLOYMENT} == "clustered"  ]; then
-  echo "    arguments: \"backend=ccl halo_swap_mode=all_to_all_opt online=True client.backend=adios consistency=True time_dependency=time_dependent verbose=True\"" >> $CFILE
+  echo "    arguments: \"backend=ccl halo_swap_mode=all_to_all_opt online=True client.backend=adios consistency=True time_dependency=time_dependent verbose=False\"" >> $CFILE
 fi
 echo "" >> $CFILE
 echo "# Inference config" >> $CFILE
@@ -152,7 +152,7 @@ echo "inference:" >> $CFILE
 echo "    executable: \"${NEKRS_HOME}/3rd_party/gnn/inference.py\"" >> $CFILE
 #echo "    affinity: \"./${TAFF_FILE}\"" >> $CFILE
 echo "    affinity: \"\"" >> $CFILE
-echo "    arguments: \"model_task=inference rollout_steps=100 backend=ccl halo_swap_mode=all_to_all_opt online=True client.backend=adios consistency=True time_dependency=time_dependent verbose=True\"" >> $CFILE
+echo "    arguments: \"model_task=inference rollout_steps=100 backend=ccl halo_swap_mode=all_to_all_opt online=True client.backend=adios consistency=True time_dependency=time_dependent verbose=False\"" >> $CFILE
 
 #--------------------------------------
 # Update the .par file with the ML options
@@ -170,11 +170,11 @@ echo "#!/bin/bash -l" > $SFILE
 
 echo "#PBS -S /bin/bash" >>$SFILE
 echo "#PBS -N nekRS_turbChannel" >>$SFILE
-echo "#PBS -l select=4" >>$SFILE
-echo "#PBS -l walltime=1:00:00" >>$SFILE
+echo "#PBS -l select=$NODES" >>$SFILE
+echo "#PBS -l walltime=$TIME" >>$SFILE
 echo "#PBS -l filesystems=home:flare" >>$SFILE
 echo "#PBS -A datascience" >>$SFILE
-echo "#PBS -q debug-scaling" >>$SFILE
+echo "#PBS -q $QUEUE" >>$SFILE
 echo "#PBS -k doe" >>$SFILE
 echo "#PBS -j oe" >>$SFILE
 
@@ -218,7 +218,7 @@ echo "export FI_CXI_RX_MATCH_MODE=hybrid" >> $SFILE # required by parRSB
 echo -e "\n# oneCCL vars" >>$SFILE
 echo "export CCL_PROCESS_LAUNCHER=pmix" >>$SFILE
 echo "export CCL_ATL_TRANSPORT=mpi" >>$SFILE
-echo "export CCL_ALLREDUCE_SCALEOUT=direct:0-1048576;rabenseifner:1048577-max" >>$SFILE
+echo "export CCL_ALLREDUCE_SCALEOUT=direct:0-1048576,rabenseifner:1048577-max" >>$SFILE
 echo "export CCL_BCAST=double_tree" >>$SFILE
 echo "export CCL_KVS_MODE=mpi" >>$SFILE
 echo "export CCL_CONFIGURATION_PATH=\"\"" >>$SFILE
@@ -245,12 +245,10 @@ echo "    rm -r ./*.bp" >> $SFILE
 echo "fi" >> $SFILE
 
 echo -e "\n# precompilation" >>$SFILE
-echo "if [ ! -d .cache ]; then" >> $RFILE
-echo "  echo Cleaning up the cache" >> $RFILE
-echo "  rm -r .cache" >> $RFILE
-echo "fi" >> $RFILE
-CMD_build="mpiexec -n ${RANKS_FOR_BUILD} -ppn ${RANKS_FOR_BUILD} --cpu-bind list:1:8:16:24:32:40:53:60:68:76:84:92 -- ./${SAFF_FILE} ${RANKS_FOR_BUILD} $bin --setup ${case} --backend ${NEKRS_BACKEND} --device-id 0 $extra_args --build-only ${RANKS_FOR_BUILD}"
+echo "if [ ! -d .cache ]; then" >> $SFILE
+CMD_build="mpiexec -n ${RANKS_FOR_BUILD} -ppn ${RANKS_FOR_BUILD} --cpu-bind list:1:8:16:24:32:40:53:60:68:76:84:92 -- $bin --setup ${case} --backend ${NEKRS_BACKEND} --build-only ${RANKS_FOR_BUILD}"
 add_build_CMD "$SFILE" "$CMD_build" "$TOTAL_RANKS"
+echo "fi" >> $SFILE
 
 echo -e "\n# actual run" >>$SFILE
 echo "python driver.py" >> $SFILE
