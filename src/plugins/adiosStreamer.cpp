@@ -30,13 +30,23 @@ adios_client_t::adios_client_t(MPI_Comm& comm, nrs_t *nrs)
         _stream_io = _adios->DeclareIO("streamIO");
         _stream_io.SetEngine(_engine);
         if (_stream == "sync") {
+            // block if reader is not ready, sync sim and trainer here
             _params["RendezvousReaderCount"] = "1";
+            // block when queue is full
             _params["QueueFullPolicy"] = "Block";
+            // number of steps writer allows to be queued before taking action (0 means no limit to queued steps)
             _params["QueueLimit"] = "1";
         } else if (_stream == "async") {
-            _params["RendezvousReaderCount"] = "0";
-            _params["QueueFullPolicy"] = "Block";
+            // block if reader is not ready, sync sim and trainer here
+            _params["RendezvousReaderCount"] = "1"; 
+            // "Block" or "Discard" when queue is full
+            _params["QueueFullPolicy"] = "Discard";
+            // number of steps writer allows to be queued before taking action (0 means no limit to queued steps)
+            // With QueueFullPolicy=Discard, the newest step is discarded
+            // Keep queue small so GNN training sees new data with short lag
             _params["QueueLimit"] = "3";
+            // number of steps writer allows to be queued before taking action WHEN NO reader is connected (0 means no limit to queued steps)
+            _params["ReserveQueueLimit"] = "0";
         }
         _params["DataTransport"] = _transport;
         _params["OpenTimeoutSecs"] = "600";
@@ -59,7 +69,8 @@ adios_client_t::adios_client_t(MPI_Comm& comm, nrs_t *nrs)
 // destructor
 adios_client_t::~adios_client_t()
 {
-    if (_rank == 0) printf("Taking down adios_client_t\n");
+    // Close the stream for transfering the solution data
+    closeStream();
 }
 
 // check if nekRS should quit
@@ -101,6 +112,38 @@ int adios_client_t::check_run()
     fflush(stdout);
 
     return exit_val;
+}
+
+// Open the solution transfer stream
+void adios_client_t::openStream()
+{
+    try
+    {
+        if (_rank == 0) std::cout << "Opening ADIOS2 solutionStream ... " << std::endl;
+        _solWriter = _stream_io.Open("solutionStream", adios2::Mode::Write);
+        MPI_Barrier(_comm);
+        if (_rank == 0) std::cout << "Done ... " << std::endl;
+    }
+    catch (std::exception &e)
+    {
+        std::cout << "Error opening ADIOS2 solutionStream, STOPPING PROGRAM from rank " << _rank << "\n";
+        std::cout << e.what() << "\n";
+    }
+}
+
+// Close the solution transfer stream
+void adios_client_t::closeStream()
+{
+    try
+    {
+        if (_rank == 0) std::cout << "Closing ADIOS2 solutionStream " << std::endl;
+        _solWriter.Close();
+    }
+    catch (std::exception &e)
+    {
+        std::cout << "Error closing ADIOS2 solutionStream, STOPPING PROGRAM from rank " << _rank << "\n";
+        std::cout << e.what() << "\n";
+    }
 }
 
 // write checkpoint file

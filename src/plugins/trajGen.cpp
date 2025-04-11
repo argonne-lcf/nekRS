@@ -233,22 +233,23 @@ void trajGen_t::trajGenWriteADIOS(adios_client_t* client,
                                                         {client->_global_field_offset * client->_num_dim}, // global dim
                                                         {client->_offset_field_offset * client->_num_dim}, // starting offset in global dim
                                                         {client->_field_offset * client->_num_dim}); // local size
+
+        // Open the stream for transfering the solution data
+        client->openStream();
     }
 
     if (send_data) {
         if (rank == 0) {
             printf("[TRAJ WRITE ADIOS] -- Writing data at tstep %d and physical time %g \n", tstep, time);
         }
-        adios2::Engine solWriter = client->_stream_io.Open("solutionStream", adios2::Mode::Write);
-        solWriter.BeginStep();
+        client->_solWriter.BeginStep();
         if (field_name == "velocity") {
             dfloat *U = new dfloat[num_dim * field_offset]();
             nrs->o_U.copyTo(U, num_dim * field_offset);
-            solWriter.Put<dfloat>(client->uIn, previous_U);
-            solWriter.Put<dfloat>(client->uOut, U);
+            client->_solWriter.Put<dfloat>(client->uIn, previous_U);
+            client->_solWriter.Put<dfloat>(client->uOut, U);
         }
-        solWriter.EndStep();
-        solWriter.Close();
+        client->_solWriter.EndStep();
         MPI_Barrier(comm);
         if (rank == 0) {
             printf("[TRAJ WRITE ADIOS] -- Done writing data\n");

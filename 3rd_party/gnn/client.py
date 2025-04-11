@@ -1,6 +1,7 @@
 import os
 import sys
 from typing import Optional, Union, Tuple
+import logging
 from omegaconf import DictConfig
 import numpy as np
 from time import sleep, perf_counter
@@ -16,6 +17,8 @@ try:
     from adios2 import Stream, Adios
 except ModuleNotFoundError:
     pass
+
+log = logging.getLogger(__name__)
 
 class OnlineClient:
     """Class for the online training client
@@ -61,26 +64,17 @@ class OnlineClient:
                 self.client = Client(address=SSDB,cluster=True)
         elif self.backend == 'adios':
             self.engine = cfg.client.adios_engine
-            self.stream = cfg.client.adios_stream
             self.transport = cfg.client.adios_transport
             adios = Adios(self.comm)
             self.client = adios.declare_io('streamIO')
             self.client.set_engine(self.engine)
-            if self.stream == 'sync':
-                parameters = {
-                    'RendezvousReaderCount': '1', # producer waits for consumer in Open()
-                    'QueueFullPolicy': 'Block', # wait for consumer to get every step
-                    'QueueLimit': '1', # only buffer one step
-                }
-            elif self.stream == 'async': 
-                parameters = {
-                    'RendezvousReaderCount': '0', # producer does not wait for consumer in Open()
-                    'QueueFullPolicy': 'Block', # slow consumer misses out on steps
-                    'QueueLimit': '3', # buffer first step
-                }
-            parameters['DataTransport'] = self.transport # options: MPI, WAN, UCX, RDMA
-            parameters['OpenTimeoutSecs'] = '600' # number of seconds producer waits on Open() for consumer
+            parameters = {
+                'DataTransport': self.transport, # options: MPI, WAN, UCX, RDMA
+                'OpenTimeoutSecs': '600', # number of seconds writer waits on Open() for reader
+                'AlwaysProvideLatestTimestep': 'False', # True means reader will see only the newest available step
+            }
             self.client.set_parameters(parameters)
+            self.solutionStream = None
         self.timers['init'].append(perf_counter()-tic)
 
     def file_exists(self, file_name: str) -> bool:
@@ -219,30 +213,33 @@ class OnlineClient:
         self.comm.Barrier()
         tic = perf_counter()
         if self.backend == 'adios':
-            with Stream(self.client, 'solutionStream', 'r', self.comm) as stream:
-                stream.begin_step()
+            if self.solutionStream is None:
+                if self.rank == 0: log.info('Opening ADIOS2 solutionStream ...')
+                self.solutionStream = Stream(self.client, "solutionStream", "r", self.comm)
+                         
+            self.solutionStream.begin_step()
 
-                arr = stream.inquire_variable('out_u')
-                count = self.N_list[self.rank] * 3
-                start = sum(self.N_list[:self.rank]) * 3
-                # stream.read() gets data now, Mode.Sync is default 
-                # see 
-                #   - https://github.com/ornladios/ADIOS2/blob/67f771b7a2f88ce59b6808cc4356159d86255f1d/python/adios2/stream.py#L331
-                #   - https://github.com/ornladios/ADIOS2/blob/67f771b7a2f88ce59b6808cc4356159d86255f1d/python/adios2/engine.py#L123)
-                ticc = perf_counter()
-                outputs = stream.read('out_u', [start], [count])
-                transfer_time = perf_counter() - ticc
-                outputs = outputs.reshape((-1,3),order='F')
+            arr = self.solutionStream.inquire_variable('out_u')
+            count = self.N_list[self.rank] * 3
+            start = sum(self.N_list[:self.rank]) * 3
+            # stream.read() gets data now, Mode.Sync is default 
+            # see 
+            #   - https://github.com/ornladios/ADIOS2/blob/67f771b7a2f88ce59b6808cc4356159d86255f1d/python/adios2/stream.py#L331
+            #   - https://github.com/ornladios/ADIOS2/blob/67f771b7a2f88ce59b6808cc4356159d86255f1d/python/adios2/engine.py#L123)
+            ticc = perf_counter()
+            outputs = self.solutionStream.read('out_u', [start], [count])
+            transfer_time = perf_counter() - ticc
+            outputs = outputs.reshape((-1,3),order='F')
 
-                arr = stream.inquire_variable('in_u')
-                count = self.N_list[self.rank] * 3
-                start = sum(self.N_list[:self.rank]) * 3
-                ticc = perf_counter()
-                inputs = stream.read('in_u', [start], [count])
-                transfer_time += perf_counter() - ticc
-                inputs = inputs.reshape((-1,3),order='F')
+            arr = self.solutionStream.inquire_variable('in_u')
+            count = self.N_list[self.rank] * 3
+            start = sum(self.N_list[:self.rank]) * 3
+            ticc = perf_counter()
+            inputs = self.solutionStream.read('in_u', [start], [count])
+            transfer_time += perf_counter() - ticc
+            inputs = inputs.reshape((-1,3),order='F')
 
-                stream.end_step()
+            self.solutionStream.end_step()
         self.timers['data'].append(perf_counter()-tic)
         return inputs, outputs, transfer_time
 
@@ -263,6 +260,11 @@ class OnlineClient:
                                     np.int32(np.array([MLrun]))
                     )
         elif self.backend == 'adios':
+            # Close solution stream
+            if self.solutionStream is not None:
+                self.solutionStream.close()
+            
+            # Communicate to nekRS to stop
             with Stream('check-run.bp', 'w', self.comm) as stream:
                 if self.rank == 0:
                     stream.write("check-run", np.int32([MLrun]))

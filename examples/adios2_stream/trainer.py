@@ -64,7 +64,6 @@ if rank == 0: print('Done reading graph data', flush=True)
 workflow_steps = 5
 try:
     if rank == 0: print('[ML] Opening stream ... ',flush=True)
-    #with Stream(sstIO, "solutionStream", "r", comm) as stream:
     stream = Stream(sstIO, "solutionStream", "r", comm)
     for step in range(workflow_steps):
         sleep(5)

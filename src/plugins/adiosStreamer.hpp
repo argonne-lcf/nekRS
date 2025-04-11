@@ -14,6 +14,7 @@ public:
   adios2::ADIOS *_adios;
   adios2::IO _stream_io;
   adios2::IO _write_io;
+  adios2::Engine _solWriter;
 
   // solution variables and array sizes
   unsigned long _num_dim;
@@ -26,6 +27,8 @@ public:
   // member functions
   int check_run();
   void checkpoint();
+  void openStream();
+  void closeStream();
 
 private:
   // Streamer parameters
