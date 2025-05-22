@@ -920,7 +920,9 @@ void nrs_t::restartFromFile(const std::string &restartStr)
       if (it != options.end()) {
         std::string s = *it;
         lowerCase(s);
-        std::cout << "requested field: " << s << std::endl;
+        if (platform->comm.mpiRank == 0) {
+          std::cout << "requested field: " << s << std::endl;
+        }
         flds.push_back(s);
       }
     }
@@ -1615,6 +1617,7 @@ void nrs_t::writeCheckpoint(double t, int step, bool enforceOutXYZ, bool enforce
   checkpointWriter->writeAttribute("outputMesh", (outXYZ) ? "true" : "false");
 
   checkpointWriter->addVariable("time", t);
+  checkpointWriter->addVariable("step", step);
 
   for (const auto &entry : userCheckpointFields) {
     checkpointWriter->addVariable(entry.first, entry.second);

@@ -103,6 +103,7 @@ namespace nek {
 
 struct fldData {
   double time = 0;
+  int step = 0;
   double p0th = 0;
   std::vector<occa::memory> o_x; 
   std::vector<occa::memory> o_u;

@@ -24,6 +24,7 @@ static void (*nek_outfld_ptr)(char *,
                               int *,
                               int *,
                               int *,
+                              int *,
                               double *,
                               double *,
                               double *,
@@ -251,11 +252,11 @@ void writeFld(const std::string &filename,
               int Nout,
               bool uniform)
 {
-  int step = 0;
   const auto nxyz = nekData.nx1 * nekData.nx1 * nekData.nx1;
   const auto Nlocal = nekData.nelt * nxyz;
 
   const auto &time = data.time;
+  const auto &step = data.step;
   const auto &p0th = data.p0th;
 
   const auto &o_x = data.o_x;
@@ -386,6 +387,7 @@ void writeFld(const std::string &filename,
 
     (*nek_outfld_ptr)(const_cast<char *>(filename.c_str()),
                       const_cast<double *>(&time),
+                      const_cast<int *>(&step),
                       fldWriteFlag.data(),
                       &nxo,
                       &ifreg,
@@ -589,6 +591,7 @@ void set_usr_handles(const char *session_in, int verbose)
   check_error(dlerror());
   nek_outfld_ptr = (void (*)(char *,
                              double *,
+                             int *,
                              int *,
                              int *,
                              int *,

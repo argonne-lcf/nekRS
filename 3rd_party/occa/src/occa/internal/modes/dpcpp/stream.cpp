@@ -19,7 +19,11 @@ namespace occa {
     // TODO: Add compile-time and run-time checks for extension support
     occa::streamTag stream::tag()
     {
-      ::sycl::event e{sycl::ext::oneapi::experimental::submit_profiling_tag(commandQueue)};
+      ::sycl::event e;
+    #if SYCL_EXT_ONEAPI_PROFILING_TAG
+      OCCA_DPCPP_ERROR("stream::tag",
+        e = sycl::ext::oneapi::experimental::submit_profiling_tag(commandQueue));
+    #endif
       return new dpcpp::streamTag(modeDevice, e);
     }
 

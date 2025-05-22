@@ -57,7 +57,8 @@ echo "export FI_CXI_RX_MATCH_MODE=hybrid" >> $SFILE # required by parRSB
 # Temporary workaround while waiting on bugfix in runtime
 echo "export UR_L0_USE_COPY_ENGINE=0" >> $SFILE
 
-#echo "export MPIR_CVAR_COLL_SELECTION_TUNING_JSON_FILE=/opt/aurora/24.180.3/mpich/tuning/20230818-1024/MPIR_Coll_tuning.json" >> $SFILE
+# FIXME?
+echo "export MPIR_CVAR_COLL_SELECTION_TUNING_JSON_FILE=/opt/aurora/24.180.3/mpich/tuning/20230818-1024/MPIR_Coll_tuning.json" >> $SFILE
 
 # Required for correct device-side timings until upstream bugfixes are available
 # https://github.com/intel/llvm/pull/16233
@@ -66,6 +67,11 @@ echo "export UR_L0_REUSE_DISCARDED_EVENTS=0" >> $SFILE
 echo "export UR_L0_DISABLE_EVENTS_CACHING=1" >> $SFILE
 echo "export SYCL_PI_LEVEL_ZERO_IMMEDIATE_COMMANDLISTS_EVENT_CLEANUP_THRESHOLD=-1" >> $SFILE
 echo "export SYCL_PI_LEVEL_ZERO_REUSE_DISCARDED_EVENTS=0" >> $SFILE
+
+# romio hint
+# https://docs.alcf.anl.gov/aurora/data-management/daos/daos-overview/?h=stripe#mpi-io-container-access
+echo "export MPICH_MPIIO_HINTS=\"romio_cb_write=enable:romio_cb_read=enable:cb_buffer_size=16777216:cb_config_list=*\\\\:8:striping_unit=2097152\"" >> $SFILE
+echo "export MPICH_MPIIO_STATS=1" >> $SFILE
 
 CMD=.lhelper
 echo "#!/bin/bash" > $CMD

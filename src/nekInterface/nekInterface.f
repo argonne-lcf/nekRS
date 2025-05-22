@@ -285,7 +285,7 @@ c-----------------------------------------------------------------------
       return
       end
 c-----------------------------------------------------------------------
-      subroutine nekf_outfld(fname, time_in, out_fld, 
+      subroutine nekf_outfld(fname, time_in, istep_in, out_fld,
      &                       nxo_in, rego_in,
      $                       xm_in, ym_in, zm_in,
      $                       vx_in, vy_in, vz_in,
@@ -298,6 +298,7 @@ c-----------------------------------------------------------------------
 
       character fname*(*)
       real time_in
+      integer istep_in
       integer out_fld(*)
 
       integer rego_in
@@ -317,6 +318,7 @@ c-----------------------------------------------------------------------
       integer*8 cntg
 
       real time_s
+      integer istep_s
 
       common /vrthov/ ur1(lxo*lxo*lxo*lelt)
      &              , ur2(lxo*lxo*lxo*lelt)
@@ -324,6 +326,8 @@ c-----------------------------------------------------------------------
 
       time_s = time
       time = time_in
+      istep_s = istep
+      istep = istep_in
 
       rego = .false.
       if(rego_in.ne.0) rego = .true.
@@ -500,6 +504,7 @@ c-----------------------------------------------------------------------
       call err_chk(ierr,'Error closing file in mfo_outfld. Abort. $')
 
       time = time_s
+      istep = istep_s
 
       return
       end
