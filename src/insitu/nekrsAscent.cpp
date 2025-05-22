@@ -153,6 +153,7 @@ void NekrsAscent::run(const double time, const int tstep) {
 
   platform->timer.tic("insituTransferData", 1);
   double tStart = MPI_Wtime();
+  
   auto sim_data = std::make_shared<SimulationData>(mMesh, mNrs, mMode, time, tstep);
   double tEnd = MPI_Wtime();
   mElapsedDataTransferTime += (tEnd - tStart);

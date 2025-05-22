@@ -15,7 +15,6 @@ namespace occa
     {
     private:
       mutable hash_t hash_;
-      bool enable_timing{true};
 
     public:
       ::sycl::device dpcppDevice;

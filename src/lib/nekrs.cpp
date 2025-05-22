@@ -258,7 +258,14 @@ void setup(MPI_Comm commg_in,
   }
 
   auto loadComponents = [](bool registerOnly) {
+    const double tStart = MPI_Wtime();
+    if (rank==0) {
+      printf("Load Kernels (registerOnly=%d) ...\n", (registerOnly) ? 1 : 0);
+      fflush(stdout);
+    }
+
     platform->options.setArgs("REGISTER ONLY", (registerOnly) ? "TRUE" : "FALSE");
+
     auto props = registerUDFKernels();
     static occa::properties kernelInfoUDF;
     if (registerOnly) {
@@ -271,8 +278,14 @@ void setup(MPI_Comm commg_in,
     if (platform->solver->id() == "nrs") {
       registerNrsKernels(kernelInfoUDF);
     }
-
     platform->options.removeArgs("REGISTER ONLY");
+
+    MPI_Barrier(platform->comm.mpiComm);
+    const double loadTime = MPI_Wtime() - tStart;
+    if (rank==0) {
+      printf("Load Kernels :: done (%gs)\n\n", loadTime);
+      fflush(stdout);
+    }
   };
 
   // just register what to compile
@@ -297,7 +310,7 @@ void setup(MPI_Comm commg_in,
                std::ofstream::out | std::ofstream::trunc);
       ofs.close();
 
-      printf("done (%gs)\n\n", loadTime);
+      printf("compileKernels :: done (%gs)\n\n", loadTime);
     }
     fflush(stdout);
   }
@@ -328,10 +341,22 @@ void setup(MPI_Comm commg_in,
   loadComponents(false);
 
   if (nrs) {
+    const double tStart = MPI_Wtime();
+    if (rank == 0) {
+      printf("nrs->init ...\n");
+      fflush(stdout);
+    }
     nrs->init();
 
     if (neknekCoupled()) {
       new neknek_t(nrs, nSessions, sessionID);
+    }
+
+    MPI_Barrier(platform->comm.mpiComm);
+    const double loadTime = MPI_Wtime() - tStart;
+    if (rank == 0) {
+      printf("nrs->init :: done (%g) \n", loadTime);
+      fflush(stdout);
     }
   }
 

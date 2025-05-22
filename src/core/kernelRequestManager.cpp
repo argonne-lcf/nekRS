@@ -153,22 +153,12 @@ void kernelRequestManager_t::compile()
   const auto &device = platformRef.device;
 
   constexpr int maxCompilingRanks{
-      32}; // large enough to speed things up, small enough to control pressure on filesystem
+      12}; // large enough to speed things up, small enough to control pressure on filesystem
   const int rank = platform->cacheLocal ? platformRef.comm.localRank : platformRef.comm.mpiRank;
   const int ranksCompiling =
       std::min(maxCompilingRanks,
                platform->cacheLocal ? platformRef.comm.mpiCommLocalSize : platformRef.comm.mpiCommSize);
-
-  auto Nthreads = 1;
-  if (getenv("NEKRS_JITC_NTHREADS")) {
-    Nthreads = std::stoi(getenv("NEKRS_JITC_NTHREADS"));
-  }
-
-  if (platformRef.comm.mpiRank == 0 && (platform->verbose || platform->buildOnly)) {
-    std::cout << "requests.size(): " << requests.size() << std::endl;
-    std::cout << "Nthreads: " << Nthreads << std::endl;
-  }
-
+  
   {
     std::map<std::string, kernelRequest_t> map;
     for (auto &&req : requests) {
@@ -185,42 +175,32 @@ void kernelRequestManager_t::compile()
   // compile requests (assumed to have a unique occa hash) on build ranks
   constexpr int hashLength = 16 + 1; // null-terminated
   auto hashes = (char *)std::calloc(requests.size() * hashLength, sizeof(char));
+  
+  auto reqIdStart = std::numeric_limits<long int>::max();
+  auto reqIdEnd = static_cast<long int>(1);
 
-  ThreadPool pool(Nthreads);
-
-  if (rank < ranksCompiling) {
-    for (auto &&req : requests) {
-      auto retVal = pool.enqueue([&]() {
-        const auto reqId = std::distance(requests.begin(), requests.find(req));
-        if (reqId % ranksCompiling != rank) {
-          return;
+  if (rank < ranksCompiling) { 
+    for (auto&& req : requests) {
+      const auto reqId = std::distance(requests.begin(), requests.find(req));
+      if (reqId % ranksCompiling == rank) {
+        reqIdStart = std::min(reqIdStart, static_cast<long int>(reqId));
+        reqIdEnd = std::max(reqIdEnd, static_cast<long int>(reqId));
+        if (platform->verbose || platform->buildOnly) {
+          std::cout << "Compiling request <" << req.requestName << ">";
+          fflush(stdout);
         }
-        try {
-          if (platform->verbose || platform->buildOnly) {
-            std::cout << "Compiling request <" << req.requestName << ">";
-          }
 
-          auto knl = device.compileKernel(req.fileName, req.props, req.suffix, MPI_COMM_SELF);
-          const auto hash = knl.hash().getString();
-          nekrsCheck(hash.size() != hashLength - 1, MPI_COMM_SELF, EXIT_FAILURE, "%s\n", "Invalid hash!");
-
-          std::strncpy(hashes + reqId * hashLength, hash.c_str(), hashLength);
-
-          if (platform->verbose || platform->buildOnly) {
-            std::cout << " (" << hash << ") on rank " << rank << std::flush << std::endl;
-          }
-
-        } catch (const std::exception &e) {
-          std::cerr << "Caught exception: " << e.what() << std::endl;
+        auto knl = device.compileKernel(req.fileName, req.props, req.suffix, MPI_COMM_SELF);
+        const auto hash = knl.hash().getString();
+        std::strncpy(hashes + reqId*hashLength, hash.c_str(), hashLength); 
+        if (platform->verbose || platform->buildOnly) {
+          std::cout << " (" << hash << ") on rank " << rank << std::endl;
         }
-      });
+      }
     }
   }
-
-  // finish compilation
-  pool.finish();
-  MPI_Barrier(platform->comm.mpiComm);
-
+  MPI_Barrier(platform->comm.mpiComm); // finish compilation
+                                       //
   // a-posteriori check for duplicated hash causing a potential race condition
   // no parallel version available yet
   if (platform->comm.mpiCommSize == 1) {

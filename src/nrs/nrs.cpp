@@ -1449,7 +1449,13 @@ void nrs_t::printStepInfo(double time, int tstep, bool printStepInfo, bool print
   const double elapsedStep = platform->timer.query("elapsedStep", "DEVICE:MAX");
   const double elapsedStepSum = platform->timer.query("elapsedStepSum", "DEVICE:MAX");
   bool verboseInfo = platform->options.compareArgs("VERBOSE SOLVER INFO", "TRUE");
-  const auto cfl = this->computeCFL();
+  bool computeCFL = (printStepInfo) ? true : false;
+
+  dfloat cfl = 0.0;
+  if (computeCFL) {
+    cfl = this->computeCFL();
+  }
+
   dfloat divUErrVolAvg, divUErrL2;
 
   if (verboseInfo) {
@@ -1536,13 +1542,17 @@ void nrs_t::printStepInfo(double time, int tstep, bool printStepInfo, bool print
     }
   }
 
-  bool largeCFLCheck = (cfl > 30) && this->numberActiveFields();
+  if (computeCFL) {
+    int maxCFL = 30;
+    platform->options.getArgs("MAXIMIUM CFL", maxCFL);
+    bool largeCFLCheck = (cfl > maxCFL) && this->numberActiveFields();
 
-  nekrsCheck(largeCFLCheck || std::isnan(cfl) || std::isinf(cfl),
-             platform->comm.mpiComm,
-             EXIT_FAILURE,
-             "%s\n",
-             "Unreasonable CFL!");
+    nekrsCheck(largeCFLCheck || std::isnan(cfl) || std::isinf(cfl),
+               platform->comm.mpiComm,
+               EXIT_FAILURE,
+               "Unreasonable CFL! %.4e\n",
+               cfl);
+  }
 }
 
 void nrs_t::writeCheckpoint(double t, int step, bool enforceOutXYZ, bool enforceFP64, int N_, bool uniform)

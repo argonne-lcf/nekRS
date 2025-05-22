@@ -78,7 +78,6 @@ void SimulationData::constructConduitNode(const mesh_t *mesh, const nrs_t *nrs, 
     mConduitData["fields/ghosts/values"].set_external(getGhosts(), mesh->Nlocal);
   }
   */
-
   
   mConduitData["fields/vel_x/association"]  = "vertex";
   mConduitData["fields/vel_x/topology"]     = "mesh";
@@ -159,7 +158,6 @@ dfloat* SimulationData::getVelocity(const std::string& axis) {
 }
 
 void SimulationData::setMesh(const mesh_t *mesh) {
-
   if(mMode == "synchronous") {
     mMesh.x = (dfloat*) mesh->o_x.ptr();
     mMesh.y = (dfloat*) mesh->o_y.ptr();

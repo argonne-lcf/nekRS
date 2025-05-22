@@ -24,9 +24,6 @@ namespace occa
       occa::json &kernelProps = properties["kernel"];
       setCompilerLinkerOptions(kernelProps);
       arch = dpcppDevice.get_info<::sycl::info::device::name>();
-      #ifdef SYCL_EXT_ONEAPI_BACKEND_LEVEL_ZERO
-        enable_timing = (::sycl::backend::ext_oneapi_level_zero != device_.get_backend());
-      #endif
     }
 
     hash_t device::hash() const
@@ -78,14 +75,9 @@ namespace occa
       return new stream(this, props, q);
     }
 
-    // Uses a oneAPI extension to enqueue a barrier.
-    // When ombined with in-order queues, this provides
-    // the execution required for `streamTag`s.
     occa::streamTag device::tagStream()
     {
-      ::sycl::queue& dpcpp_queue = getDpcppStream(currentStream).commandQueue;
-      ::sycl::event dpcpp_event = dpcpp_queue.ext_oneapi_submit_barrier();
-      return new occa::dpcpp::streamTag(this, dpcpp_event);
+      return getDpcppStream(currentStream).tag();
     }
 
     void device::waitFor(occa::streamTag tag)
@@ -96,15 +88,12 @@ namespace occa
     double device::timeBetween(const occa::streamTag &startTag,
                                const occa::streamTag &endTag)
     {
-      if (!enable_timing) return 0;
-
       auto& dpcppStartTag{getDpcppStreamTag(startTag)};
       auto& dpcppEndTag{getDpcppStreamTag(endTag)};
 
-      dpcppStartTag.waitFor();
       dpcppEndTag.waitFor();
 
-      return (dpcppEndTag.endTime() - dpcppStartTag.endTime());
+      return (dpcppEndTag.startTime() - dpcppStartTag.endTime());
     }
 
 

@@ -16,6 +16,13 @@ namespace occa {
                        commandQueue.wait_and_throw());
     }
 
+    // TODO: Add compile-time and run-time checks for extension support
+    occa::streamTag stream::tag()
+    {
+      ::sycl::event e{sycl::ext::oneapi::experimental::submit_profiling_tag(commandQueue)};
+      return new dpcpp::streamTag(modeDevice, e);
+    }
+
     occa::dpcpp::streamTag stream::memcpy(void * dest,const void* src, occa::udim_t num_bytes)
     {
       ::sycl::event e{commandQueue.memcpy(dest, src, num_bytes)};

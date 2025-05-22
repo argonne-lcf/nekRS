@@ -136,7 +136,10 @@ c-----------------------------------------------------------------------
       common /ivrtx/ vertex ((2**ldim)*lelt)
       integer*8 vertex
 
+      real*8 etimes, etime1, etime2, etimeSetup, dnekclock_sync
+
       etimes = dnekclock_sync()
+      if (nio.eq.0) write(*,*) 'call nek setup'
 
       call read_re2_hdr(ifbswap, .true.)
 
@@ -238,14 +241,18 @@ c-----------------------------------------------------------------------
       call genwz           ! Compute GLL points, weights, etc.
 
       if(nio.eq.0) write(6,*) 'call usrdat'
+      etime1 = dnekclock_sync()
       call usrdat
-      if(nio.eq.0) write(6,'(A,/)') ' done :: usrdat' 
+      etime2 = dnekclock_sync()
+      if(nio.eq.0) write(6,998) ' done :: usrdat', etime2-etime1
 
       call gengeom(igeom)  ! Generate geometry, after usrdat 
 
       if(nio.eq.0) write(6,*) 'call usrdat2'
+      etime1 = dnekclock_sync()
       call usrdat2
-      if(nio.eq.0) write(6,'(A,/)') ' done :: usrdat2' 
+      etime2 = dnekclock_sync()
+      if(nio.eq.0) write(6,998) ' done :: usrdat2', etime2-etime1
 
       call fix_geom
       call geom_reset(1)    ! recompute Jacobians, etc.
@@ -259,8 +266,10 @@ c-----------------------------------------------------------------------
       ifield = 1
 
       if(nio.eq.0) write(6,*) 'call usrdat3'
+      etime1 = dnekclock_sync()
       call usrdat3
-      if(nio.eq.0) write(6,'(A,/)') ' done :: usrdat3'
+      etime2 = dnekclock_sync()
+      if(nio.eq.0) write(6,998) ' done :: usrdat3', etime2-etime1
 
       time = 0.0
       p0thn = p0th
@@ -268,6 +277,7 @@ c-----------------------------------------------------------------------
 
       etimeSetup = dnekclock_sync() - etimes
       if(nio.eq.0) write(6,999) etimeSetup 
+ 998  format(a, 1p1e13.4, ' s',/)
  999  format(' nek setup done in ', 1p1e13.4, ' s')
       if(nio.eq.0) write(6,*) 
       call flush(6)
@@ -385,7 +395,8 @@ c-----------------------------------------------------------------------
       nxyzo8  = nxo*nyo*nzo
 
       ! only relevant for single shared file
-      offs0 = iHeaderSize + 4 + isize*cntg
+      offs0 = cntg ! cast to int*8
+      offs0 = iHeaderSize + 4 + isize*offs0
       strideB = nelB * nxyzo8*wdsizo
       stride  = cntg * nxyzo8*wdsizo
 
@@ -1328,7 +1339,8 @@ c-----------------------------------------------------------------------
       endif
 #endif
 
-      offs0   = iHeadersize + 4 + isize*nelgr
+      offs0   = nelgr ! cast to int*8
+      offs0   = iHeadersize + 4 + isize*offs0
       nxyzr8  = nxr*nyr*nzr
       strideB = nelBr* nxyzr8*wdsizr
       stride  = nelgr* nxyzr8*wdsizr
