@@ -70,7 +70,8 @@ set(PARRSB_DIR ${NEK5000_SOURCE_DIR}/3rd_party/parRSB/parRSB)
 
 FetchContent_Declare(
   parrsb_content
-  URL ${PARRSB_SUBTREE}
+  GIT_REPOSITORY https://github.com/thilinarmtb/parRSB.git
+  GIT_TAG reorder_dofs
   SOURCE_DIR ${PARRSB_DIR}
 )
 FetchContent_GetProperties(parrsb_content)
