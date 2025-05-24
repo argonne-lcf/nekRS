@@ -251,7 +251,7 @@ struct box *crs_box_setup(uint n, const ulong *id, uint nnz, const uint *Ai,
   if (tmp)
     box->mult = atoi(tmp);
 
-  box->algo = BOX_GPU_BLAS;
+  box->algo = BOX_CHOLMOD;
   tmp = getenv("NEKRS_CRS_ALGO");
   if (tmp)
     box->algo = atoi(tmp);
