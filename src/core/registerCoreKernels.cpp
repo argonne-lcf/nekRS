@@ -27,6 +27,9 @@ void registerCoreKernels()
     kernelName = "core-copyFloatToDfloat";
     platform->copyFloatToDfloatKernel = platform->kernelRequests.load(kernelName);
 
+    kernelName = "core-gatherRHS";
+    platform->gatherRHSKernel = platform->kernelRequests.load(kernelName);
+
     return;
   }
 
@@ -154,6 +157,10 @@ void registerCoreKernels()
     platform->kernelRequests.add(section + kernelName, fileName, prop);
 
     kernelName = "copyPfloatToDfloat";
+    fileName = oklpath + "/core/" + kernelName + extension;
+    platform->kernelRequests.add(section + kernelName, fileName, prop);
+
+    kernelName = "gatherRHS";
     fileName = oklpath + "/core/" + kernelName + extension;
     platform->kernelRequests.add(section + kernelName, fileName, prop);
   }

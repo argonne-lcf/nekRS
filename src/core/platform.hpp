@@ -65,6 +65,8 @@ public:
   occa::kernel copyDfloatToFloatKernel;
   occa::kernel copyDoubleToDfloatKernel;
   occa::kernel copyFloatToDfloatKernel;
+
+  occa::kernel gatherRHSKernel;
 };
 #endif
 
