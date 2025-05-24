@@ -12,12 +12,12 @@ static int check_alloc_(void *ptr, const char *file, unsigned line) {
 }
 #define check_alloc(ptr) check_alloc_(ptr, __FILE__, __LINE__)
 
-static int gen_crs_basis(double *b, int j_, dfloat *z, int Nq, int Np) {
-  double *zr = (double *)calloc(Nq, sizeof(double));
-  double *zs = (double *)calloc(Nq, sizeof(double));
-  double *zt = (double *)calloc(Nq, sizeof(double));
-  double *z0 = (double *)calloc(Nq, sizeof(double));
-  double *z1 = (double *)calloc(Nq, sizeof(double));
+static int gen_crs_basis(dfloat *b, int j_, dfloat *z, int Nq, int Np) {
+  dfloat *zr = (dfloat *)calloc(Nq, sizeof(dfloat));
+  dfloat *zs = (dfloat *)calloc(Nq, sizeof(dfloat));
+  dfloat *zt = (dfloat *)calloc(Nq, sizeof(dfloat));
+  dfloat *z0 = (dfloat *)calloc(Nq, sizeof(dfloat));
+  dfloat *z1 = (dfloat *)calloc(Nq, sizeof(dfloat));
   if (zr == NULL || zs == NULL || zt == NULL || z0 == NULL || z1 == NULL)
     return 1;
 
@@ -26,17 +26,17 @@ static int gen_crs_basis(double *b, int j_, dfloat *z, int Nq, int Np) {
     z1[i] = 0.5 * (1 + z[i]);
   }
 
-  memcpy(zr, z0, Nq * sizeof(double));
-  memcpy(zs, z0, Nq * sizeof(double));
-  memcpy(zt, z0, Nq * sizeof(double));
+  memcpy(zr, z0, Nq * sizeof(dfloat));
+  memcpy(zs, z0, Nq * sizeof(dfloat));
+  memcpy(zt, z0, Nq * sizeof(dfloat));
 
   int jj = j_ + 1;
   if (jj % 2 == 0)
-    memcpy(zr, z1, Nq * sizeof(double));
+    memcpy(zr, z1, Nq * sizeof(dfloat));
   if (jj == 3 || jj == 4 || jj == 7 || jj == 8)
-    memcpy(zs, z1, Nq * sizeof(double));
+    memcpy(zs, z1, Nq * sizeof(dfloat));
   if (jj > 4)
-    memcpy(zt, z1, Nq * sizeof(double));
+    memcpy(zt, z1, Nq * sizeof(dfloat));
 
   for (int k = 0; k < Nq; k++) {
     for (int j = 0; j < Nq; j++) {
@@ -54,7 +54,7 @@ static int gen_crs_basis(double *b, int j_, dfloat *z, int Nq, int Np) {
 
 static int get_local_crs_galerkin(double *a, int nc, mesh_t *mf,
                                   elliptic_t *ef) {
-  int nelt = mf->Nelements, Np = mf->Np;
+  size_t nelt = mf->Nelements, Np = mf->Np;
   size_t size = nelt * Np;
 
   dfloat *b = tcalloc(dfloat, nc * Np);
@@ -65,10 +65,10 @@ static int get_local_crs_galerkin(double *a, int nc, mesh_t *mf,
   dfloat *u = tcalloc(dfloat, size), *w = tcalloc(dfloat, size);
   check_alloc(u), check_alloc(w);
 
-  occa::memory o_u = platform->device.malloc(size * sizeof(dfloat), u);
-  occa::memory o_w = platform->device.malloc(size * sizeof(dfloat), w);
-  occa::memory o_upf = platform->device.malloc(size * sizeof(pfloat));
-  occa::memory o_wpf = platform->device.malloc(size * sizeof(pfloat));
+  occa::memory o_u = platform->device.malloc<dfloat>(size, u);
+  occa::memory o_w = platform->device.malloc<dfloat>(size, w);
+  occa::memory o_upf = platform->device.malloc<pfloat>(size);
+  occa::memory o_wpf = platform->device.malloc<pfloat>(size);
 
   int i, j, k, e;
   for (j = 0; j < nc; j++) {
@@ -77,8 +77,7 @@ static int get_local_crs_galerkin(double *a, int nc, mesh_t *mf,
 
     o_u.copyFrom(u);
     platform->copyDfloatToPfloatKernel(mf->Nlocal, o_u, o_upf);
-    ellipticAx(ef, mf->Nelements, mf->o_elementList, o_upf, o_wpf,
-               pfloatString);
+    ellipticAx(ef, mf->Nelements, mf->o_elementList, o_upf, o_wpf, pfloatString);
     platform->copyPfloatToDfloatKernel(mf->Nlocal, o_wpf, o_w);
     o_w.copyTo(w);
 
