@@ -241,15 +241,17 @@ void ellipticMultiGridSetup(elliptic_t *elliptic_)
 
       hlong *coarseGlobalStarts = (hlong *)calloc(platform->comm.mpiCommSize + 1, sizeof(hlong));
 
-      int jl = options.compareArgs("COARSE SOLVER", "XXT");
-      if (jl) {
+      int xxt = options.compareArgs("COARSE SOLVER", "XXT");
+      int box = options.compareArgs("COARSE SOLVER", "BOX");
+      if (xxt || box) {
         uint num_total, nnz;
         uint *ia, *ja;
         ulong *gids;
         double *a;
         jl_setup_aux(&num_total, &gids, &nnz, &ia, &ja, &a, ellipticCoarse, elliptic);
 
-        jl_setup(platform->comm.mpiComm, num_total, gids, nnz, ia, ja, a, elliptic->nullspace, 1);
+        uint verbose = 1;
+        jl_setup(platform->comm.mpiComm, num_total, gids, nnz, ia, ja, a, elliptic->nullspace, verbose);
 
         int rank = platform->comm.mpiRank;
         coarseGlobalStarts[rank] = 0;
