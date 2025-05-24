@@ -30,7 +30,7 @@
 #include "ellipticMultiGrid.h"
 #include "ellipticBuildFEM.hpp"
 
-#include "jl.hpp"
+#include "nekrs_crs.hpp"
 
 void ellipticMultiGridSetup(elliptic_t *elliptic_)
 {

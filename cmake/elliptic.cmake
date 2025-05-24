@@ -32,5 +32,10 @@ set(ELLIPTIC_SOURCES
         ${ELLIPTIC_SOURCE_DIR}/MG/level.cpp
         ${ELLIPTIC_SOURCE_DIR}/MG/MGSolver.cpp
         ${ELLIPTIC_SOURCE_DIR}/ellipticZeroMean.cpp
-        ${ELLIPTIC_SOURCE_DIR}/xxt/jl.cpp
-        ${ELLIPTIC_SOURCE_DIR}/xxt/crs_xxt.cpp)
+        ${ELLIPTIC_SOURCE_DIR}/box/crs_xxt.cpp
+        ${ELLIPTIC_SOURCE_DIR}/box/crs_box.cpp
+        ${ELLIPTIC_SOURCE_DIR}/box/crs_box_cholmod.cpp
+        ${ELLIPTIC_SOURCE_DIR}/box/crs_box_csr.cpp
+        ${ELLIPTIC_SOURCE_DIR}/box/crs_box_gpu_blas.cpp
+        ${ELLIPTIC_SOURCE_DIR}/box/crs_box_timer.cpp
+        ${ELLIPTIC_SOURCE_DIR}/box/nekrs_crs.cpp)

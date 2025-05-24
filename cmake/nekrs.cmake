@@ -151,7 +151,7 @@ set(NRS_INCLUDE
     ${ELLIPTIC_SOURCE_DIR}/amgSolver/hypre
     ${ELLIPTIC_SOURCE_DIR}/amgSolver/amgx
     ${ELLIPTIC_SOURCE_DIR}/MG
-    ${ELLIPTIC_SOURCE_DIR}/xxt
+    ${ELLIPTIC_SOURCE_DIR}/box
 )
 
 add_library(nekrs-lib SHARED ${NRS_SRC})
