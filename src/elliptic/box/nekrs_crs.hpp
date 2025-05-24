@@ -1,10 +1,9 @@
 #if !defined(_NEKRS_CRS_HPP_)
 #define _NEKRS_CRS_HPP_
 
-#include "elliptic.h"
-#include "gslib.h"
-#include "platform.hpp"
-#include <string>
+#include <elliptic.h>
+#include <gslib.h>
+#include <platform.hpp>
 
 #define JL_XXT 1
 #define JL_BOX 2

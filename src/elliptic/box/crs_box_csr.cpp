@@ -1,5 +1,5 @@
 #include "crs_box_csr.hpp"
-#include <stdlib.h>
+#include <cstdlib>
 
 struct csr *csr_setup(const unsigned nz, const unsigned *const ia,
                       const unsigned *const ja, const double *const va,

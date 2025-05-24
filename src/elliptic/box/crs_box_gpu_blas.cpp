@@ -1,10 +1,13 @@
+#include <cstdio>
+#include <cstdlib>
+
+#include <platform.hpp>
+
 #if defined(ENABLE_GPU_BLAS)
 
 #include <hip/hip_runtime.h>
 #include <hipblas/hipblas.h>
 #include <lapacke.h>
-
-#include <platform.hpp>
 
 #define check_hip_runtime(call)                                                \
   {                                                                            \
@@ -248,7 +251,7 @@ void asm1_gpu_blas_free(struct box *box) {
 
 #else
 
-void asm1_gpu_blas_setup(struct csr *A, unsigned null_space, struct box *box) {
+void asm1_gpu_blas_setup(struct csr *A, unsigned null_space, struct box *box, occa::kernel &gatherRHS_) {
   fprintf(stderr, "GPU BLAS not enabled.\n");
   exit(EXIT_FAILURE);
 }

@@ -1,16 +1,15 @@
-#include <assert.h>
-#include <float.h>
-#include <limits.h>
-#include <math.h>
-#include <stdarg.h>
-#include <stddef.h>
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
+#include <cassert>
+#include <cfloat>
+#include <climits>
+#include <cmath>
+#include <cstdarg>
+#include <cstddef>
+#include <cstdio>
+#include <cstdlib>
+#include <cstring>
 #include <unistd.h>
 
-// FIXME: Get rid of this once box solver is ported to C.
-#include "nekInterfaceAdapter.hpp"
+#include <nekInterfaceAdapter.hpp>
 
 #include "crs_box_impl.hpp"
 
@@ -29,9 +28,9 @@ static void crs_box_dump(uint n, const ulong *id, uint nnz, const uint *Ai,
 
   fprintf(fp, "%u %u %u\n", n, nnz, null_space);
   for (uint i = 0; i < n; i++)
-    fprintf(fp, "%lu\n", id[i]);
+    fprintf(fp, "%llu\n", id[i]);
   for (uint i = 0; i < nnz; i++)
-    fprintf(fp, "%u %u %.*e\n", Ai[i], Aj[i], A[i]);
+    fprintf(fp, "%u %u %e\n", Ai[i], Aj[i], A[i]);
 
   fclose(fp);
 }
@@ -52,7 +51,7 @@ static void dump_asm1(const char *name, const uint n, const ulong *const dofs,
 
   fprintf(fp, "%u %u\n", n, nnz);
   for (uint i = 0; i < nnz; i++)
-    fprintf(fp, "%u %u %.*e\n", dofs[Ai[i]], dofs[Aj[i]], Av[i]);
+    fprintf(fp, "%llu %llu %e\n", dofs[Ai[i]], dofs[Aj[i]], Av[i]);
 
   fclose(fp);
 }

@@ -61,7 +61,7 @@ inline void timer_dump(struct comm *c, unsigned interval) {
       fprintf(fp, "copy_rhs,crs_dsavg1,asm1,mult_dsavg,mult_rhs_update,copy_to_"
                   "nek5000,map_vtx_to_box,asm2,map_box_to_vtx,copy_from_"
                   "nek5000,crs_dsavg2,copy_solution\n");
-      fprintf(fp, "%d\n", btime.n);
+      fprintf(fp, "%zu\n", btime.n);
 
       struct btime_t *ptr = (struct btime_t *)btime.ptr;
       for (uint i = 0; i < btime.n; i++) {

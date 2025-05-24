@@ -1,4 +1,4 @@
-#include <assert.h>
+#include <cassert>
 
 #include "crs_box.hpp"
 #include "nekrs_crs.hpp"

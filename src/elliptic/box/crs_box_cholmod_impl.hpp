@@ -155,7 +155,7 @@ static struct cholmod_csr *csr_setup(struct csr *A, const int null,
   comm_allreduce(comm, gs_int, gs_max, &max, 1, &wrk);
   comm_allreduce(comm, gs_long, gs_add, &avg, 1, &wrk);
   if (comm->id == 0) {
-    printf("\tBOX CHOLMOD min_nnz = %d max_nnz = %d avg_nnz = %ld\n", min, max,
+    printf("\tBOX CHOLMOD min_nnz = %d max_nnz = %d avg_nnz = %lld\n", min, max,
            avg / comm->np);
     fflush(stdout);
   }

@@ -296,7 +296,7 @@ void crs_xxt_setup_inter_comm(uint n, const ulong *id, uint nnz, const uint *Ai,
     array_init(struct map_t, &map, num_elements);
 
     for (uint i = 0; i < num_elements; i++) {
-      struct map_t m = {.idx = i, .p = partition[i]};
+      struct map_t m = {.idx = i, .p = (uint)partition[i]};
       array_cat(struct map_t, &map, &m, 1);
     }
 

@@ -1,11 +1,9 @@
 #if !defined(_CRS_BOX_HPP_)
 #define _CRS_BOX_HPP_
 
-// Inclusion of occa.hpp here is a workaround for a weird issue. Fix it before
-// releasing rhe code.
-#include "occa.hpp"
-#define OMPI_SKIP_MPICXX 1
-#include "gslib.h"
+#include <elliptic.h>
+#include <gslib.h>
+#include <platform.hpp>
 
 struct xxt;
 struct xxt *crs_xxt_setup(uint n, const ulong *id, uint nz, const uint *Ai,
