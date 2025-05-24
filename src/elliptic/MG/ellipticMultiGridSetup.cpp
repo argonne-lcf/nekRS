@@ -252,7 +252,7 @@ void ellipticMultiGridSetup(elliptic_t *elliptic_)
 
         uint type = box * JL_BOX + xxt * JL_XXT;
         jl_setup(type, num_total, gids, nnz, ia, ja, a, elliptic->nullspace, gs_double,
-          platform->comm.mpiComm, 0);
+          platform->comm.mpiComm);
 
         int rank = platform->comm.mpiRank;
         coarseGlobalStarts[rank] = 0;

@@ -160,7 +160,7 @@ static struct crs *crs = NULL;
 
 void jl_setup(uint type, uint n, const ulong *id, uint nnz, const uint *Ai,
               const uint *Aj, const double *A, uint null, gs_dom dom,
-              MPI_Comm comm, const MPI_Comm *inter_comm) {
+              MPI_Comm comm) {
   if (crs != NULL) {
     if (crs->c.id == 0) {
       fprintf(stderr, "jl_setup: coarse solver is already initialized.\n");
@@ -206,8 +206,7 @@ void jl_setup(uint type, uint n, const ulong *id, uint nnz, const uint *Ai,
     crs->solver = (void *)crs_xxt_setup(n, id, nnz, Ai, Aj, A, null, c, dom);
     break;
   case JL_BOX:
-    crs->solver =
-        (void *)crs_box_setup(n, id, nnz, Ai, Aj, A, null, c, inter_comm, dom);
+    crs->solver = (void *)crs_box_setup(n, id, nnz, Ai, Aj, A, null, c, dom);
     break;
   default:
     break;

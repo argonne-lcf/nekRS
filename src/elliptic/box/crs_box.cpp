@@ -147,7 +147,6 @@ static const sint *get_u2c(unsigned *cni, const unsigned n,
 static void crs_box_setup_aux(struct box *box, uint ne, const long long *vtx,
                               const double *mask, const int *frontier, uint nw,
                               double tol, const struct comm *comm,
-                              const MPI_Comm *inter_comm,
                               const double *const xyz) {
   const unsigned ncr = box->ncr, sn = box->sn, nnz = sn * ncr;
   const double *va = (const double *)nekData.schwz_amat;
@@ -188,8 +187,7 @@ static void crs_box_setup_aux(struct box *box, uint ne, const long long *vtx,
   box->ss = NULL;
 
   if (box->algo == BOX_XXT) {
-    crs_xxt_setup_inter_comm(box->sn, tmp_vtx, nnz, ia, ja, va, null_space,
-                             inter_comm, box->dom, &box->local);
+    crs_xxt_setup(box->sn, tmp_vtx, nnz, ia, ja, va, null_space, &(box->local), box->dom);
   } else {
     box->u2c = (int *)get_u2c(&box->cn, box->sn, tmp_vtx, &box->bfr);
     struct csr *A = csr_setup(nnz, ia, ja, va, box->u2c, tol, &box->bfr);
@@ -231,8 +229,7 @@ static void crs_box_setup_aux(struct box *box, uint ne, const long long *vtx,
 
 struct box *crs_box_setup(uint n, const ulong *id, uint nnz, const uint *Ai,
                           const uint *Aj, const double *A, uint null_space,
-                          const struct comm *comm, const MPI_Comm *inter_comm,
-                          gs_dom dom) {
+                          const struct comm *comm, gs_dom dom) {
   struct box *box = tcalloc(struct box, 1);
   box->un = n;
   box->ncr = nnz / n;
@@ -265,7 +262,7 @@ struct box *crs_box_setup(uint n, const ulong *id, uint nnz, const uint *Ai,
   // Copy the local communicator.
   MPI_Comm local;
   MPI_Comm_split(comm->c, comm->id, 1, &local);
-  comm_init(&box->local, local);
+  comm_init(&(box->local), local);
   MPI_Comm_free(&local);
 
   // Fortran setup for ASM2. We should port this to C.
@@ -276,7 +273,7 @@ struct box *crs_box_setup(uint n, const ulong *id, uint nnz, const uint *Ai,
   crs_box_setup_aux(
       box, *nekData.schwz_ne, (const long long *)nekData.schwz_vtx,
       (const double *)nekData.schwz_mask, (const int *)nekData.schwz_frontier,
-      (*nekData.schwz_nw), 1e-12, comm, inter_comm, nekData.schwz_xyz);
+      (*nekData.schwz_nw), 1e-12, comm, nekData.schwz_xyz);
 
   // Print some info.
   if (box->global.id == 0) {
