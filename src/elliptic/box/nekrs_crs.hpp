@@ -15,9 +15,9 @@ void jl_setup(uint type, uint n, const ulong *id, uint nnz, const uint *Ai,
               const uint *Aj, const double *A, uint null, gs_dom dom,
               MPI_Comm comm);
 
-void jl_solve(occa::memory o_x, occa::memory o_rhs);
+void jl_solve(occa::memory &o_x, occa::memory &o_rhs);
 
-void jl_solve2(occa::memory o_x, occa::memory o_rhs);
+void jl_solve2(occa::memory &o_x, occa::memory &o_rhs);
 
 void jl_free();
 

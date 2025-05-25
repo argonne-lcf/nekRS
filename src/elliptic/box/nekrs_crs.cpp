@@ -137,7 +137,7 @@ void jl_setup_aux(uint *ntot_, ulong **gids_, uint *nnz_, uint **ia_,
 
   if (elliptic->Nmasked) {
     dlong *mask_ids = (dlong *)calloc(elliptic->Nmasked, sizeof(dlong));
-    elliptic->o_maskIds.copyTo(mask_ids, elliptic->Nmasked * sizeof(dlong));
+    elliptic->o_maskIds.copyTo(mask_ids, elliptic->Nmasked);
     for (int n = 0; n < elliptic->Nmasked; n++)
       gids[mask_ids[n]] = 0;
     free(mask_ids);
@@ -225,13 +225,13 @@ void jl_setup(uint type, uint n, const ulong *id, uint nnz, const uint *Ai,
     }                                                                          \
   }
 
-void jl_solve(occa::memory o_x, occa::memory o_rhs) {
+void jl_solve(occa::memory &o_x, occa::memory &o_rhs) {
   // if (crs->type == JL_BOX && crs->dom == gs_float) {
   //   crs_box_solve(o_x, (struct box *)crs->solver, o_rhs);
   //   return;
   // }
 
-  o_rhs.copyTo(crs->wrk, crs->un * sizeof(float), 0);
+  o_rhs.copyTo(crs->wrk, crs->un, 0);
 #define copy_from_buf(T)                                                       \
   {                                                                            \
     T *rhs = (T *)crs->rhs;                                                    \
@@ -260,10 +260,10 @@ void jl_solve(occa::memory o_x, occa::memory o_rhs) {
   }
   DOMAIN_SWITCH(crs->dom, copy_to_buf);
 #undef copy_to_buf
-  o_x.copyFrom(crs->wrk, crs->un * sizeof(float), 0);
+  o_x.copyFrom(crs->wrk, crs->un, 0);
 }
 
-void jl_solve2(occa::memory o_x, occa::memory o_rhs) {
+void jl_solve2(occa::memory &o_x, occa::memory &o_rhs) {
   crs_box_solve2(o_x, (struct box *)crs->solver, o_rhs);
 }
 
