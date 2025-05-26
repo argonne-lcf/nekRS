@@ -144,17 +144,22 @@ static const sint *get_u2c(unsigned *cni, const unsigned n,
   return u2c;
 }
 
-static void crs_box_setup_aux(struct box *box, uint ne, const long long *vtx,
-                              const double *mask, const int *frontier, uint nw,
-                              double tol, const struct comm *comm,
-                              const double *const xyz) {
-  const unsigned ncr = box->ncr, sn = box->sn, nnz = sn * ncr;
+static void crs_box_setup_asm1(struct box *box, double tol, const struct comm *comm) {
+  uint ne = *nekData.schwz_ne;
+  uint nw = (*nekData.schwz_nw);
+  const long long *vtx = (const long long *)nekData.schwz_vtx;
+  const double *mask = (const double *)nekData.schwz_mask;
+  const int *frontier = (const int *)nekData.schwz_frontier;
+  const double *const xyz = nekData.schwz_xyz;
   const double *va = (const double *)nekData.schwz_amat;
+
+  const uint ncr = box->ncr, sn = box->sn;
+  const uint nnz = sn * ncr;
   uint *ia = tcalloc(uint, nnz);
   uint *ja = tcalloc(uint, nnz);
-  for (unsigned e = 0; e < ne; e++) {
-    for (unsigned j = 0; j < ncr; j++) {
-      for (unsigned i = 0; i < ncr; i++) {
+  for (uint e = 0; e < ne; e++) {
+    for (uint j = 0; j < ncr; j++) {
+      for (uint i = 0; i < ncr; i++) {
         ia[e * ncr * ncr + j * ncr + i] = e * ncr + i;
         ja[e * ncr * ncr + j * ncr + i] = e * ncr + j;
       }
@@ -182,10 +187,7 @@ static void crs_box_setup_aux(struct box *box, uint ne, const long long *vtx,
     null_space = 0;
   assert(null_space == 0);
 
-  box->cn = 0;
-  box->u2c = NULL;
-  box->ss = NULL;
-
+  box->cn = 0, box->u2c = NULL, box->ss = NULL;
   if (box->algo == BOX_XXT) {
     crs_xxt_setup(box->sn, tmp_vtx, nnz, ia, ja, va, null_space, &(box->local), box->dom);
   } else {
@@ -265,15 +267,12 @@ struct box *crs_box_setup(uint n, const ulong *id, uint nnz, const uint *Ai,
   comm_init(&(box->local), local);
   MPI_Comm_free(&local);
 
-  // Fortran setup for ASM2. We should port this to C.
+  // ASM2 setup using Fortran. We should port this to C.
   nek::box_crs_setup();
 
-  // Setup ASM1 solver on C side.
+  // ASM1 setup on C side.
   box->sn = (*nekData.schwz_ne) * box->ncr;
-  crs_box_setup_aux(
-      box, *nekData.schwz_ne, (const long long *)nekData.schwz_vtx,
-      (const double *)nekData.schwz_mask, (const int *)nekData.schwz_frontier,
-      (*nekData.schwz_nw), 1e-12, comm, nekData.schwz_xyz);
+  crs_box_setup_asm1(box, 1e-12, comm);
 
   // Print some info.
   if (box->global.id == 0) {
