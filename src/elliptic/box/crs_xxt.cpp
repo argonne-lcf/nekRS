@@ -1,13 +1,11 @@
 #include <cassert>
-#include <float.h>
-#include <limits.h>
-#include <malloc.h>
-#include <math.h>
-#include <stddef.h>
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
-#include <vector>
+#include <cstdlib>
+#include <cfloat>
+#include <climits>
+#include <cmath>
+#include <cstddef>
+#include <cstdio>
+#include <cstring>
 
 #include "crs_box_impl.hpp"
 
@@ -84,7 +82,7 @@ static double local_time = 0;
 
 #define T float
 #define SUFFIX _float
-#define gs_domain gs_double
+#define gs_domain gs_float
 #include "crs_xxt_impl.hpp"
 #undef T
 #undef SUFFIX

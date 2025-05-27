@@ -969,7 +969,7 @@ struct xxt *crs_xxt_setup(uint n, const ulong *id, uint nz, const uint *Ai,
 
   sparse_cholesky_factor(A_ll.n, A_ll.Arp, A_ll.Aj, A_ll.A, &data->fac_A_ll,
                          &buf);
-#if defined(ENABLE_CHOLMOD)
+#if defined(ENABLE_BOX_CHOLMOD)
   fac_A_ll = sparse_cholmod_factor(A_ll.n, A_ll.Arp, A_ll.Aj,
                                    (const void *)A_ll.A, gs_domain, &buf);
 #endif
@@ -1051,7 +1051,7 @@ void crs_xxt_solve(T *x, struct xxt *data, const T *b) {
       for (uint i = 0; i < ln; ++i)
         vc[i] = y_inv_f32[i];
     }
-#elif defined(ENABLE_CHOLMOD)
+#elif defined(ENABLE_BOX_CHOLMOD)
     sparse_cholmod_solve(vc, fac_A_ll, vc);
 #else
     sparse_cholesky_solve(vc, &data->fac_A_ll, vc);
@@ -1093,7 +1093,7 @@ void crs_xxt_solve(T *x, struct xxt *data, const T *b) {
       for (uint i = 0; i < ln; ++i)
         vl[i] = y_inv_f32[i];
     }
-#elif defined(ENABLE_CHOLMOD)
+#elif defined(ENABLE_BOX_CHOLMOD)
     sparse_cholmod_solve(vl, fac_A_ll, vl);
 #else
     sparse_cholesky_solve(vl, &data->fac_A_ll, vl);
@@ -1117,7 +1117,7 @@ void crs_xxt_solve(T *x, struct xxt *data, const T *b) {
       for (uint i = 0; i < ln; ++i)
         vc[i] = y_inv_f32[i];
     }
-#elif defined(ENABLE_CHOLMOD)
+#elif defined(ENABLE_BOX_CHOLMOD)
     sparse_cholmod_solve(vc, fac_A_ll, vc);
 #else
     sparse_cholesky_solve(vc, &data->fac_A_ll, vc);
@@ -1227,7 +1227,7 @@ void crs_xxt_free(struct xxt *data) {
   free(y_inv);
   free(y_inv_f32);
 #endif
-#if defined(ENABLE_CHOLMOD)
+#if defined(ENABLE_BOX_CHOLMOD)
   sparse_cholmod_free(fac_A_ll);
 #endif
 }
