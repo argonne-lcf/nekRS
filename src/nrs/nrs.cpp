@@ -999,7 +999,7 @@ void nrs_t::restartFromFile(const std::string &restartStr)
     const auto scalarStart = (o_iofldT.size()) ? 1 : 0;
     for (int i = scalarStart; i < Nscalar; i++) {
       const auto sid = scalarDigitStr(i - scalarStart);
-      if (checkOption("s" + sid) && isAvailable("scalar" + sid)) {
+      if (checkOption("s") && isAvailable("scalar" + sid)) {
         auto o_Si = cds->o_S.slice(cds->fieldOffsetScan[i], mesh->Nlocal);
         std::vector<occa::memory> o_iofldSi = {o_Si};
         iofld->addVariable("scalar" + sid, o_iofldSi);
@@ -1017,12 +1017,46 @@ void nrs_t::restartFromFile(const std::string &restartStr)
   platform->options.setArgs("START TIME", (requestedTime.size()) ? requestedTime : to_string_f(time));
 }
 
+void nrs_t::restartFromFiles(const std::string &restartStr)
+{
+  // split string with comma
+  std::vector<std::string> list = serializeString(restartStr, ',');
+
+  for (std::string fileStr : list) {
+    if (!fileStr.empty()) {
+      if (platform->comm.mpiRank == 0 && platform->verbose) {
+        printf("restarting string: |%s|\n", fileStr.c_str());
+        fflush(stdout);
+      }
+      restartFromFile(fileStr);
+    }
+  }
+}
+
 void nrs_t::setIC()
 {
   getICFromNek();
 
   if (!platform->options.getArgs("RESTART FILE NAME").empty()) {
-    restartFromFile(platform->options.getArgs("RESTART FILE NAME"));
+
+    // split string with comma
+    std::string str0;
+    platform->options.getArgs("RESTART FILE NAME", str0);
+    if (platform->comm.mpiRank == 0 && platform->verbose) {
+      printf("Initial restart string: |%s|\n", str0.c_str());
+      fflush(stdout);
+    }
+
+    std::vector<std::string> list = serializeString(str0, ',');
+    // multiple files
+    for (std::string str1 : list) {
+      if (platform->comm.mpiRank == 0 && platform->verbose) {
+        printf("restarting string: |%s|\n", str1.c_str());
+        fflush(stdout);
+      }
+
+      restartFromFiles(str1);
+    }
   }
 
   if (platform->comm.mpiRank == 0) {

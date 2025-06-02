@@ -740,12 +740,18 @@ void ciCheckpointing(nrs_t *nrs)
       nrs->writeCheckpoint(time, 0);
     }
 
-    nrs->restartFromFile(restartFile); 
+    // wipe out solutions after write
+    platform->linAlg->fill(nrs->NVfields * nrs->fieldOffset, 0.0, nrs->o_U);
+    if (nrs->Nscalar > 0) {
+      platform->linAlg->fill(nrs->cds->fieldOffsetSum, 0.0, nrs->cds->o_S);
+    }
+
+    nrs->restartFromFiles(restartFile);
  
     double startTime;
     platform->options.getArgs("START TIME", startTime);
  
-    nrs->copyToNek(0.0, 0);
+    nrs->copyToNek(0.0, 0, true);
     nek::userchk();
  
     auto err = nek::ptr<double>("errors");
@@ -758,7 +764,27 @@ void ciCheckpointing(nrs_t *nrs)
     nrs->checkpointWriter.reset();
   };
 
+  auto breakMeshMesh = [&]() {
+    auto mesh = (nrs->cht) ? nrs->cds->mesh[0] : nrs->mesh;
+
+    platform->linAlg->fill(mesh->Nlocal, -0.12, mesh->o_x);
+    platform->linAlg->fill(mesh->Nlocal, -0.12, mesh->o_y);
+    platform->linAlg->fill(mesh->Nlocal, -0.12, mesh->o_z);
+
+    auto [x, y, z] = mesh->xyzHost(); // device to host
+    for (int i = 0; i < mesh->Nlocal; i++) {
+      nekData.xm1[i] = x[i];
+      nekData.ym1[i] = y[i];
+      nekData.zm1[i] = z[i];
+    }
+  };
+
   run("NEK", "ethier0.f00000");
+  run("NEK", "ethier0.f00001+U+P+T+S");
+
+  breakMeshMesh(); // force loading mesh from restart
+  run("NEK", "ethier0.f00000+X, ethier0.f00001+U+P+S", true);
+
   run("ADIOS", "ethier.bp");
   run("ADIOS", "ethier.bp+int", true);
 }

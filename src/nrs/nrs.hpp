@@ -244,6 +244,7 @@ public:
   occa::memory Qcriterion();
 
   void restartFromFile(const std::string& restartStr);
+  void restartFromFiles(const std::string& restartStr);
   void writeCheckpoint(double t, int step, bool enforceOutXYZ = false, bool enforceFP64 = false, int Nout = 0, bool uniform = false);
 
   void finalize();
