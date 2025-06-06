@@ -195,7 +195,7 @@ void SimulationData::setScalars(const nrs_t *nrs) {
   for (int is = 0; is < cds->NSfields; is++) {
     const auto& sid = (is==0) ? "temperature" : "scalar" + scalarDigitStr(is);
     dlong Nlocal = (is) ? cds->meshV->Nlocal : cds->mesh[0]->Nlocal;
-    auto o_scalar = cds->o_S + cds->fieldOffsetScan[is] * sizeof(dfloat);
+    auto o_scalar = cds->o_S + cds->fieldOffsetScan[is];
 
     if(mMode == "synchronous") {
       mScalars[sid] = (dfloat*) o_scalar.ptr();
