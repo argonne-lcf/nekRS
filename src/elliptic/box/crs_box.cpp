@@ -441,7 +441,7 @@ void crs_box_solve2(occa::memory &o_x, struct box *box, occa::memory &o_rhs) {
 
   timer_tic(c);
   // Can move the first inv_mul.* to here.
-  o_rhs.copyTo(box->srhs, box->un * sizeof(float), 0);
+  o_rhs.copyTo(box->srhs, box->un, 0);
   timer_toc(COPY_RHS);
 
   // crs_dsavg1.
@@ -550,7 +550,7 @@ void crs_box_solve2(occa::memory &o_x, struct box *box, occa::memory &o_rhs) {
 
   // Copy solution.
   timer_tic(c);
-  o_x.copyFrom(box->sx, box->un * sizeof(float), 0);
+  o_x.copyFrom(box->sx, box->un, 0);
   timer_toc(COPY_SOLUTION);
 
   timer_print(&box->global, 1000);
