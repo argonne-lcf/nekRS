@@ -250,9 +250,16 @@ void ellipticMultiGridSetup(elliptic_t *elliptic_)
         double *a;
         jl_setup_aux(&num_total, &gids, &nnz, &ia, &ja, &a, ellipticCoarse, elliptic);
 
+
+        gs_dom dom = gs_double;
+        const char *dom_str = getenv("NEKRS_CRS_DOM");
+        if (dom_str && strncmp(dom_str, "gs_double", 32) == 0)
+          dom = gs_double;
+        if (dom_str && strncmp(dom_str, "gs_float", 32) == 0)
+          dom = gs_float;
+
         uint type = box * JL_BOX + xxt * JL_XXT;
-        jl_setup(type, num_total, gids, nnz, ia, ja, a, elliptic->nullspace, gs_double,
-          platform->comm.mpiComm);
+        jl_setup(type, num_total, gids, nnz, ia, ja, a, elliptic->nullspace, dom, platform->comm.mpiComm);
 
         int rank = platform->comm.mpiRank;
         coarseGlobalStarts[rank] = 0;

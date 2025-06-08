@@ -175,13 +175,6 @@ void jl_setup(uint type, uint n, const ulong *id, uint nnz, const uint *Ai,
   crs->type = type;
   crs->un = n;
 
-  crs->dom = dom;
-  const char *tmp = getenv("NEKRS_CRS_DOM");
-  if (tmp && strncmp(tmp, "gs_double", 32) == 0)
-    crs->dom = gs_double;
-  if (tmp && strncmp(tmp, "gs_float", 32) == 0)
-    crs->dom = gs_float;
-
   size_t usize;
   switch (dom) {
   case gs_double:
@@ -196,6 +189,7 @@ void jl_setup(uint type, uint n, const ulong *id, uint nnz, const uint *Ai,
     break;
   }
 
+  crs->dom = dom;
   crs->x = calloc(usize, 2 * n);
   crs->rhs = (void *)((char *)crs->x + n * usize);
   crs->wrk = tcalloc(float, crs->un);

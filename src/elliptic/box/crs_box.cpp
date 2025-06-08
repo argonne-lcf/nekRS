@@ -242,11 +242,6 @@ struct box *crs_box_setup(uint n, const ulong *id, uint nnz, const uint *Ai,
     timer_init();
 
   box->dom = dom;
-  tmp = getenv("NEKRS_CRS_DOM");
-  if (tmp && strncmp(tmp, "gs_double", 32) == 0)
-    box->dom = gs_double;
-  if (tmp && strncmp(tmp, "gs_float", 32) == 0)
-    box->dom = gs_float;
 
   box->mult = 1;
   tmp = getenv("NEKRS_CRS_MULT");
