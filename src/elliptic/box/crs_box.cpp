@@ -189,8 +189,11 @@ static void crs_box_setup_asm1(struct box *box, double tol, const struct comm *c
 
   box->cn = 0, box->u2c = NULL, box->ss = NULL;
   if (box->algo == BOX_XXT) {
-    crs_xxt_setup(box->sn, tmp_vtx, nnz, ia, ja, va, null_space, &(box->local), box->dom);
-  } else {
+    box->ss = (void *)crs_xxt_setup(box->sn, tmp_vtx, nnz, ia, ja, va,
+        null_space, &(box->local), box->dom);
+  }
+
+  if (box->algo == BOX_CHOLMOD || box->algo == BOX_GPU_BLAS) {
     box->u2c = (int *)get_u2c(&box->cn, box->sn, tmp_vtx, &box->bfr);
     struct csr *A = csr_setup(nnz, ia, ja, va, box->u2c, tol, &box->bfr);
     if (box->algo == BOX_CHOLMOD)
@@ -248,7 +251,7 @@ struct box *crs_box_setup(uint n, const ulong *id, uint nnz, const uint *Ai,
   if (tmp)
     box->mult = atoi(tmp);
 
-  box->algo = BOX_CHOLMOD;
+  box->algo = BOX_XXT;
   tmp = getenv("NEKRS_CRS_ALGO");
   if (tmp)
     box->algo = atoi(tmp);
@@ -311,7 +314,7 @@ void crs_box_solve(void *x, struct box *box, const void *rhs) {
   timer_tic(c);
   switch (box->algo) {
   case BOX_XXT:
-    crs_xxt_solve_inter_comm((double *)box->sx, (const double *)box->srhs);
+    crs_xxt_solve((double *)box->sx, (struct xxt *)box->ss, (const double *)box->srhs);
     break;
   case BOX_CHOLMOD:
     asm1_cholmod_solve(box->sx, box, box->srhs);
@@ -559,7 +562,7 @@ void crs_box_free(struct box *box) {
 
   switch (box->algo) {
   case BOX_XXT:
-    crs_xxt_finalize_inter_comm();
+    crs_xxt_free((struct xxt *)box->ss);
     break;
   case BOX_CHOLMOD:
     asm1_cholmod_free(box);
