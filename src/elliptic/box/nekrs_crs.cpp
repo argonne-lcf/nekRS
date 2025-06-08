@@ -107,19 +107,9 @@ static void set_mat_ij(uint *ia, uint *ja, int nc, int nelt) {
   }
 }
 
-//==============================================================================
-// nekRS interface to coarse solvers
-//
-
-struct crs {
-  uint un, type;
-  struct comm c;
-  gs_dom dom;
-  float *wrk;
-  void *x, *rhs;
-  void *solver;
-};
-
+/*
+ * nekRS interface to coarse solvers
+ */
 void jl_setup_aux(uint *ntot_, ulong **gids_, uint *nnz_, uint **ia_,
                   uint **ja_, double **a_, elliptic_t *elliptic,
                   elliptic_t *ellipticf) {
@@ -156,6 +146,15 @@ void jl_setup_aux(uint *ntot_, ulong **gids_, uint *nnz_, uint **ia_,
 }
 #undef check_alloc
 
+struct crs {
+  uint un, type;
+  struct comm c;
+  gs_dom dom;
+  float *wrk;
+  void *x, *rhs;
+  void *solver;
+};
+
 static struct crs *crs = NULL;
 
 void jl_setup(uint type, uint n, const ulong *id, uint nnz, const uint *Ai,
@@ -171,7 +170,7 @@ void jl_setup(uint type, uint n, const ulong *id, uint nnz, const uint *Ai,
 
   crs = tcalloc(struct crs, 1);
 
-  comm_init(&crs->c, comm);
+  comm_init(&(crs->c), comm);
   crs->type = type;
   crs->un = n;
 
@@ -205,6 +204,12 @@ void jl_setup(uint type, uint n, const ulong *id, uint nnz, const uint *Ai,
   default:
     break;
   }
+
+  if (crs->c.id == 0) {
+    printf("%s: n = %u, nnz = %u, null = %u, dom = %s\n", __func__, n, nnz, null,
+        (dom == gs_double) ? "double" : "float");
+    fflush(stdout);
+  }
 }
 
 #define DOMAIN_SWITCH(dom, macro)                                              \
@@ -220,11 +225,6 @@ void jl_setup(uint type, uint n, const ulong *id, uint nnz, const uint *Ai,
   }
 
 void jl_solve(occa::memory &o_x, occa::memory &o_rhs) {
-  // if (crs->type == JL_BOX && crs->dom == gs_float) {
-  //   crs_box_solve(o_x, (struct box *)crs->solver, o_rhs);
-  //   return;
-  // }
-
   o_rhs.copyTo(crs->wrk, crs->un, 0);
 #define copy_from_buf(T)                                                       \
   {                                                                            \

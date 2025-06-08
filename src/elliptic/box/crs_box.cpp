@@ -235,7 +235,7 @@ struct box *crs_box_setup(uint n, const ulong *id, uint nnz, const uint *Ai,
   struct box *box = tcalloc(struct box, 1);
   box->un = n;
   box->ncr = nnz / n;
-  buffer_init(&box->bfr, 1024);
+  buffer_init(&(box->bfr), 1024);
 
   const char *tmp = getenv("NEKRS_CRS_TIMER");
   if (tmp && atoi(tmp) > 0)
@@ -254,7 +254,7 @@ struct box *crs_box_setup(uint n, const ulong *id, uint nnz, const uint *Ai,
     box->algo = atoi(tmp);
 
   // Copy the global communicator.
-  comm_dup(&box->global, comm);
+  comm_dup(&(box->global), comm);
 
   // Copy the local communicator.
   MPI_Comm local;
@@ -266,19 +266,15 @@ struct box *crs_box_setup(uint n, const ulong *id, uint nnz, const uint *Ai,
   nek::box_crs_setup();
 
   // ASM1 setup on C side.
-  box->sn = (*nekData.schwz_ne) * box->ncr;
+  box->sn = *(nekData.schwz_ne) * box->ncr;
   crs_box_setup_asm1(box, 1e-12, comm);
 
   // Print some info.
   if (box->global.id == 0) {
-    printf("crs_box_setup: n = %u, nnz = %u, null_space = %u, dom = %s, "
-           "mult = %u, algo = %u, ne = %u, nw = %u\n",
-           box->un, nnz, null_space,
-           (box->dom == gs_double) ? "gs_double" : "gs_float", box->mult,
-           box->algo, *nekData.schwz_ne, *nekData.schwz_nw);
+    printf("%s: mult = %u, algo = %u, ne = %u, nw = %u\n", __func__,
+           box->mult, box->algo, *(nekData.schwz_ne), *(nekData.schwz_nw));
     fflush(stdout);
   }
-
   return box;
 }
 
@@ -431,19 +427,14 @@ void crs_box_solve(void *x, struct box *box, const void *rhs) {
 }
 
 void crs_box_solve2(occa::memory &o_x, struct box *box, occa::memory &o_rhs) {
-  if (box->dom != gs_float) {
-    fprintf(stderr, "Wrong domain !\n");
-    fflush(stderr);
-    MPI_Abort(MPI_COMM_WORLD, EXIT_FAILURE);
-  }
+  struct comm *c = &(box->global);
 
-  if (box->algo != BOX_GPU_BLAS) {
-    fprintf(stderr, "Wrong solver !\n");
+  if ((box->dom != gs_float) || (box->algo != BOX_GPU_BLAS)) {
+    if (c->id == 0)
+      fprintf(stderr, "Wrong domain or wrong solver!\n");
     fflush(stderr);
-    MPI_Abort(MPI_COMM_WORLD, EXIT_FAILURE);
+    MPI_Abort(c->c, EXIT_FAILURE);
   }
-
-  struct comm *c = &box->global;
 
   timer_tic(c);
   // Can move the first inv_mul.* to here.
