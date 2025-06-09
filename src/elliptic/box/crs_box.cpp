@@ -10,6 +10,7 @@
 #include <unistd.h>
 
 #include <nekInterfaceAdapter.hpp>
+#include <nekrs_crs.hpp>
 
 #include "crs_box_impl.hpp"
 
@@ -193,12 +194,12 @@ static void crs_box_setup_asm1(struct box *box, double tol, const struct comm *c
         null_space, &(box->local), box->dom);
   }
 
-  if (box->algo == BOX_CHOLMOD || box->algo == BOX_GPU_BLAS) {
+  if (box->algo == BOX_CHOLMOD || box->algo == BOX_GPU) {
     box->u2c = (int *)get_u2c(&box->cn, box->sn, tmp_vtx, &box->bfr);
     struct csr *A = csr_setup(nnz, ia, ja, va, box->u2c, tol, &box->bfr);
     if (box->algo == BOX_CHOLMOD)
       asm1_cholmod_setup(A, null_space, box);
-    if (box->algo == BOX_GPU_BLAS)
+    if (box->algo == BOX_GPU)
       asm1_gpu_blas_setup(A, null_space, box, platform->gatherRHSKernel);
     csr_free(A);
   }
@@ -232,29 +233,15 @@ static void crs_box_setup_asm1(struct box *box, double tol, const struct comm *c
 #undef allocate_work_arrays
 }
 
-struct box *crs_box_setup(uint n, const ulong *id, uint nnz, const uint *Ai,
-                          const uint *Aj, const double *A, uint null_space,
-                          const struct comm *comm, gs_dom dom) {
+struct box *crs_box_setup(uint n, const ulong *id, uint nnz, const uint *Ai, const uint *Aj,
+                          const double *A, const jl_opts *opts, const struct comm *comm) {
   struct box *box = tcalloc(struct box, 1);
   box->un = n;
   box->ncr = nnz / n;
+  box->dom = opts->dom;
+  box->mult = opts->mult;
+  box->algo = opts->algo;
   buffer_init(&(box->bfr), 1024);
-
-  const char *tmp = getenv("NEKRS_CRS_TIMER");
-  if (tmp && atoi(tmp) > 0)
-    timer_init();
-
-  box->dom = dom;
-
-  box->mult = 1;
-  tmp = getenv("NEKRS_CRS_MULT");
-  if (tmp)
-    box->mult = atoi(tmp);
-
-  box->algo = BOX_XXT;
-  tmp = getenv("NEKRS_CRS_ALGO");
-  if (tmp)
-    box->algo = atoi(tmp);
 
   // Copy the global communicator.
   comm_dup(&(box->global), comm);
@@ -264,6 +251,9 @@ struct box *crs_box_setup(uint n, const ulong *id, uint nnz, const uint *Ai,
   MPI_Comm_split(comm->c, comm->id, 1, &local);
   comm_init(&(box->local), local);
   MPI_Comm_free(&local);
+
+  if (opts->timer)
+    timer_init();
 
   // ASM2 setup using Fortran. We should port this to C.
   nek::box_crs_setup();
@@ -278,6 +268,7 @@ struct box *crs_box_setup(uint n, const ulong *id, uint nnz, const uint *Ai,
            box->mult, box->algo, *(nekData.schwz_ne), *(nekData.schwz_nw));
     fflush(stdout);
   }
+
   return box;
 }
 
@@ -319,7 +310,7 @@ void crs_box_solve(void *x, struct box *box, const void *rhs) {
   case BOX_CHOLMOD:
     asm1_cholmod_solve(box->sx, box, box->srhs);
     break;
-  case BOX_GPU_BLAS:
+  case BOX_GPU:
     asm1_gpu_blas_solve(box->sx, box, box->srhs);
     break;
   default:
@@ -432,7 +423,7 @@ void crs_box_solve(void *x, struct box *box, const void *rhs) {
 void crs_box_solve2(occa::memory &o_x, struct box *box, occa::memory &o_rhs) {
   struct comm *c = &(box->global);
 
-  if ((box->dom != gs_float) || (box->algo != BOX_GPU_BLAS)) {
+  if ((box->dom != gs_float) || (box->algo != BOX_GPU)) {
     if (c->id == 0)
       fprintf(stderr, "Wrong domain or wrong solver!\n");
     fflush(stderr);
@@ -567,7 +558,7 @@ void crs_box_free(struct box *box) {
   case BOX_CHOLMOD:
     asm1_cholmod_free(box);
     break;
-  case BOX_GPU_BLAS:
+  case BOX_GPU:
     asm1_gpu_blas_free(box);
     break;
   default:

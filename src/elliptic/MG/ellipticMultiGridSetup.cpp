@@ -250,16 +250,41 @@ void ellipticMultiGridSetup(elliptic_t *elliptic_)
         double *a;
         jl_setup_aux(&num_total, &gids, &nnz, &ia, &ja, &a, ellipticCoarse, elliptic);
 
+        jl_opts opts;
 
-        gs_dom dom = gs_double;
-        const char *dom_str = getenv("NEKRS_CRS_DOM");
-        if (dom_str && strncmp(dom_str, "gs_double", 32) == 0)
-          dom = gs_double;
-        if (dom_str && strncmp(dom_str, "gs_float", 32) == 0)
-          dom = gs_float;
+        opts.algo = BOX;
+        opts.dom = gs_double;
+        opts.asm1 = BOX_CHOLMOD;
+        opts.mult = 1;
+        opts.null_space = elliptic->nullspace;
+        opts.timer = 1;
 
-        uint type = box * JL_BOX + xxt * JL_XXT;
-        jl_setup(type, num_total, gids, nnz, ia, ja, a, elliptic->nullspace, dom, platform->comm.mpiComm);
+        if (xxt)
+          opts.algo = XXT;
+
+        const char *tmp = getenv("NEKRS_CRS_DOM");
+        if (tmp && strncmp(tmp, "gs_float", 32) == 0)
+          opts.dom = gs_float;
+        if (tmp && strncmp(tmp, "gs_double", 32) == 0)
+          opts.dom = gs_double;
+
+        tmp = getenv("NEKRS_CRS_ASM1");
+        if (tmp && strncmp(tmp, "xxt", 32) == 0)
+          opts.asm1 = BOX_XXT;
+        if (tmp && strncmp(tmp, "cholmod", 32) == 0)
+          opts.asm1 = BOX_CHOLMOD;
+        if (tmp && strncmp(tmp, "gpu", 32) == 0)
+          opts.asm1 = BOX_GPU;
+
+        tmp = getenv("NEKRS_CRS_MULT");
+        if (tmp)
+          opts.mult = atoi(tmp);
+
+        tmp = getenv("NEKRS_CRS_TIMER");
+        if (tmp)
+          opts.timer = atoi(tmp);
+
+        jl_setup(num_total, gids, nnz, ia, ja, a, &opts, platform->comm.mpiComm);
 
         int rank = platform->comm.mpiRank;
         coarseGlobalStarts[rank] = 0;

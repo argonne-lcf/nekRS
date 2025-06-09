@@ -157,25 +157,9 @@ struct crs {
 
 static struct crs *crs = NULL;
 
-void jl_setup(uint type, uint n, const ulong *id, uint nnz, const uint *Ai,
-              const uint *Aj, const double *A, uint null, gs_dom dom,
-              MPI_Comm comm) {
-  if (crs != NULL) {
-    if (crs->c.id == 0) {
-      fprintf(stderr, "jl_setup: coarse solver is already initialized.\n");
-      fflush(stderr);
-    }
-    return;
-  }
-
-  crs = tcalloc(struct crs, 1);
-
-  comm_init(&(crs->c), comm);
-  crs->type = type;
-  crs->un = n;
-
+void allocate_work_arrays(struct crs *crs) {
   size_t usize;
-  switch (dom) {
+  switch (crs->dom) {
   case gs_double:
     usize = sizeof(double);
     break;
@@ -183,31 +167,47 @@ void jl_setup(uint type, uint n, const ulong *id, uint nnz, const uint *Ai,
     usize = sizeof(float);
     break;
   default:
-    fprintf(stderr, "jl_setup: unknown gs_dom = %d.\n", dom);
-    MPI_Abort(comm, EXIT_FAILURE);
+    fprintf(stderr, "%s: unknown gs_dom = %d.\n", __func__, crs->dom);
+    MPI_Abort(crs->c.c, EXIT_FAILURE);
     break;
   }
 
-  crs->dom = dom;
-  crs->x = calloc(usize, 2 * n);
-  crs->rhs = (void *)((char *)crs->x + n * usize);
+  crs->x = calloc(usize, crs->un);
+  crs->rhs = calloc(usize, crs->un);
   crs->wrk = tcalloc(float, crs->un);
+}
 
-  struct comm *c = &crs->c;
-  switch (type) {
-  case JL_XXT:
-    crs->solver = (void *)crs_xxt_setup(n, id, nnz, Ai, Aj, A, null, c, dom);
+void jl_setup(uint n, const ulong *id, uint nnz, const uint *Ai, const uint *Aj,
+              const double *A, const jl_opts *opts, MPI_Comm comm) {
+  if (crs != NULL) {
+    if (crs->c.id == 0)
+      fprintf(stderr, "%s: coarse solver is already initialized.\n", __func__);
+    fflush(stderr);
+    return;
+  }
+
+  crs = tcalloc(struct crs, 1);
+  crs->un = n;
+  crs->dom = opts->dom;
+  crs->type = opts->algo;
+  allocate_work_arrays(crs);
+
+  comm_init(&(crs->c), comm);
+  struct comm *c = &(crs->c);
+  switch (crs->type) {
+  case XXT:
+    crs->solver = (void *)crs_xxt_setup(n, id, nnz, Ai, Aj, A, opts->null_space, c, opts->dom);
     break;
-  case JL_BOX:
-    crs->solver = (void *)crs_box_setup(n, id, nnz, Ai, Aj, A, null, c, dom);
+  case BOX:
+    crs->solver = (void *)crs_box_setup(n, id, nnz, Ai, Aj, A, opts, c);
     break;
   default:
     break;
   }
 
   if (crs->c.id == 0) {
-    printf("%s: n = %u, nnz = %u, null = %u, dom = %s\n", __func__, n, nnz, null,
-        (dom == gs_double) ? "double" : "float");
+    printf("%s: n = %u, nnz = %u, null = %u, dom = %s\n", __func__, crs->un, nnz,
+        opts->null_space, (crs->dom == gs_double) ? "double" : "float");
     fflush(stdout);
   }
 }
@@ -236,10 +236,10 @@ void jl_solve(occa::memory &o_x, occa::memory &o_rhs) {
 #undef copy_from_buf
 
   switch (crs->type) {
-  case JL_XXT:
+  case XXT:
     crs_xxt_solve(crs->x, (struct xxt *)crs->solver, crs->rhs);
     break;
-  case JL_BOX:
+  case BOX:
     crs_box_solve(crs->x, (struct box *)crs->solver, crs->rhs);
     break;
   default:
@@ -268,10 +268,10 @@ void jl_free() {
     return;
 
   switch (crs->type) {
-  case JL_XXT:
+  case XXT:
     crs_xxt_free((struct xxt *)crs->solver);
     break;
-  case JL_BOX:
+  case BOX:
     crs_box_free((struct box *)crs->solver);
     break;
   default:
@@ -279,5 +279,6 @@ void jl_free() {
   }
 
   comm_free(&crs->c);
-  free(crs->x), free(crs->wrk), free(crs), crs = NULL;
+  free(crs->x), free(crs->rhs), free(crs->wrk), free(crs);
+  crs = NULL;
 }

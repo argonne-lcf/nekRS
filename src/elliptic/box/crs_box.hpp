@@ -5,6 +5,8 @@
 #include <gslib.h>
 #include <platform.hpp>
 
+#include <nekrs_crs.hpp>
+
 struct xxt;
 struct xxt *crs_xxt_setup(uint n, const ulong *id, uint nz, const uint *Ai,
                           const uint *Aj, const double *A, uint null_space,
@@ -14,17 +16,10 @@ void crs_xxt_stats(struct xxt *data);
 void crs_xxt_times(double *cholesky, double *local, double *xxt, double *qqt);
 void crs_xxt_free(struct xxt *data);
 
-void crs_xxt_setup_inter_comm(uint n, const ulong *id, uint nz, const uint *Ai,
-                              const uint *Aj, const double *A, uint null_space,
-                              const MPI_Comm *inter_comm, gs_dom dom,
-                              struct comm *local_comm);
-void crs_xxt_solve_inter_comm(double *x, const double *rhs);
-void crs_xxt_finalize_inter_comm(void);
-
 struct box;
 struct box *crs_box_setup(uint n, const ulong *id, uint nnz, const uint *Ai,
-                          const uint *Aj, const double *A, uint null,
-                          const struct comm *comm, gs_dom dom);
+                          const uint *Aj, const double *A, const jl_opts *opts,
+                          const struct comm *comm);
 void crs_box_solve(void *x, struct box *data, const void *b);
 void crs_box_solve2(occa::memory &o_x, struct box *data, occa::memory &o_rhs);
 void crs_box_free(struct box *data);

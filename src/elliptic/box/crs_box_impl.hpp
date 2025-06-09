@@ -17,10 +17,6 @@
     }                                                                          \
   }
 
-#define BOX_XXT 1
-#define BOX_CHOLMOD 2
-#define BOX_GPU_BLAS 4
-
 struct box {
   // User input.
   uint un;
