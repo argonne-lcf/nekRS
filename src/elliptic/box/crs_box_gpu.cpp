@@ -2,7 +2,6 @@
 #include <cstdlib>
 
 #include <platform.hpp>
-#include <lapacke.h>
 
 #include "crs_box_impl.hpp"
 
@@ -82,6 +81,17 @@ void setup_u2c(const int un, const int *u2c) {
   array_free(&map);
 }
 
+#define FNAME(x) TOKEN_PASTE(x, _)
+
+#define FDGETRF FNAME(dgetrf)
+#define FDGETRI FNAME(dgetri)
+
+extern "C" {
+  void FDGETRF(int *M, int *N, double *A, int *lda, int *IPIV, int *INFO);
+  void FDGETRI(int *N, double *A, int *lda, int *IPIV, double *WORK, int *lwork,
+               int *INFO);
+}
+
 void setup_inverse(double **A_inv, float **A_inv_f32, const struct csr *A) {
   nr = A->nr;
   double *B = tcalloc(double, A->nr * A->nr);
@@ -90,32 +100,45 @@ void setup_inverse(double **A_inv, float **A_inv_f32, const struct csr *A) {
       B[i * A->nr + A->cols[j] - A->base] = A->vals[j];
   }
 
+  int N = A->nr;
+  *A_inv = tcalloc(double, A->nr * A->nr);
+  for (int i = 0; i < N; i++) {
+    for (int j = 0; j < N; j++)
+      (*A_inv)[i * N + j] = B[j * N + i];
+  }
+
   int *ipiv = tcalloc(int, A->nr);
-  int info = LAPACKE_dgetrf(LAPACK_ROW_MAJOR, A->nr, A->nr, B, A->nr, ipiv);
+  int info;
+  FDGETRF(&N, &N, *A_inv, &N, ipiv, &info);
   if (info != 0) {
     fprintf(stderr, "dgetrf failed !\n");
     fflush(stderr);
     MPI_Abort(MPI_COMM_WORLD, EXIT_FAILURE);
   }
 
-  info = LAPACKE_dgetri(LAPACK_ROW_MAJOR, A->nr, B, A->nr, ipiv);
+  int size = N * N;
+  double *work = (double *)calloc(size, sizeof(double));
+  FDGETRI(&N, *A_inv, &N, ipiv, work, &size, &info);
   if (info != 0) {
     fprintf(stderr, "dgetri failed !\n");
     fflush(stderr);
     MPI_Abort(MPI_COMM_WORLD, EXIT_FAILURE);
   }
-  free(ipiv);
+  free(ipiv), free(work);
 
-  *A_inv = tcalloc(double, A->nr * A->nr);
-  for (uint i = 0; i < A->nr; i++) {
-    for (uint j = 0; j < A->nr; j++)
-      (*A_inv)[i * A->nr + j] = B[i * A->nr + j];
+  for (int i = 0; i < N; i++) {
+    for (int j = 0; j < N; j++)
+      B[i * N + j] = (*A_inv)[j * N + i];
   }
+
+  for (uint i = 0; i < A->nr; i++)
+    for (uint j = 0; j < A->nr; j++)
+      (*A_inv)[i * N + j] = B[i * N + j];
 
   *A_inv_f32 = tcalloc(float, A->nr * A->nr);
   for (uint i = 0; i < A->nr; i++)
     for (uint j = 0; j < A->nr; j++)
-      (*A_inv_f32)[i * A->nr + j] = (float)B[i * A->nr + j];
+      (*A_inv_f32)[i * N + j] = (float)B[i * N + j];
 
   free(B);
 }
