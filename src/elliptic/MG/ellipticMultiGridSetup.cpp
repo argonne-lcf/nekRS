@@ -251,23 +251,20 @@ void ellipticMultiGridSetup(elliptic_t *elliptic_)
         jl_setup_aux(&num_total, &gids, &nnz, &ia, &ja, &a, ellipticCoarse, elliptic);
 
         jl_opts opts;
-
-        opts.algo = BOX;
-        opts.dom = gs_double;
-        opts.asm1 = BOX_CHOLMOD;
-        opts.mult = 1;
         opts.null_space = elliptic->nullspace;
-        opts.timer = 1;
 
+        opts.algo =  BOX;
         if (xxt)
           opts.algo = XXT;
 
+        opts.dom = gs_double;
         const char *tmp = getenv("NEKRS_CRS_DOM");
         if (tmp && strncmp(tmp, "gs_float", 32) == 0)
           opts.dom = gs_float;
         if (tmp && strncmp(tmp, "gs_double", 32) == 0)
           opts.dom = gs_double;
 
+        opts.asm1 = BOX_CHOLMOD;
         tmp = getenv("NEKRS_CRS_ASM1");
         if (tmp && strncmp(tmp, "xxt", 32) == 0)
           opts.asm1 = BOX_XXT;
@@ -276,10 +273,12 @@ void ellipticMultiGridSetup(elliptic_t *elliptic_)
         if (tmp && strncmp(tmp, "gpu", 32) == 0)
           opts.asm1 = BOX_GPU;
 
+        opts.mult = 1;
         tmp = getenv("NEKRS_CRS_MULT");
         if (tmp)
           opts.mult = atoi(tmp);
 
+        opts.timer = 1;
         tmp = getenv("NEKRS_CRS_TIMER");
         if (tmp)
           opts.timer = atoi(tmp);
