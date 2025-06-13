@@ -189,10 +189,9 @@ static void setup_asm1(struct box *box, double tol, const struct comm *comm) {
   assert(null_space == 0);
 
   box->cn = 0;
-  box->u2c = NULL;
+  box->u2c = (int *)get_u2c(&box->cn, box->sn, tmp_vtx, &box->bfr);
   box->ss = NULL;
 
-  box->u2c = (int *)get_u2c(&box->cn, box->sn, tmp_vtx, &box->bfr);
   struct csr *A = csr_setup(nnz, ia, ja, va, box->u2c, tol, &box->bfr);
 
   if (box->algo == BOX_XXT)
@@ -238,7 +237,7 @@ struct box *crs_box_setup(uint n, const ulong *id, uint nnz, const uint *Ai, con
   box->ncr = nnz / n;
   box->dom = opts->dom;
   box->mult = opts->mult;
-  box->algo = opts->algo;
+  box->algo = opts->asm1;
   buffer_init(&(box->bfr), 1024);
 
   // Copy the global communicator.

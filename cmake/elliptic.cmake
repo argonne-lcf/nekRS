@@ -42,6 +42,8 @@ set(ELLIPTIC_SOURCES
 
 if (ENABLE_ONEMKL)
   add_library(crs_box_onemkl SHARED "${ELLIPTIC_SOURCE_DIR}/box/crs_box_gpu_onemkl.cpp")
+  target_compile_definitions(crs_box_onemkl PRIVATE -DENABLE_ONEMKL)
   find_package(MKL CONFIG REQUIRED PATHS $ENV{MKLROOT})
   target_link_libraries(crs_box_onemkl PRIVATE MKL::MKL_SYCL::BLAS MKL::MKL_SYCL)
+  install(TARGETS crs_box_onemkl LIBRARY DESTINATION lib ARCHIVE DESTINATION lib)
 endif()
