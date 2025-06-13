@@ -108,6 +108,20 @@ c-----------------------------------------------------------------------
 
       call nekrs_registerPtr('cbc', cbc)
 
+      ! box solver
+      call nekrs_registerPtr('box_e', box_e(1))
+      call nekrs_registerPtr('box_r', box_r(1))
+      call nekrs_registerPtr('box_mask', box_mask(1))
+      call nekrs_registerPtr('schwz_ne', schwz_ne)
+      call nekrs_registerPtr('schwz_nw', schwz_nw)
+      call nekrs_registerPtr('schwz_ncr', schwz_ncr)
+      call nekrs_registerPtr('schwz_mask', schwz_mask(1))
+      call nekrs_registerPtr('schwz_amat', schwz_amat(1))
+      call nekrs_registerPtr('schwz_vtx', schwz_vtx(1))
+      call nekrs_registerPtr('schwz_eids', schwz_eids(1))
+      call nekrs_registerPtr('schwz_xyz', schwz_xyz(1))
+      call nekrs_registerPtr('schwz_frontier', schwz_frontier(1))
+
       return
       end
 c-----------------------------------------------------------------------
@@ -1396,3 +1410,72 @@ c-----------------------------------------------------------------------
 
       return
       end
+C----------------------------------------------------------------------
+C     box solver
+C----------------------------------------------------------------------
+      subroutine nekf_box_crs_setup()
+      include 'SIZE'
+      include 'TOTAL'
+      include 'NEKINTF'
+
+      integer null_space,nxc,ncr
+      integer ne,nv,nw
+      logical ifdbg
+
+      call setup_schwz_2l_crs
+      call set_coarse_mask(box_mask,null_space) ! This is the Q1 mask
+
+      nxc=2
+      nzc=1
+      if(if3d) then
+        nzc=nxc
+      endif
+
+      schwz_ne=nelv
+      nv=lvrs
+      call nrs_setup_schwarz_mat_mask(schwz_ne,nv,schwz_vtx,nxc,nzc,
+     $  schwz_amat,schwz_mask)
+
+      call nrs_init_elements(schwz_ne,schwz_eids,lvrs,schwz_xyz)
+
+      schwz_nw=0
+      ifdbg=.true.
+      call nrs_find_overlap_elements(schwz_ne,schwz_eids,nv,schwz_vtx,
+     $  schwz_xyz,schwz_amat,schwz_mask,schwz_nw,schwz_frontier,lelmrs,
+     $  ifdbg)
+
+      schwz_ncr=nxc*nxc*nxc
+
+      call nrs_set_global_crs(box_mask)
+
+      return
+      end
+C----------------------------------------------------------------------
+      subroutine nekf_box_map_vtx_to_box
+      include 'SIZE'
+      include 'TOTAL'
+      include 'NEKINTF'
+
+      call map_vtx_to_box(box_vb,box_r)
+
+      end
+C----------------------------------------------------------------------
+      subroutine nekf_box_crs_solve
+      include 'SIZE'
+      include 'TOTAL'
+      include 'NEKINTF'
+
+      call box_crs_solve_h1(box_ub,box_vb)
+
+      return
+      end
+C----------------------------------------------------------------------
+      subroutine nekf_box_map_box_to_vtx
+      include 'SIZE'
+      include 'TOTAL'
+      include 'NEKINTF'
+
+      call map_box_to_vtx(box_e,box_ub)
+
+      end
+C----------------------------------------------------------------------

@@ -30,7 +30,7 @@
 #include "ellipticMultiGrid.h"
 #include "ellipticBuildFEM.hpp"
 
-#include "jl.hpp"
+#include "nekrs_crs.hpp"
 
 void ellipticMultiGridSetup(elliptic_t *elliptic_)
 {
@@ -241,15 +241,62 @@ void ellipticMultiGridSetup(elliptic_t *elliptic_)
 
       hlong *coarseGlobalStarts = (hlong *)calloc(platform->comm.mpiCommSize + 1, sizeof(hlong));
 
-      int jl = options.compareArgs("COARSE SOLVER", "XXT");
-      if (jl) {
+      int xxt = options.compareArgs("COARSE SOLVER", "XXT");
+      int box = options.compareArgs("COARSE SOLVER", "BOX");
+      if (xxt || box) {
         uint num_total, nnz;
         uint *ia, *ja;
         ulong *gids;
         double *a;
         jl_setup_aux(&num_total, &gids, &nnz, &ia, &ja, &a, ellipticCoarse, elliptic);
 
-        jl_setup(platform->comm.mpiComm, num_total, gids, nnz, ia, ja, a, elliptic->nullspace, 1);
+        jl_opts opts;
+        opts.null_space = elliptic->nullspace;
+
+        opts.algo =  BOX;
+        if (xxt)
+          opts.algo = XXT;
+
+        opts.dom = gs_double;
+        const char *tmp = getenv("NEKRS_CRS_DOM");
+        if (tmp && strncmp(tmp, "gs_float", 32) == 0)
+          opts.dom = gs_float;
+        if (tmp && strncmp(tmp, "gs_double", 32) == 0)
+          opts.dom = gs_double;
+        if (tmp && platform->comm.mpiRank == 0)
+          printf("NEKRS_CRS_DOM = %s\n", tmp);
+
+        opts.asm1 = BOX_CHOLMOD;
+        tmp = getenv("NEKRS_CRS_ASM1");
+        if (tmp && strncmp(tmp, "xxt", 32) == 0)
+          opts.asm1 = BOX_XXT;
+        if (tmp && strncmp(tmp, "cholmod", 32) == 0)
+          opts.asm1 = BOX_CHOLMOD;
+        if (tmp && strncmp(tmp, "gpu", 32) == 0)
+          opts.asm1 = BOX_GPU;
+        if (tmp && platform->comm.mpiRank == 0) {
+          printf("BOX_XXT = %d, BOX_CHOLMOD = %d, BOX_GPU = %d\n", BOX_XXT, BOX_CHOLMOD, BOX_GPU);
+          printf("NEKRS_CRS_ASM1 = %s, opts.asm1 = %d\n", tmp, opts.asm1);
+          printf("is_xxt = %d\n", !strncmp(tmp, "xxt", 32));
+          printf("is_cholmod = %d\n", !strncmp(tmp, "cholmod", 32));
+          printf("is_gpu = %d\n", !strncmp(tmp, "gpu", 32));
+        }
+
+        opts.mult = 1;
+        tmp = getenv("NEKRS_CRS_MULT");
+        if (tmp)
+          opts.mult = atoi(tmp);
+        if (tmp && platform->comm.mpiRank == 0)
+          printf("NEKRS_CRS_MULT = %s\n", tmp);
+
+        opts.timer = 1;
+        tmp = getenv("NEKRS_CRS_TIMER");
+        if (tmp)
+          opts.timer = atoi(tmp);
+        if (tmp && platform->comm.mpiRank == 0)
+          printf("NEKRS_CRS_TIMER = %s\n", tmp);
+
+        jl_setup(num_total, gids, nnz, ia, ja, a, &opts, platform->comm.mpiComm);
 
         int rank = platform->comm.mpiRank;
         coarseGlobalStarts[rank] = 0;

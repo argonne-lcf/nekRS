@@ -335,7 +335,7 @@ void fpartmesh(int *nell, long long *el, long long *vl, double *xyz,
   if (*loglevel > 2)
     print_part_stat(vl, nel, nv, cext);
 
-  ierr = parrsb_part_mesh(part, vl, xyz, NULL, nel, nv, &options, comm.c);
+  ierr = parrsb_part_mesh(part, vl, xyz, nel, nv, options, comm.c);
   if (ierr != 0)
     goto err;
 
@@ -368,42 +368,6 @@ void fpartmesh(int *nell, long long *el, long long *vl, double *xyz,
 err:
   fflush(stdout);
   *rtval = 1;
-}
-
-#define fpartmesh_greedy FORTRAN_UNPREFIXED(fpartmesh_greedy, FPARTMESH_GRREDY)
-
-void fpartmesh_greedy(int *const nel2, long long *const el2,
-                      long long *const vl2, const int *const nel1,
-                      const long long *const vl1, const int *const lelm_,
-                      const int *const nv, const int *const fcomm,
-                      int *const rtval) {
-#if defined(PARRSB)
-  const int lelm = *lelm_;
-
-  struct comm comm;
-#if defined(MPI)
-  comm_ext cext = MPI_Comm_f2c(*fcomm);
-#else
-  comm_ext cext = 0;
-#endif
-  comm_init(&comm, cext);
-
-  int *const part = (int *)malloc(lelm * sizeof(int));
-  parrsb_part_solid(part, vl2, *nel2, vl1, *nel1, *nv, comm.c);
-
-  int ierr = redistribute_data(nel2, vl2, el2, part, *nv, lelm, &comm);
-  if (ierr != 0)
-    goto err;
-  *rtval = 0;
-
-  free(part);
-  comm_free(&comm);
-  return;
-
-err:
-  fflush(stdout);
-  *rtval = 1;
-#endif
 }
 
 #define fprintpartstat FORTRAN_UNPREFIXED(printpartstat, PRINTPARTSTAT)
