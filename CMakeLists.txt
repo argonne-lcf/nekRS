@@ -315,9 +315,9 @@ if (ENABLE_CHOLMOD)
 endif()
 
 if (ENABLE_ONEMKL)
-  target_compile_definitions(nekrs-lib PRIVATE -DENABLE_ONEMKL)
+  target_compile_definitions(nekrs-lib PUBLIC -DENABLE_ONEMKL)
   if (NEKRS_BUILD_FLOAT)
-    target_compile_definitions(nekrs-lib-fp32 PRIVATE -DENABLE_ONEMKL)
+    target_compile_definitions(nekrs-lib-fp32 PUBLIC -DENABLE_ONEMKL)
   endif()
 endif()
 
