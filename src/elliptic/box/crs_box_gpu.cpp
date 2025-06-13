@@ -20,16 +20,6 @@ static uint gs_n;
 static occa::memory o_gs_off, o_gs_idx;
 static occa::memory o_cx;
 
-#define FNAME(x) TOKEN_PASTE(x, _)
-#define FDGETRF FNAME(dgetrf)
-#define FDGETRI FNAME(dgetri)
-
-extern "C" {
-  void FDGETRF(int *M, int *N, double *A, int *lda, int *IPIV, int *INFO);
-  void FDGETRI(int *N, double *A, int *lda, int *IPIV, double *WORK, int *lwork,
-               int *INFO);
-}
-
 static void setup_core(uint nr_) {
   nr = nr_;
   h_r = calloc(nr, sizeof(double));
@@ -44,53 +34,27 @@ static void finalize_core(void) {
 }
 
 static void setup_inverse(double **A_inv, float **A_inv_f32, const struct csr *A) {
-  double *B = tcalloc(double, A->nr * A->nr);
-  for (uint i = 0; i < A->nr; i++) {
-    for (uint j = A->offs[i]; j < A->offs[i + 1]; j++)
-      B[i * A->nr + A->cols[j] - A->base] = A->vals[j];
-  }
+  assert(sizeof(dfloat) == sizeof(double));
 
   int N = A->nr;
+  std::vector<dfloat> B(N * N);
+  for (uint i = 0; i < A->nr; i++) {
+    for (uint j = A->offs[i]; j < A->offs[i + 1]; j++) {
+      // B[i * A->nr + A->cols[j] - A->base] = A->vals[j];
+      B[(A->cols[j] - A->base) * A->nr + i] = A->vals[j];
+    }
+  }
+
+  auto invA = platform->linAlg->matrixInverse(N, B);
+
   *A_inv = tcalloc(double, A->nr * A->nr);
-  for (int i = 0; i < N; i++) {
-    for (int j = 0; j < N; j++)
-      (*A_inv)[i * N + j] = B[j * N + i];
-  }
-
-  int *ipiv = tcalloc(int, A->nr);
-  int info;
-  FDGETRF(&N, &N, *A_inv, &N, ipiv, &info);
-  if (info != 0) {
-    fprintf(stderr, "dgetrf failed !\n");
-    fflush(stderr);
-    MPI_Abort(MPI_COMM_WORLD, EXIT_FAILURE);
-  }
-
-  int size = N * N;
-  double *work = (double *)calloc(size, sizeof(double));
-  FDGETRI(&N, *A_inv, &N, ipiv, work, &size, &info);
-  if (info != 0) {
-    fprintf(stderr, "dgetri failed !\n");
-    fflush(stderr);
-    MPI_Abort(MPI_COMM_WORLD, EXIT_FAILURE);
-  }
-  free(ipiv), free(work);
-
-  for (int i = 0; i < N; i++) {
-    for (int j = 0; j < N; j++)
-      B[i * N + j] = (*A_inv)[j * N + i];
-  }
-
-  for (uint i = 0; i < A->nr; i++)
-    for (uint j = 0; j < A->nr; j++)
-      (*A_inv)[i * N + j] = B[i * N + j];
-
   *A_inv_f32 = tcalloc(float, A->nr * A->nr);
-  for (uint i = 0; i < A->nr; i++)
-    for (uint j = 0; j < A->nr; j++)
-      (*A_inv_f32)[i * N + j] = (float)B[i * N + j];
-
-  free(B);
+  for (int i = 0; i < N; i++) {
+    for (int j = 0; j < N; j++) {
+      (*A_inv)[i * N + j] = (double)invA[j * N + i];
+      (*A_inv_f32)[i * N + j] = (float)invA[j * N + i];
+    }
+  }
 }
 
 static void setup_u2c(const int un, const int *u2c) {
