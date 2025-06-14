@@ -38,6 +38,7 @@ private:
   static platform_t *singleton;
 
 public:
+  int tStep;
   setupAide &options;
   int warpSize;
   comm_t comm;

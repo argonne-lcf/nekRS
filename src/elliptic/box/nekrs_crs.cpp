@@ -259,6 +259,9 @@ void jl_solve(occa::memory &o_x, occa::memory &o_rhs) {
 #undef copy_to_buf
   o_x.copyFrom(crs->wrk, crs->un, 0);
   timer_toc(COPY_SOLUTION_TO_GPU);
+
+  if ((platform->tStep % 500) == 0)
+    timer_print(&(crs->c));
 }
 
 void jl_solve2(occa::memory &o_x, occa::memory &o_rhs) {
@@ -269,7 +272,6 @@ void jl_solve2(occa::memory &o_x, occa::memory &o_rhs) {
 
 void jl_free() {
   if (crs == NULL) return;
-  timer_print(&(crs->c));
 
   switch (crs->type) {
   case XXT:

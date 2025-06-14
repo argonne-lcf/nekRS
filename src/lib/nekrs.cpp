@@ -408,6 +408,7 @@ std::tuple<double, double> dt(int tstep)
 {
   dfloat dt_ = -1;
   platform->options.getArgs("DT", dt_);
+  platform->tStep = tstep;
 
   if (platform->options.compareArgs("VARIABLE DT", "TRUE")) {
     if (platform->options.getArgs("DT").empty() && tstep == 1 || tstep > 1) {
