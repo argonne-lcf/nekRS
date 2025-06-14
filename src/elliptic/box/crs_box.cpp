@@ -145,7 +145,7 @@ static const sint *get_u2c(unsigned *cni, const unsigned n,
   return u2c;
 }
 
-static void setup_asm1(struct box *box, double tol, const struct comm *comm) {
+static void setup_asm1(struct box *box, const jl_opts *opts, double tol, const struct comm *comm) {
   uint ne = *(nekData.schwz_ne);
   uint nw = *(nekData.schwz_nw);
   const long long *vtx = (const long long *)nekData.schwz_vtx;
@@ -191,16 +191,14 @@ static void setup_asm1(struct box *box, double tol, const struct comm *comm) {
   box->cn = 0;
   box->u2c = (int *)get_u2c(&box->cn, box->sn, tmp_vtx, &box->bfr);
   box->ss = NULL;
-
   struct csr *A = csr_setup(nnz, ia, ja, va, box->u2c, tol, &box->bfr);
 
   if (box->algo == BOX_XXT)
-    box->ss = (void *)crs_xxt_setup(box->sn, tmp_vtx, nnz, ia, ja, va, null_space, &(box->local), box->dom);
+    box->ss = (void *)crs_xxt_setup(box->sn, tmp_vtx, nnz, ia, ja, va, opts, &(box->local));
   if (box->algo == BOX_CHOLMOD)
     asm1_cholmod_setup(A, null_space, box);
   if (box->algo == BOX_GPU)
     asm1_gpu_setup(A, null_space, box);
-
   csr_free(A), free(ia), free(ja);
 
   // Setup the crs_dsavg which basically average the solution of original
@@ -249,15 +247,12 @@ struct box *crs_box_setup(uint n, const ulong *id, uint nnz, const uint *Ai, con
   comm_init(&(box->local), local);
   MPI_Comm_free(&local);
 
-  if (opts->timer)
-    timer_init();
-
   // ASM2 setup using Fortran. We should port this to C.
   nek::box_crs_setup();
 
   // ASM1 setup on C side.
   box->sn = *(nekData.schwz_ne) * box->ncr;
-  setup_asm1(box, 1e-12, comm);
+  setup_asm1(box, opts, 1e-12, comm);
 
   // Print some info.
   if (box->global.id == 0) {

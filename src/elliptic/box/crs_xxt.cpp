@@ -94,10 +94,11 @@ struct xxt {
 };
 
 struct xxt *crs_xxt_setup(uint n, const ulong *id, uint nz, const uint *Ai,
-                          const uint *Aj, const double *A, uint null_space,
-                          const struct comm *comm, gs_dom dom) {
+                          const uint *Aj, const double *A, const jl_opts *opts,
+                          const struct comm *comm) {
   struct xxt *xxt = tcalloc(struct xxt, 1);
-  xxt->dom = dom;
+  gs_dom dom = xxt->dom = opts->dom;
+  uint null_space = opts->null_space;
   switch (dom) {
   case gs_double:
     xxt->solver =
@@ -172,6 +173,7 @@ void crs_xxt_free(struct xxt *xxt) {
   free(xxt);
 }
 
+#if 0
 static uint initialized = 0;
 static uint num_vertices = 0, num_elements = 0;
 static int remote_size = 0;
@@ -412,3 +414,4 @@ void crs_xxt_finalize_inter_comm() {
 
   initialized = 0;
 }
+#endif

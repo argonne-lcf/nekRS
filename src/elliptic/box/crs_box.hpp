@@ -9,8 +9,8 @@
 
 struct xxt;
 struct xxt *crs_xxt_setup(uint n, const ulong *id, uint nz, const uint *Ai,
-                          const uint *Aj, const double *A, uint null_space,
-                          const struct comm *comm, gs_dom dom);
+                          const uint *Aj, const double *A, const jl_opts *opts,
+                          const struct comm *comm);
 void crs_xxt_solve(void *x, struct xxt *data, const void *b);
 void crs_xxt_stats(struct xxt *data);
 void crs_xxt_times(double *cholesky, double *local, double *xxt, double *qqt);
