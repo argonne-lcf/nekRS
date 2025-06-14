@@ -278,20 +278,22 @@ void ellipticMultiGridSetup(elliptic_t *elliptic_)
         if (tmp)
           opts.mult = atoi(tmp);
 
-        opts.timer = 1;
+        int timer = 1;
         tmp = getenv("NEKRS_CRS_TIMER");
         if (tmp)
-          opts.timer = atoi(tmp);
+          timer = atoi(tmp);
 
         if (platform->comm.mpiRank == 0) {
           printf("NEKRS_CRS_DOM   = %d (gs_double = %d, gs_float = %d)\n", opts.dom, gs_double, gs_float);
           printf("NEKRS_CRS_ASM1  = %d (BOX_XXT = %d, BOX_CHOLMOD = %d, BOX_GPU = %d)\n", opts.asm1, BOX_XXT, BOX_CHOLMOD, BOX_GPU);
           printf("NEKRS_CRS_MULT  = %d\n", opts.mult);
-          printf("NEKRS_CRS_TIMER = %d\n", opts.timer);
+          printf("NEKRS_CRS_TIMER = %d\n", timer);
         }
         fflush(stdout);
 
         jl_setup(num_total, gids, nnz, ia, ja, a, &opts, platform->comm.mpiComm);
+        if (timer)
+          jl_timer_init();
 
         int rank = platform->comm.mpiRank;
         coarseGlobalStarts[rank] = 0;

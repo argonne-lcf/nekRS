@@ -189,9 +189,6 @@ void jl_setup(uint n, const ulong *id, uint nnz, const uint *Ai, const uint *Aj,
   crs->type = opts->algo;
   allocate_work_arrays(crs);
 
-  if (opts->timer)
-    timer_init();
-
   comm_init(&(crs->c), comm);
   struct comm *c = &(crs->c);
   switch (crs->type) {
@@ -210,6 +207,10 @@ void jl_setup(uint n, const ulong *id, uint nnz, const uint *Ai, const uint *Aj,
         opts->null_space, (crs->dom == gs_double) ? "double" : "float");
     fflush(stdout);
   }
+}
+
+void jl_timer_init() {
+  timer_init();
 }
 
 #define DOMAIN_SWITCH(dom, macro)                                              \
@@ -259,9 +260,6 @@ void jl_solve(occa::memory &o_x, occa::memory &o_rhs) {
 #undef copy_to_buf
   o_x.copyFrom(crs->wrk, crs->un, 0);
   timer_toc(COPY_SOLUTION_TO_GPU);
-
-  if ((platform->tStep % 500) == 0)
-    timer_print(&(crs->c));
 }
 
 void jl_solve2(occa::memory &o_x, occa::memory &o_rhs) {
@@ -287,4 +285,8 @@ void jl_free() {
   comm_free(&(crs->c));
   free(crs->x), free(crs->rhs), free(crs->wrk), free(crs);
   crs = NULL;
+}
+
+void jl_timer_print(MPI_Comm comm) {
+  timer_print(comm);
 }

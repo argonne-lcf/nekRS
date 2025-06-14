@@ -24,16 +24,18 @@ void timer_toc(BoxMetric m) {
   time_box[m] += (comm_time() - start_time);
 }
 
-void timer_print(const struct comm *c) {
+void timer_print(MPI_Comm comm) {
   if (!timer_on) return;
+
+  struct comm c;
+  comm_init(&c, comm);
 
   double max[MAX_METRICS], wrk[2 * MAX_METRICS];
   for (unsigned i = 0; i < MAX_METRICS; i++)
     max[i] = time_box[i];
-  comm_allreduce(c, gs_double, gs_max, max, MAX_METRICS, wrk);
+  comm_allreduce(&c, gs_double, gs_max, max, MAX_METRICS, wrk);
 
-
-  if (c->id == 0) {
+  if (c.id == 0) {
     printf("box copy_rhs          : %e\n", time_box[COPY_RHS]);
     printf("box asm1              : %e\n", time_box[ASM1]);
     printf("box mult_rhs_update   : %e\n", time_box[MULT_RHS_UPDATE]);
@@ -46,6 +48,8 @@ void timer_print(const struct comm *c) {
     printf("box copy_solution     : %e\n", time_box[COPY_SOLUTION]);
   }
   fflush(stdout);
+
+  comm_free(&c);
 }
 
 #undef MAX_METRICS

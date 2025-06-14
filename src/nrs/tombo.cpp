@@ -1,5 +1,7 @@
 #include "nrs.hpp"
 
+#include <nekrs_crs.hpp>
+
 namespace tombo
 {
 occa::memory pressureSolve(nrs_t *nrs, double time, int stage)
@@ -106,6 +108,8 @@ occa::memory pressureSolve(nrs_t *nrs, double time, int stage)
   o_P.copyFrom(nrs->o_P);
 
   nrs->pSolver->solve(o_lambda0, o_NULL, o_pRhs, o_P);
+  if ((platform->tStep % 500) == 0)
+    jl_timer_print(platform->comm.mpiComm);
 
   if (platform->verbose) {
     const dfloat debugNorm = platform->linAlg->weightedNorm2Many(mesh->Nlocal,

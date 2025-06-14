@@ -22,8 +22,9 @@ typedef struct {
   box_algo_t asm1;
   unsigned mult;
   unsigned null_space;
-  unsigned timer;
 } jl_opts;
+
+void jl_timer_init();
 
 void jl_setup_aux(uint *ntot, ulong **gids, uint *nnz, uint **ia, uint **ja,
                   double **a, elliptic_t *elliptic, elliptic_t *ellipticf);
@@ -36,5 +37,7 @@ void jl_solve(occa::memory &o_x, occa::memory &o_rhs);
 void jl_solve2(occa::memory &o_x, occa::memory &o_rhs);
 
 void jl_free();
+
+void jl_timer_print(MPI_Comm comm);
 
 #endif

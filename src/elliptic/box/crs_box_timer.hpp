@@ -24,6 +24,6 @@ typedef enum {
 void timer_init();
 void timer_tic(const struct comm *c);
 void timer_toc(const BoxMetric m);
-void timer_print(const struct comm *c);
+void timer_print(MPI_Comm comm);
 
 #endif
