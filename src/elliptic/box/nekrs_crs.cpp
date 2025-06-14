@@ -282,7 +282,7 @@ void jl_free() {
     break;
   }
 
-  comm_free(&crs->c);
+  comm_free(&(crs->c));
   free(crs->x), free(crs->rhs), free(crs->wrk), free(crs);
   crs = NULL;
 }

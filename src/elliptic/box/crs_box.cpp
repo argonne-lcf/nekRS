@@ -232,10 +232,12 @@ struct box *crs_box_setup(uint n, const ulong *id, uint nnz, const uint *Ai, con
                           const double *A, const jl_opts *opts, const struct comm *comm) {
   struct box *box = tcalloc(struct box, 1);
   box->un = n;
-  box->ncr = nnz / n;
+  box->ncr = (n != 0) ? (nnz / n) : 0;
   box->dom = opts->dom;
   box->mult = opts->mult;
   box->algo = opts->asm1;
+
+  // Allocate workspace.
   buffer_init(&(box->bfr), 1024);
 
   // Copy the global communicator.
@@ -265,7 +267,7 @@ struct box *crs_box_setup(uint n, const ulong *id, uint nnz, const uint *Ai, con
 }
 
 void crs_box_solve(void *x, struct box *box, const void *rhs) {
-  struct comm *c = &box->global;
+  struct comm *c = &(box->global);
 
   // Copy RHS.
   timer_tic(c);
@@ -282,7 +284,7 @@ void crs_box_solve(void *x, struct box *box, const void *rhs) {
 
   // crs_dsavg1.
   timer_tic(c);
-  gs(box->srhs, box->dom, gs_add, 0, box->gsh, &box->bfr);
+  gs(box->srhs, box->dom, gs_add, 0, box->gsh, &(box->bfr));
 #define avg(T)                                                                 \
   {                                                                            \
     T *srhs = (T *)box->srhs;                                                  \
@@ -297,7 +299,7 @@ void crs_box_solve(void *x, struct box *box, const void *rhs) {
   timer_tic(c);
   switch (box->algo) {
   case BOX_XXT:
-    crs_xxt_solve((double *)box->sx, (struct xxt *)box->ss, (const double *)box->srhs);
+    crs_xxt_solve(box->sx, (struct xxt *)box->ss, box->srhs);
     break;
   case BOX_CHOLMOD:
     asm1_cholmod_solve(box->sx, box, box->srhs);

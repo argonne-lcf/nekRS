@@ -295,6 +295,7 @@ void ellipticMultiGridSetup(elliptic_t *elliptic_)
           opts.timer = atoi(tmp);
         if (tmp && platform->comm.mpiRank == 0)
           printf("NEKRS_CRS_TIMER = %s\n", tmp);
+        fflush(stdout);
 
         jl_setup(num_total, gids, nnz, ia, ja, a, &opts, platform->comm.mpiComm);
 
