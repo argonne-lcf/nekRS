@@ -1,26 +1,29 @@
 #if !defined(_CRS_BOX_TIMER_HPP_)
 #define _CRS_BOX_TIMER_HPP_
 
-enum BOX_METRIC {
-  COPY_RHS = 0,
-  CRS_DSAVG1 = 1,
-  ASM1 = 2,
-  CRS_DSAVG2 = 3,
-  MULT_RHS_UPDATE = 4,
-  COPY_TO_NEK5000 = 5,
-  MAP_VTX_TO_BOX = 6,
-  ASM2 = 7,
-  MAP_BOX_TO_VTX = 8,
-  COPY_FROM_NEK5000 = 9,
-  CRS_DSAVG3 = 10,
-  COPY_SOLUTION = 11,
-  NONE = 100
-};
+#include <gslib.h>
+
+typedef enum {
+  COPY_RHS_FROM_GPU = 0,
+  COPY_RHS,
+  CRS_DSAVG1,
+  ASM1,
+  CRS_DSAVG2,
+  MULT_RHS_UPDATE,
+  COPY_TO_NEK5000,
+  MAP_VTX_TO_BOX,
+  ASM2,
+  MAP_BOX_TO_VTX,
+  COPY_FROM_NEK5000,
+  CRS_DSAVG3,
+  COPY_SOLUTION,
+  COPY_SOLUTION_TO_GPU,
+  NONE,
+} BoxMetric;
 
 void timer_init();
 void timer_tic(const struct comm *c);
-void timer_toc(BOX_METRIC m);
-void timer_dump(struct comm *c, unsigned interval);
-void timer_print(struct comm *c, unsigned interval);
+void timer_toc(const BoxMetric m);
+void timer_print(const struct comm *c);
 
 #endif

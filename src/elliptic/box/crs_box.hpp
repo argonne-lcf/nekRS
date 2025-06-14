@@ -1,11 +1,14 @@
 #if !defined(_CRS_BOX_HPP_)
 #define _CRS_BOX_HPP_
 
+#include <cassert>
+
 #include <elliptic.h>
 #include <gslib.h>
 #include <platform.hpp>
 
-#include <nekrs_crs.hpp>
+#include "nekrs_crs.hpp"
+#include "crs_box_timer.hpp"
 
 struct xxt;
 struct xxt *crs_xxt_setup(uint n, const ulong *id, uint nz, const uint *Ai,

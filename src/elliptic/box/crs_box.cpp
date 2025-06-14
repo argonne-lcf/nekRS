@@ -324,8 +324,8 @@ void crs_box_solve(void *x, struct box *box, const void *rhs) {
   timer_toc(CRS_DSAVG1);
 
   // mult_rhs_update.
+  timer_tic(c);
   if (box->mult) {
-    timer_tic(c);
     // rhs = rhs - A*sx.
 #define update_rhs(T)                                                          \
   {                                                                            \
@@ -344,8 +344,8 @@ void crs_box_solve(void *x, struct box *box, const void *rhs) {
   }
     BOX_DOMAIN_SWITCH(box->dom, update_rhs);
 #undef update_rhs
-    timer_toc(MULT_RHS_UPDATE);
   }
+  timer_toc(MULT_RHS_UPDATE);
 
   // Copy to nek5000 to do the global solve.
   timer_tic(c);
@@ -408,8 +408,6 @@ void crs_box_solve(void *x, struct box *box, const void *rhs) {
   BOX_DOMAIN_SWITCH(box->dom, copy_to_x);
 #undef copy_to_x
   timer_toc(COPY_SOLUTION);
-
-  timer_print(&box->global, 1000);
 }
 
 void crs_box_solve2(occa::memory &o_x, struct box *box, occa::memory &o_rhs) {
@@ -535,13 +533,10 @@ void crs_box_solve2(occa::memory &o_x, struct box *box, occa::memory &o_rhs) {
   timer_tic(c);
   o_x.copyFrom(box->sx, box->un, 0);
   timer_toc(COPY_SOLUTION);
-
-  timer_print(&box->global, 1000);
 }
 
 void crs_box_free(struct box *box) {
-  if (!box)
-    return;
+  if (!box) return;
 
   switch (box->algo) {
   case BOX_XXT:

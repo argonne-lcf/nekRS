@@ -1,7 +1,4 @@
-#include <cassert>
-
 #include "crs_box.hpp"
-#include "nekrs_crs.hpp"
 
 static int check_alloc_(void *ptr, const char *file, unsigned line) {
   if (ptr == NULL) {
@@ -192,6 +189,9 @@ void jl_setup(uint n, const ulong *id, uint nnz, const uint *Ai, const uint *Aj,
   crs->type = opts->algo;
   allocate_work_arrays(crs);
 
+  if (opts->timer)
+    timer_init();
+
   comm_init(&(crs->c), comm);
   struct comm *c = &(crs->c);
   switch (crs->type) {
@@ -225,6 +225,7 @@ void jl_setup(uint n, const ulong *id, uint nnz, const uint *Ai, const uint *Aj,
   }
 
 void jl_solve(occa::memory &o_x, occa::memory &o_rhs) {
+  timer_tic(&(crs->c));
   o_rhs.copyTo(crs->wrk, crs->un, 0);
 #define copy_from_buf(T)                                                       \
   {                                                                            \
@@ -234,6 +235,7 @@ void jl_solve(occa::memory &o_x, occa::memory &o_rhs) {
   }
   DOMAIN_SWITCH(crs->dom, copy_from_buf);
 #undef copy_from_buf
+  timer_toc(COPY_RHS_FROM_GPU);
 
   switch (crs->type) {
   case XXT:
@@ -246,6 +248,7 @@ void jl_solve(occa::memory &o_x, occa::memory &o_rhs) {
     break;
   }
 
+  timer_tic(&(crs->c));
 #define copy_to_buf(T)                                                         \
   {                                                                            \
     T *x = (T *)crs->x;                                                        \
@@ -255,6 +258,7 @@ void jl_solve(occa::memory &o_x, occa::memory &o_rhs) {
   DOMAIN_SWITCH(crs->dom, copy_to_buf);
 #undef copy_to_buf
   o_x.copyFrom(crs->wrk, crs->un, 0);
+  timer_toc(COPY_SOLUTION_TO_GPU);
 }
 
 void jl_solve2(occa::memory &o_x, occa::memory &o_rhs) {
@@ -264,8 +268,8 @@ void jl_solve2(occa::memory &o_x, occa::memory &o_rhs) {
 #undef DOMAIN_SWITCH
 
 void jl_free() {
-  if (crs == NULL)
-    return;
+  if (crs == NULL) return;
+  timer_print(&(crs->c));
 
   switch (crs->type) {
   case XXT:
