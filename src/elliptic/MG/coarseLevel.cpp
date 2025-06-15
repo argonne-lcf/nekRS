@@ -240,7 +240,7 @@ void MGSolver_t::coarseLevel_t::solve(occa::memory &o_rhs, occa::memory &o_x)
     } else if (options.compareArgs("COARSE SOLVER", "AMGX")) {
       AMGX->solve(o_Gx.ptr(), o_xBuffer.ptr());
     } else if (jl) {
-      jl_solve(o_x, o_Sx);
+      jl_solve2(o_x, o_Sx);
     }
 
     if (!jl) {

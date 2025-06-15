@@ -417,13 +417,13 @@ void crs_box_solve2(occa::memory &o_x, struct box *box, occa::memory &o_rhs) {
 
   if ((box->dom != gs_float) || (box->algo != BOX_GPU)) {
     if (c->id == 0)
-      fprintf(stderr, "Wrong domain or wrong solver!\n");
+      fprintf(stderr, "Wrong domain and/or wrong solver!\n");
     fflush(stderr);
     MPI_Abort(c->c, EXIT_FAILURE);
   }
 
-  timer_tic(c);
   // Can move the first inv_mul.* to here.
+  timer_tic(c);
   o_rhs.copyTo(box->srhs, box->un, 0);
   timer_toc(COPY_RHS);
 
