@@ -1,0 +1,30 @@
+@kernel void mapBoxToVtx(const dlong nelv, @restrict const int *iphi_e, @restrict const double *phi_e,
+                         @restrict const double *ub, @restrict float *uc) {
+  for (dlong e = 0; e < nelv; ++e; @outer(0)) {
+    int ibox = iphi_e[e] - 1;
+    @shared double s_r[p_NC][p_NC];
+
+    for (int i = 0; i < p_NC; ++i; @inner(0)) {
+      for (int j = 0; j < p_NC; ++j; @inner(1)) {
+        s_r[i][j] = phi_e[i + j * p_NC + e * p_NC * p_NC] * ub[j + p_NC * ibox];
+      }
+    }
+
+    for (int i = 0; i < p_NC; ++i; @inner(0)) {
+      for (int j = 0; j < p_NC; ++j; @inner(1)) {
+        for (int offset = p_NC / 2; offset >= 1; offset /= 2) {
+          if (j < offset)
+            s_r[i][j] = s_r[i][j] + s_r[i][j + offset];
+          @barrier();
+        }
+      }
+    }
+
+    for (int i = 0; i < p_NC; ++i; @inner(0)) {
+      for (int j = 0; j < p_NC; ++j; @inner(1)) {
+        if (j == 0)
+          uc[i + p_NC * e] = s_r[i][j];
+      }
+    }
+  }
+}

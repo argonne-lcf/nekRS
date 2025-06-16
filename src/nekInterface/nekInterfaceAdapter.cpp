@@ -1171,7 +1171,11 @@ int setup(int numberActiveFields)
   /* box solver */
   nekData.box_e = ptr<double>("box_e");
   nekData.box_r = ptr<double>("box_r");
+  nekData.box_phi_e = ptr<double>("box_phi_e");
+  nekData.box_iphi_e = ptr<int>("box_iphi_e");
   nekData.box_mask = ptr<double>("box_mask");
+  nekData.box_ne = ptr<int>("box_ne");
+  nekData.box_nnz = ptr<int>("box_nnz");
   nekData.schwz_mask = ptr<double>("schwz_mask");
   nekData.schwz_amat = ptr<double>("schwz_amat");
   nekData.schwz_xyz = ptr<double>("schwz_xyz");

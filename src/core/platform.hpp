@@ -68,6 +68,9 @@ public:
   occa::kernel copyFloatToDfloatKernel;
 
   occa::kernel gatherRHSKernel;
+  occa::kernel mapVtxToBoxKernel;
+  occa::kernel boxZeroKernel;
+  occa::kernel mapBoxToVtxKernel;
 };
 #endif
 

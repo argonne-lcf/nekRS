@@ -16,7 +16,8 @@ C----------------------------------------------------------------------
       real box_e,box_r,box_mask,box_ub,box_vb,box_phi_e,
      $  schwz_amat,schwz_mask,schwz_xyz
       integer*8 schwz_vtx, schwz_eids
-      integer schwz_ne,schwz_nw,schwz_ncr,schwz_frontier,box_iphi_e
+      integer schwz_ne,schwz_nw,schwz_ncr,schwz_frontier,box_iphi_e,
+     $  box_ne,box_nnz
       common /BOXCRS/ box_e(lx1*ly1*lz1*lelmrs),
      $                box_r(lx1*ly1*lz1*lelmrs),
      $                box_mask(lvrs*lelmrs),
@@ -24,6 +25,8 @@ C----------------------------------------------------------------------
      $                box_vb(lvrs*lelmrs),
      $                box_phi_e(lvrs*lvrs*lelt),
      $                box_iphi_e(lvrs*lelt),
+     $                box_ne,
+     $                box_nnz,
      $                schwz_amat(lvrs*lvrs*lelmrs),
      $                schwz_mask(lvrs*lelmrs),
      $                schwz_vtx(lvrs*lelmrs),

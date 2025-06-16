@@ -74,7 +74,7 @@ struct nekdata_private {
 
   /* box solver */
   double *box_e, *box_r, *box_mask, *box_phi_e, *schwz_mask, *schwz_amat, *schwz_xyz;
-  int *schwz_ne, *schwz_nw, *schwz_ncr, *schwz_frontier, *box_iphi_e;
+  int *schwz_ne, *schwz_nw, *schwz_ncr, *schwz_frontier, *box_iphi_e, *box_ne, *box_nnz;
   long long *schwz_vtx, *schwz_eids;
 };
 

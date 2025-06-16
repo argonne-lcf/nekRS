@@ -14,6 +14,9 @@
 
 #include "crs_box_impl.hpp"
 
+occa::memory o_phi_e, o_iphi_e;
+occa::memory o_ub, o_uc;
+
 static void crs_box_dump(uint n, const ulong *id, uint nnz, const uint *Ai,
                          const uint *Aj, const double *A, uint null_space,
                          const struct comm *comm) {
@@ -228,6 +231,30 @@ static void setup_asm1(struct box *box, const jl_opts *opts, double tol, const s
 #undef allocate_work_arrays
 }
 
+static void setup_asm12_interpolation(const struct box *box) {
+  // Copy the phi_e, and iphi_e to C.
+  nek::box_copy_phi_e();
+
+  // Setup device memory
+  const int ncr = *(nekData.schwz_ncr);
+  const int nelv = nekData.nelv;
+  const int size = ncr * ncr * nelv;
+
+  o_phi_e = platform->device.malloc<double>(size);
+  o_phi_e.copyFrom(nekData.box_phi_e);
+
+  o_iphi_e = platform->device.malloc<int>(nelv);
+  int *wrk = (int *)calloc(nelv, sizeof(int));
+  for (int i = 0; i < nelv; i++)
+    wrk[i] = nekData.box_iphi_e[i * ncr];
+  o_iphi_e.copyFrom(wrk);
+  free(wrk);
+
+  assert(box->un == (ncr * nelv));
+  o_uc = platform->device.malloc<float>(ncr * nelv);
+  o_ub = platform->device.malloc<double>(*(nekData.box_ne));
+}
+
 struct box *crs_box_setup(uint n, const ulong *id, uint nnz, const uint *Ai, const uint *Aj,
                           const double *A, const jl_opts *opts, const struct comm *comm) {
   struct box *box = tcalloc(struct box, 1);
@@ -255,6 +282,9 @@ struct box *crs_box_setup(uint n, const ulong *id, uint nnz, const uint *Ai, con
   // ASM1 setup on C side.
   box->sn = *(nekData.schwz_ne) * box->ncr;
   setup_asm1(box, opts, 1e-12, comm);
+
+  // Setup interpolation between ASM1 and ASM2 on C.
+  setup_asm12_interpolation(box);
 
   // Print some info.
   if (box->global.id == 0) {
@@ -429,7 +459,7 @@ void crs_box_solve2(occa::memory &o_x, struct box *box, occa::memory &o_rhs) {
 
   // crs_dsavg1.
   timer_tic(c);
-  gs(box->srhs, box->dom, gs_add, 0, box->gsh, &box->bfr);
+  gs(box->srhs, box->dom, gs_add, 0, box->gsh, &(box->bfr));
 #define avg(T)                                                                 \
   {                                                                            \
     T *srhs = (T *)box->srhs;                                                  \
@@ -447,7 +477,7 @@ void crs_box_solve2(occa::memory &o_x, struct box *box, occa::memory &o_rhs) {
 
   // crs_dsavg2.
   timer_tic(c);
-  gs(box->sx, box->dom, gs_add, 0, box->gsh, &box->bfr);
+  gs(box->sx, box->dom, gs_add, 0, box->gsh, &(box->bfr));
 #define avg(T)                                                                 \
   {                                                                            \
     T *sx = (T *)box->sx;                                                      \
@@ -517,6 +547,21 @@ void crs_box_solve2(occa::memory &o_x, struct box *box, occa::memory &o_rhs) {
   BOX_DOMAIN_SWITCH(box->dom, copy_from_nek5000);
 #undef copy_from_nek5000
   timer_toc(COPY_FROM_NEK5000);
+
+#if 0
+  timer_tic(c);
+  o_uc.copyFrom(box->srhs);
+  platform->boxZeroKernel(*(nekData.box_ne), o_ub);
+  platform->mapVtxToBoxKernel(nekData.nelv, o_iphi_e, o_phi_e, o_uc, o_ub);
+  o_ub.copyTo(nekData.box_r);
+  timer_toc(MAP_VTX_TO_BOX);
+
+  timer_tic(c);
+  o_ub.copyFrom(nekData.box_e);
+  platform->mapBoxToVtxKernel(nekData.nelv, o_iphi_e, o_phi_e, o_ub, o_uc);
+  o_uc.copyTo(box->sx);
+  timer_toc(MAP_BOX_TO_VTX);
+#endif
 
   // crs_dsavg3.
   timer_tic(c);

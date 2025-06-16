@@ -27,8 +27,10 @@ void registerCoreKernels()
     kernelName = "core-copyFloatToDfloat";
     platform->copyFloatToDfloatKernel = platform->kernelRequests.load(kernelName);
 
-    kernelName = "core-gatherRHS";
-    platform->gatherRHSKernel = platform->kernelRequests.load(kernelName);
+    platform->gatherRHSKernel = platform->kernelRequests.load("core-gatherRHS");
+    platform->mapVtxToBoxKernel = platform->kernelRequests.load("core-mapVtxToBox");
+    platform->mapBoxToVtxKernel = platform->kernelRequests.load("core-mapBoxToVtx");
+    platform->boxZeroKernel = platform->kernelRequests.load("core-boxZero");
 
     return;
   }
@@ -160,9 +162,19 @@ void registerCoreKernels()
     fileName = oklpath + "/core/" + kernelName + extension;
     platform->kernelRequests.add(section + kernelName, fileName, prop);
 
-    kernelName = "gatherRHS";
-    fileName = oklpath + "/core/" + kernelName + extension;
-    platform->kernelRequests.add(section + kernelName, fileName, prop);
+    prop["defines/p_NC"] = 8;
+
+    fileName = oklpath + "/core/gatherRHS" + extension;
+    platform->kernelRequests.add(section + "gatherRHS", fileName, prop);
+
+    fileName = oklpath + "/core/mapVtxToBox" + extension;
+    platform->kernelRequests.add(section + "mapVtxToBox", fileName, prop);
+
+    fileName = oklpath + "/core/mapBoxToVtx" + extension;
+    platform->kernelRequests.add(section + "mapBoxToVtx", fileName, prop);
+
+    fileName = oklpath + "/core/boxZero" + extension;
+    platform->kernelRequests.add(section + "boxZero", fileName, prop);
   }
 
   registerLinAlgKernels();
