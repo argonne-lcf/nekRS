@@ -112,6 +112,7 @@ c-----------------------------------------------------------------------
       call nekrs_registerPtr('box_e', box_e(1))
       call nekrs_registerPtr('box_r', box_r(1))
       call nekrs_registerPtr('box_mask', box_mask(1))
+      call nekrs_registerPtr('box_phi_e', box_phi_e(1))
       call nekrs_registerPtr('schwz_ne', schwz_ne)
       call nekrs_registerPtr('schwz_nw', schwz_nw)
       call nekrs_registerPtr('schwz_ncr', schwz_ncr)
@@ -1451,6 +1452,15 @@ C----------------------------------------------------------------------
       return
       end
 C----------------------------------------------------------------------
+      subroutine nekf_box_copy_phi_e
+      include 'SIZE'
+      include 'TOTAL'
+      include 'NEKINTF'
+
+      call box_copy_phi_e(box_phi_e,box_iphi_e)
+
+      end
+C----------------------------------------------------------------------
       subroutine nekf_box_map_vtx_to_box
       include 'SIZE'
       include 'TOTAL'
@@ -1467,7 +1477,6 @@ C----------------------------------------------------------------------
 
       call box_crs_solve_h1(box_ub,box_vb)
 
-      return
       end
 C----------------------------------------------------------------------
       subroutine nekf_box_map_box_to_vtx

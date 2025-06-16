@@ -85,6 +85,7 @@ static int (*nek_gllel_ptr)(int *);
 
 /* box solver */
 static void (*nek_box_crs_setup)(void);
+static void (*nek_box_copy_phi_e)(void);
 static void (*nek_box_map_vtx_to_box)(void);
 static void (*nek_box_map_box_to_vtx)(void);
 static void (*nek_box_crs_solve)(void);
@@ -657,6 +658,8 @@ void set_usr_handles(const char *session_in, int verbose)
 
   /* box solver */
   nek_box_crs_setup = (void (*)(void))dlsym(handle, fname("nekf_box_crs_setup"));
+  check_error(dlerror());
+  nek_box_copy_phi_e = (void (*)(void))dlsym(handle, fname("nekf_box_copy_phi_e"));
   check_error(dlerror());
   nek_box_map_vtx_to_box = (void (*)())dlsym(handle, fname("nekf_box_map_vtx_to_box"));
   check_error(dlerror());
@@ -1335,6 +1338,10 @@ void printMeshMetrics()
 /* box solver */
 void box_crs_setup() {
   (*nek_box_crs_setup)();
+}
+
+void box_copy_phi_e() {
+  (*nek_box_copy_phi_e)();
 }
 
 void box_map_vtx_to_box() {
