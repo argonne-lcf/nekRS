@@ -72,8 +72,9 @@ echo "export SYCL_PI_LEVEL_ZERO_REUSE_DISCARDED_EVENTS=0" >> $SFILE
 # https://docs.alcf.anl.gov/aurora/data-management/daos/daos-overview/?h=stripe#mpi-io-container-access
 echo "export MPICH_MPIIO_HINTS=\"romio_cb_write=enable:romio_cb_read=enable:cb_buffer_size=16777216:cb_config_list=*\\\\:8:striping_unit=2097152\"" >> $SFILE
 echo "export MPICH_MPIIO_STATS=1" >> $SFILE
+echo "export NEKRS_MPI_THREAD_MULTIPLE=1" >> $SFILE
 echo "export OMP_PROC_BIND=spread" >> $SFILE
-echo "export OMP_PLACES='{3:6},{11:6},{19:6},{27:6},{35:6},{43:6},{55:6},{63:6},{71:6},{79:6},{87:6},{95:6}'" >> $SFILE
+echo "export OMP_PLACES='{2:7},{10:7},{18:7},{26:7},{34:7},{42:7},{54:7},{62:7},{70:7},{78:7},{86:7},{94:7}'" >> $SFILE
 
 CMD=.lhelper
 echo "#!/bin/bash" > $CMD
