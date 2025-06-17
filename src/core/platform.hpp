@@ -69,8 +69,9 @@ public:
 
   occa::kernel gatherRHSKernel;
   occa::kernel mapVtxToBoxKernel;
-  occa::kernel boxZeroKernel;
   occa::kernel mapBoxToVtxKernel;
+  occa::kernel boxZeroKernel;
+  occa::kernel boxMultRHSKernel;
 };
 #endif
 

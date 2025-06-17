@@ -1,0 +1,27 @@
+@kernel void boxMultRHS(const dlong ne, const dlong ncr, @restrict const float *A, @restrict const float *x,
+                         @restrict float *rhs) {
+  for (dlong e = 0; e < ne; e++; @outer(0)) {
+    @shared float s_r[p_NC][p_NC];
+
+    for (dlong c = 0; c < ncr; c++; @inner(0)) {
+      for (dlong k = 0; k < ncr; k++; @inner(1)) {
+        s_r[k][c] = x[c + ncr * e] * A[k + c * ncr + ncr * ncr * e];
+      }
+    }
+    @barrier();
+
+    for (dlong offset = ncr / 2; offset >= 1; offset /=2) {
+      for (dlong c = 0; c < ncr; c++; @inner(0)) {
+        for (dlong k = 0; k < ncr; k++; @inner(1)) {
+          if (c < offset) s_r[k][c] = s_r[k][c] + s_r[k][c + offset];
+        }
+      }
+    }
+
+    for (dlong c = 0; c < p_NC; c++; @inner(0)) {
+      for (dlong k = 0; k < p_NC; k++; @inner(1)) {
+        if (c == 0) rhs[k + p_NC * e] -= s_r[k][c];
+      }
+    }
+  }
+}

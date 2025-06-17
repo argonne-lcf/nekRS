@@ -14,8 +14,11 @@
 
 #include "crs_box_impl.hpp"
 
+occa::memory o_A;
 occa::memory o_phi_e, o_iphi_e;
 occa::memory o_ub, o_uc;
+occa::memory o_sx, o_srhs;
+static int NCR;
 
 static void crs_box_dump(uint n, const ulong *id, uint nnz, const uint *Ai,
                          const uint *Aj, const double *A, uint null_space,
@@ -231,28 +234,40 @@ static void setup_asm1(struct box *box, const jl_opts *opts, double tol, const s
 #undef allocate_work_arrays
 }
 
-static void setup_asm12_interpolation(const struct box *box) {
+static void setup_gpu_implementation(const struct box *box) {
   // Copy the phi_e, and iphi_e to C.
   nek::box_copy_phi_e();
 
   // Setup device memory
-  const int ncr = *(nekData.schwz_ncr);
+  NCR = *(nekData.schwz_ncr);
   const int nelv = nekData.nelv;
-  const int size = ncr * ncr * nelv;
+  const int v_size = NCR * nelv;
+  const int m_size = NCR * NCR * nelv;
+  assert(box->un == v_size);
 
-  o_phi_e = platform->device.malloc<double>(size);
+  o_phi_e = platform->device.malloc<double>(m_size);
   o_phi_e.copyFrom(nekData.box_phi_e);
 
   o_iphi_e = platform->device.malloc<int>(nelv);
-  int *wrk = (int *)calloc(nelv, sizeof(int));
+  int *wrki = (int *)calloc(nelv, sizeof(int));
   for (int i = 0; i < nelv; i++)
-    wrk[i] = nekData.box_iphi_e[i * ncr];
-  o_iphi_e.copyFrom(wrk);
-  free(wrk);
+    wrki[i] = nekData.box_iphi_e[i * NCR];
+  o_iphi_e.copyFrom(wrki);
+  free(wrki);
 
-  assert(box->un == (ncr * nelv));
-  o_uc = platform->device.malloc<float>(ncr * nelv);
+  o_uc = platform->device.malloc<float>(v_size);
   o_ub = platform->device.malloc<double>(*(nekData.box_ne));
+
+  /* multiplicative RHS update */
+  o_A = platform->device.malloc<float>(m_size);
+  float *wrkf = (float *)calloc(m_size, sizeof(float));
+  for (uint i = 0; i < m_size; i++)
+    wrkf[i] = nekData.schwz_amat[i];
+  o_A.copyFrom(wrkf);
+  free(wrkf);
+
+  o_sx = platform->device.malloc<float>(box->un);
+  o_srhs = platform->device.malloc<float>(box->un);
 }
 
 struct box *crs_box_setup(uint n, const ulong *id, uint nnz, const uint *Ai, const uint *Aj,
@@ -284,7 +299,7 @@ struct box *crs_box_setup(uint n, const ulong *id, uint nnz, const uint *Ai, con
   setup_asm1(box, opts, 1e-12, comm);
 
   // Setup interpolation between ASM1 and ASM2 on C.
-  setup_asm12_interpolation(box);
+  setup_gpu_implementation(box);
 
   // Print some info.
   if (box->global.id == 0) {
@@ -491,23 +506,10 @@ void crs_box_solve2(occa::memory &o_x, struct box *box, occa::memory &o_rhs) {
   // mult_rhs_update:  rhs = rhs - A*sx.
   timer_tic(c);
   if (box->mult) {
-#define update_rhs(T)                                                          \
-  {                                                                            \
-    const double *A = (const double *)nekData.schwz_amat;                      \
-    const T *sx = (T *)box->sx;                                                \
-    T *srhs = (T *)box->srhs;                                                  \
-    uint ncr = box->ncr, ue = box->un / ncr;                                   \
-    for (uint e = 0; e < ue; e++) {                                            \
-      for (uint c = 0; c < ncr; c++) {                                         \
-        for (uint k = 0; k < ncr; k++) {                                       \
-          srhs[k + ncr * e] -=                                                 \
-              sx[c + ncr * e] * A[k + c * ncr + ncr * ncr * e];                \
-        }                                                                      \
-      }                                                                        \
-    }                                                                          \
-  }
-    BOX_DOMAIN_SWITCH(box->dom, update_rhs);
-#undef update_rhs
+    o_sx.copyFrom(box->sx);
+    o_srhs.copyFrom(box->srhs);
+    platform->boxMultRHSKernel(box->un / NCR, NCR, o_A, o_sx, o_srhs);
+    o_srhs.copyTo(box->srhs);
   }
   timer_toc(MULT_RHS_UPDATE);
 
