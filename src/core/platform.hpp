@@ -72,6 +72,7 @@ public:
   occa::kernel mapBoxToVtxKernel;
   occa::kernel boxZeroKernel;
   occa::kernel boxMultRHSKernel;
+  occa::kernel boxInvMulKernel;
 };
 #endif
 

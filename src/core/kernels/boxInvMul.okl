@@ -1,0 +1,5 @@
+@kernel void boxInvMul(const dlong n, const float *x, @restrict const double *inv_mul, float *y) {
+  for (dlong i = 0; i < n; i++; @tile(p_blockSize, @outer, @inner)) {
+    y[i] = inv_mul[i] * x[i];
+  }
+}

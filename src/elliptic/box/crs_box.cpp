@@ -14,10 +14,12 @@
 
 #include "crs_box_impl.hpp"
 
-occa::memory o_A;
+/* Interpolation */
 occa::memory o_phi_e, o_iphi_e;
 occa::memory o_ub, o_uc;
-occa::memory o_sx, o_srhs;
+/* multiplicative RHS update */
+occa::memory o_A;
+occa::memory o_sx, o_srhs, o_invmul;
 static int NCR;
 
 static void crs_box_dump(uint n, const ulong *id, uint nnz, const uint *Ai,
@@ -242,8 +244,8 @@ static void setup_gpu_implementation(const struct box *box) {
   NCR = *(nekData.schwz_ncr);
   const int nelv = nekData.nelv;
   const int v_size = NCR * nelv;
-  const int m_size = NCR * NCR * nelv;
   assert(box->un == v_size);
+  const int m_size = NCR * NCR * nelv;
 
   o_phi_e = platform->device.malloc<double>(m_size);
   o_phi_e.copyFrom(nekData.box_phi_e);
@@ -259,6 +261,9 @@ static void setup_gpu_implementation(const struct box *box) {
   o_ub = platform->device.malloc<double>(*(nekData.box_ne));
 
   /* multiplicative RHS update */
+  o_sx = platform->device.malloc<float>(box->sn);
+  o_srhs = platform->device.malloc<float>(box->sn);
+
   o_A = platform->device.malloc<float>(m_size);
   float *wrkf = (float *)calloc(m_size, sizeof(float));
   for (uint i = 0; i < m_size; i++)
@@ -266,8 +271,8 @@ static void setup_gpu_implementation(const struct box *box) {
   o_A.copyFrom(wrkf);
   free(wrkf);
 
-  o_sx = platform->device.malloc<float>(box->un);
-  o_srhs = platform->device.malloc<float>(box->un);
+  o_invmul = platform->device.malloc<double>(box->un);
+  o_invmul.copyFrom(box->inv_mul);
 }
 
 struct box *crs_box_setup(uint n, const ulong *id, uint nnz, const uint *Ai, const uint *Aj,
@@ -469,47 +474,40 @@ void crs_box_solve2(occa::memory &o_x, struct box *box, occa::memory &o_rhs) {
 
   // Can move the first inv_mul.* to here.
   timer_tic(c);
-  o_rhs.copyTo(box->srhs, box->un, 0);
+  platform->boxInvMulKernel(box->un, o_rhs, o_invmul, o_srhs);
+  o_srhs.copyTo(box->srhs, box->un, 0);
   timer_toc(COPY_RHS);
 
   // crs_dsavg1.
   timer_tic(c);
   gs(box->srhs, box->dom, gs_add, 0, box->gsh, &(box->bfr));
-#define avg(T)                                                                 \
-  {                                                                            \
-    T *srhs = (T *)box->srhs;                                                  \
-    for (uint i = 0; i < box->sn; i++)                                         \
-      srhs[i] = box->inv_mul[i] * srhs[i];                                     \
-  }
-  BOX_DOMAIN_SWITCH(box->dom, avg);
-#undef avg
   timer_toc(CRS_DSAVG1);
 
   // ASM1.
   timer_tic(c);
   asm1_gpu_solve(box->sx, box, box->srhs);
+#define avg(T)                                                                 \
+  {                                                                            \
+    T *sx = (T *)box->sx;                                                      \
+    for (uint i = 0; i < box->un; i++)                                         \
+      sx[i] = box->inv_mul[i] * sx[i];                                         \
+  }
+  BOX_DOMAIN_SWITCH(box->dom, avg);
+#undef avg
   timer_toc(ASM1);
 
   // crs_dsavg2.
   timer_tic(c);
   gs(box->sx, box->dom, gs_add, 0, box->gsh, &(box->bfr));
-#define avg(T)                                                                 \
-  {                                                                            \
-    T *sx = (T *)box->sx;                                                      \
-    for (uint i = 0; i < box->sn; i++)                                         \
-      sx[i] = box->inv_mul[i] * sx[i];                                         \
-  }
-  BOX_DOMAIN_SWITCH(box->dom, avg);
-#undef avg
   timer_toc(CRS_DSAVG1);
 
   // mult_rhs_update:  rhs = rhs - A*sx.
   timer_tic(c);
   if (box->mult) {
-    o_sx.copyFrom(box->sx);
-    o_srhs.copyFrom(box->srhs);
+    o_sx.copyFrom(box->sx, box->un);
+    o_srhs.copyFrom(box->srhs, box->un);
     platform->boxMultRHSKernel(box->un / NCR, NCR, o_A, o_sx, o_srhs);
-    o_srhs.copyTo(box->srhs);
+    o_srhs.copyTo(box->srhs, box->un);
   }
   timer_toc(MULT_RHS_UPDATE);
 

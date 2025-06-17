@@ -32,6 +32,7 @@ void registerCoreKernels()
     platform->mapBoxToVtxKernel = platform->kernelRequests.load("core-mapBoxToVtx");
     platform->boxZeroKernel = platform->kernelRequests.load("core-boxZero");
     platform->boxMultRHSKernel = platform->kernelRequests.load("core-boxMultRHS");
+    platform->boxInvMulKernel = platform->kernelRequests.load("core-boxInvMul");
 
     return;
   }
@@ -179,6 +180,9 @@ void registerCoreKernels()
 
     fileName = oklpath + "/core/boxMultRHS" + extension;
     platform->kernelRequests.add(section + "boxMultRHS", fileName, prop);
+
+    fileName = oklpath + "/core/boxInvMul" + extension;
+    platform->kernelRequests.add(section + "boxInvMul", fileName, prop);
   }
 
   registerLinAlgKernels();
