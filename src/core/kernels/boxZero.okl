@@ -1,5 +1,5 @@
-@kernel void boxZero(const dlong ne, @restrict double *ub) {
-  for (dlong e = 0; e < ne; ++e; @tile(p_blockSize, @outer, @inner)) {
-    ub[e] = 0;
+@kernel void boxZero(const unsigned int n, @restrict float *u) {
+  for (unsigned int e = 0; e < n; ++e; @tile(p_blockSize, @outer, @inner)) {
+    u[e] = 0;
   }
 }

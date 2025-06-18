@@ -14,14 +14,6 @@
 
 #include "crs_box_impl.hpp"
 
-/* Interpolation */
-occa::memory o_phi_e, o_iphi_e;
-occa::memory o_ub, o_uc;
-/* multiplicative RHS update */
-occa::memory o_A;
-occa::memory o_sx, o_srhs, o_invmul;
-static int NCR;
-
 static void crs_box_dump(uint n, const ulong *id, uint nnz, const uint *Ai,
                          const uint *Aj, const double *A, uint null_space,
                          const struct comm *comm) {
@@ -113,8 +105,73 @@ void box_debug(const int verbose, const char *fmt, ...) {
   va_end(args);
 }
 
-static const sint *get_u2c(unsigned *cni, const unsigned n,
-                           const ulong *const vtx, buffer *bfr) {
+/* Interpolation */
+occa::memory o_phi_e, o_iphi_e;
+occa::memory o_ub, o_uc;
+/* multiplicative RHS update */
+static int num_crs_1d_dof;
+occa::memory o_A;
+occa::memory o_sx, o_srhs, o_invmul;
+/* setup unassembled to assembled map*/
+static int num_compressed;
+static occa::memory o_u2c_off, o_u2c_idx, o_cr, o_cx;
+
+static void setup_u2c_map_aux(unsigned un, const sint *u2c, buffer *bfr) {
+  struct map_t {
+    uint u, c;
+  };
+
+  struct array map;
+  array_init(struct map_t, &map, un);
+
+  struct map_t m;
+  for (uint i = 0; i < un; i++) {
+    if (u2c[i] < 0) continue;
+    m.u = i, m.c = u2c[i];
+    array_cat(struct map_t, &map, &m, 1);
+  }
+  sarray_sort_2(struct map_t, map.ptr, map.n, c, 0, u, 0, bfr);
+
+  uint gs_n = 0;
+  struct map_t *pm = (struct map_t *)map.ptr;
+  if (map.n > 0) {
+    gs_n = 1;
+    uint c = pm[0].c;
+    for (uint i = 1; i < map.n; i++) {
+      if (pm[i].c != c) {
+        gs_n++;
+        c = pm[i].c;
+      }
+    }
+  }
+
+  unsigned *gs_off = tcalloc(unsigned, gs_n + 1);
+  unsigned *gs_idx = tcalloc(unsigned, map.n);
+  uint gs_n2 = 0;
+  if (map.n > 0) {
+    gs_idx[0] = pm[0].u;
+    for (uint i = 1; i < map.n; i++) {
+      if (pm[i].c != pm[i - 1].c) {
+        gs_n2++;
+        gs_off[gs_n2] = i;
+      }
+      gs_idx[i] = pm[i].u;
+    }
+    gs_n2++;
+  }
+  assert(gs_n == gs_n2);
+  num_compressed = gs_n;
+
+  o_u2c_off = platform->device.malloc<unsigned>(gs_n + 1);
+  o_u2c_off.copyFrom(gs_off);
+  o_u2c_idx = platform->device.malloc<unsigned>(map.n);
+  o_u2c_idx.copyFrom(gs_idx);
+  o_cr = platform->device.malloc<float>(gs_n);
+  o_cx = platform->device.malloc<float>(gs_n);
+  free(gs_off), free(gs_idx), array_free(&map);
+}
+
+static void setup_u2c_map(struct box *box, const ulong *const vtx) {
   struct vid_t {
     ulong id;
     uint idx;
@@ -122,6 +179,7 @@ static const sint *get_u2c(unsigned *cni, const unsigned n,
   };
 
   struct array vids;
+  uint n = box->sn;
   array_init(struct vid_t, &vids, n);
 
   struct vid_t vid;
@@ -129,6 +187,8 @@ static const sint *get_u2c(unsigned *cni, const unsigned n,
     vid.id = vtx[i], vid.idx = i;
     array_cat(struct vid_t, &vids, &vid, 1);
   }
+
+  buffer *bfr = &(box->bfr);
   sarray_sort(struct vid_t, vids.ptr, vids.n, id, 1, bfr);
 
   struct vid_t *pv = (struct vid_t *)vids.ptr;
@@ -139,18 +199,18 @@ static const sint *get_u2c(unsigned *cni, const unsigned n,
       lid = pv[i].id, cn++;
     pv[i].perm = cn - 1;
   }
-  *cni = cn;
+  box->cn = cn;
   sarray_sort(struct vid_t, vids.ptr, vids.n, idx, 0, bfr);
 
-  // Setup u2c -- user vector to compress vector mapping.
   pv = (struct vid_t *)vids.ptr;
-  sint *const u2c = tcalloc(sint, n);
+  box->u2c = tcalloc(sint, n);
   for (uint i = 0; i < n; i++)
-    u2c[i] = pv[i].perm;
-
+    box->u2c[i] = pv[i].perm;
   array_free(&vids);
 
-  return u2c;
+  setup_u2c_map_aux(box->sn, box->u2c, bfr);
+  printf("%s: rank: %2d, num_compressed: %u\n", __func__, box->global.id, num_compressed);
+  fflush(stdout);
 }
 
 static void setup_asm1(struct box *box, const jl_opts *opts, double tol, const struct comm *comm) {
@@ -196,11 +256,14 @@ static void setup_asm1(struct box *box, const jl_opts *opts, double tol, const s
     null_space = 0;
   assert(null_space == 0);
 
-  box->cn = 0;
-  box->u2c = (int *)get_u2c(&box->cn, box->sn, tmp_vtx, &box->bfr);
-  box->ss = NULL;
-  struct csr *A = csr_setup(nnz, ia, ja, va, box->u2c, tol, &box->bfr);
+  // Setup unassembled to assembled map.
+  setup_u2c_map(box, tmp_vtx);
 
+  // Create the assembled matrix in CSR format.
+  struct csr *A = csr_setup(nnz, ia, ja, va, box->u2c, tol, &(box->bfr));
+
+  // Setup ASM1 solver.
+  box->ss = NULL;
   if (box->algo == BOX_XXT)
     box->ss = (void *)crs_xxt_setup(box->sn, tmp_vtx, nnz, ia, ja, va, opts, &(box->local));
   if (box->algo == BOX_CHOLMOD)
@@ -241,11 +304,11 @@ static void setup_gpu_implementation(const struct box *box) {
   nek::box_copy_phi_e();
 
   // Setup device memory
-  NCR = *(nekData.schwz_ncr);
+  num_crs_1d_dof = *(nekData.schwz_ncr);
   const int nelv = nekData.nelv;
-  const int v_size = NCR * nelv;
+  const int v_size = num_crs_1d_dof * nelv;
   assert(box->un == v_size);
-  const int m_size = NCR * NCR * nelv;
+  const int m_size = num_crs_1d_dof * num_crs_1d_dof * nelv;
 
   o_phi_e = platform->device.malloc<double>(m_size);
   o_phi_e.copyFrom(nekData.box_phi_e);
@@ -253,7 +316,7 @@ static void setup_gpu_implementation(const struct box *box) {
   o_iphi_e = platform->device.malloc<int>(nelv);
   int *wrki = (int *)calloc(nelv, sizeof(int));
   for (int i = 0; i < nelv; i++)
-    wrki[i] = nekData.box_iphi_e[i * NCR];
+    wrki[i] = nekData.box_iphi_e[i * num_crs_1d_dof];
   o_iphi_e.copyFrom(wrki);
   free(wrki);
 
@@ -472,10 +535,12 @@ void crs_box_solve2(occa::memory &o_x, struct box *box, occa::memory &o_rhs) {
     MPI_Abort(c->c, EXIT_FAILURE);
   }
 
-  // Can move the first inv_mul.* to here.
-  timer_tic(c);
+  // Multiply by inverse multiplicity
   platform->boxInvMulKernel(box->un, o_rhs, o_invmul, o_srhs);
-  o_srhs.copyTo(box->srhs, box->un, 0);
+
+  // Copy RHS.
+  timer_tic(c);
+  o_srhs.copyTo(box->srhs, box->un);
   timer_toc(COPY_RHS);
 
   // crs_dsavg1.
@@ -483,18 +548,18 @@ void crs_box_solve2(occa::memory &o_x, struct box *box, occa::memory &o_rhs) {
   gs(box->srhs, box->dom, gs_add, 0, box->gsh, &(box->bfr));
   timer_toc(CRS_DSAVG1);
 
+  o_srhs.copyFrom(box->srhs, box->sn);
+  platform->boxUtoCKernel(num_compressed, o_u2c_off, o_u2c_idx, o_srhs, o_cr);
+
   // ASM1.
   timer_tic(c);
-  asm1_gpu_solve(box->sx, box, box->srhs);
-#define avg(T)                                                                 \
-  {                                                                            \
-    T *sx = (T *)box->sx;                                                      \
-    for (uint i = 0; i < box->un; i++)                                         \
-      sx[i] = box->inv_mul[i] * sx[i];                                         \
-  }
-  BOX_DOMAIN_SWITCH(box->dom, avg);
-#undef avg
+  asm1_gpu_solve(o_cx, box, o_cr);
   timer_toc(ASM1);
+
+  platform->boxZeroKernel(box->sn, o_sx);
+  platform->boxCtoUKernel(num_compressed, o_u2c_off, o_u2c_idx, o_cx, o_sx);
+  platform->boxInvMulKernel(box->un, o_sx, o_invmul, o_sx);
+  o_sx.copyTo(box->sx, box->un);
 
   // crs_dsavg2.
   timer_tic(c);
@@ -505,8 +570,7 @@ void crs_box_solve2(occa::memory &o_x, struct box *box, occa::memory &o_rhs) {
   timer_tic(c);
   if (box->mult) {
     o_sx.copyFrom(box->sx, box->un);
-    o_srhs.copyFrom(box->srhs, box->un);
-    platform->boxMultRHSKernel(box->un / NCR, NCR, o_A, o_sx, o_srhs);
+    platform->boxMultRHSKernel(box->un / num_crs_1d_dof, num_crs_1d_dof, o_A, o_sx, o_srhs);
     o_srhs.copyTo(box->srhs, box->un);
   }
   timer_toc(MULT_RHS_UPDATE);

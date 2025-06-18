@@ -67,12 +67,13 @@ public:
   occa::kernel copyDoubleToDfloatKernel;
   occa::kernel copyFloatToDfloatKernel;
 
-  occa::kernel gatherRHSKernel;
   occa::kernel mapVtxToBoxKernel;
   occa::kernel mapBoxToVtxKernel;
   occa::kernel boxZeroKernel;
   occa::kernel boxMultRHSKernel;
   occa::kernel boxInvMulKernel;
+  occa::kernel boxUtoCKernel;
+  occa::kernel boxCtoUKernel;
 };
 #endif
 

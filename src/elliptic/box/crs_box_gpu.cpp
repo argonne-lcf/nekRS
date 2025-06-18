@@ -16,10 +16,6 @@ static double *d_A_inv = NULL;
 static float *d_A_inv_f32 = NULL;
 static void *d_r = NULL, *d_x = NULL;
 
-static uint gs_n;
-static occa::memory o_gs_off, o_gs_idx;
-static occa::memory o_cx;
-
 static void setup_core(uint nr_) {
   nr = nr_;
   h_r = calloc(nr, sizeof(double));
@@ -56,73 +52,6 @@ static void setup_inverse(double **A_inv, float **A_inv_f32, const struct csr *A
     }
   }
 }
-
-static void setup_u2c(const int un, const int *u2c) {
-  struct map_t {
-    uint u, c;
-  };
-
-  struct array map;
-  array_init(struct map_t, &map, un);
-
-  struct map_t m;
-  for (uint i = 0; i < un; i++) {
-    if (u2c[i] < 0)
-      continue;
-    m.u = i, m.c = u2c[i];
-    array_cat(struct map_t, &map, &m, 1);
-  }
-
-  if (map.n == 0) {
-    fprintf(stderr, "RHS is empty.\n");
-    fflush(stderr);
-    MPI_Abort(MPI_COMM_WORLD, EXIT_FAILURE);
-  }
-
-  buffer bfr;
-  buffer_init(&bfr, 1024);
-  sarray_sort_2(struct map_t, map.ptr, map.n, c, 0, u, 0, &bfr);
-  buffer_free(&bfr);
-
-  gs_n = 1;
-  struct map_t *pm = (struct map_t *)map.ptr;
-  uint c = pm[0].c;
-  for (uint i = 1; i < map.n; i++) {
-    if (pm[i].c != c) {
-      gs_n++;
-      c = pm[i].c;
-    }
-  }
-
-  dlong *gs_off = tcalloc(dlong, gs_n + 1);
-  dlong *gs_idx = tcalloc(dlong, map.n);
-  gs_off[0] = 0;
-  gs_idx[0] = pm[0].u;
-  uint gs_n_ = 0;
-  for (uint i = 1; i < map.n; i++) {
-    if (pm[i].c != pm[i - 1].c) {
-      gs_n_++;
-      gs_off[gs_n_] = i;
-    }
-    gs_idx[i] = pm[i].u;
-  }
-  gs_n_++;
-
-  if (gs_n_ != gs_n) {
-    fprintf(stderr, "gs_n_ != gs_n\n");
-    fflush(stderr);
-    MPI_Abort(MPI_COMM_WORLD, EXIT_FAILURE);
-  }
-
-  o_gs_off = platform->device.malloc((gs_n + 1) * sizeof(dlong));
-  o_gs_off.copyFrom(gs_off, sizeof(dlong) * (gs_n + 1), 0);
-  o_gs_idx = platform->device.malloc(map.n * sizeof(dlong));
-  o_gs_idx.copyFrom(gs_idx, sizeof(dlong) * map.n, 0);
-  o_cx = platform->device.malloc(nr * sizeof(float));
-
-  free(gs_off), free(gs_idx), array_free(&map);
-}
-
 
 #if defined(ENABLE_HIPBLAS)
 #include <hip/hip_runtime.h>
@@ -162,8 +91,6 @@ void asm1_gpu_setup(struct csr *A, unsigned null_space, struct box *box) {
   check_hip_runtime(hipMalloc(&d_x, A->nr * sizeof(double)));
 
   o_cx = platform->device.malloc(A->nr * sizeof(float));
-  setup_u2c(box->sn, box->u2c);
-
   hipblasCreate(&handle);
 
   initialized = 1;
@@ -266,7 +193,8 @@ void asm1_gpu_setup(struct csr *A, unsigned null_space, struct box *box) {
   float *A_inv_f32 = 0;
   setup_inverse(&A_inv, &A_inv_f32, A);
   setup_core(A->nr);
-  setup_u2c(box->sn, box->u2c);
+  printf("%s: rank: %2d, num_compressed: %u\n", __func__, box->global.id, A->nr);
+  fflush(stdout);
 
   const size_t size = nr * nr;
   d_A_inv = box_onemkl_device_malloc<double>(size);
@@ -321,6 +249,24 @@ void asm1_gpu_solve(void *x, struct box *box, const void *r) {
       break;
     case gs_float:
       asm1_gpu_solve_aux<float>((float *)x, box, d_A_inv_f32, (float *)r);
+      break;
+    default:
+      break;
+  }
+}
+
+void asm1_gpu_solve(occa::memory &o_x, struct box *box, occa::memory &o_r) {
+  if (!initialized) {
+    fprintf(stderr, "oneMKL is not initialized.\n");
+    MPI_Abort(MPI_COMM_WORLD, EXIT_FAILURE);
+  }
+
+  switch(box->dom) {
+    case gs_double:
+      box_onemkl_device_gemv<double>((double *)o_x.ptr(), nr, d_A_inv, (double *)o_r.ptr());
+      break;
+    case gs_float:
+      box_onemkl_device_gemv<float>((float *)o_x.ptr(), nr, d_A_inv_f32, (float *)o_r.ptr());
       break;
     default:
       break;

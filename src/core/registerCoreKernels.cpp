@@ -27,12 +27,13 @@ void registerCoreKernels()
     kernelName = "core-copyFloatToDfloat";
     platform->copyFloatToDfloatKernel = platform->kernelRequests.load(kernelName);
 
-    platform->gatherRHSKernel = platform->kernelRequests.load("core-gatherRHS");
     platform->mapVtxToBoxKernel = platform->kernelRequests.load("core-mapVtxToBox");
     platform->mapBoxToVtxKernel = platform->kernelRequests.load("core-mapBoxToVtx");
     platform->boxZeroKernel = platform->kernelRequests.load("core-boxZero");
     platform->boxMultRHSKernel = platform->kernelRequests.load("core-boxMultRHS");
     platform->boxInvMulKernel = platform->kernelRequests.load("core-boxInvMul");
+    platform->boxUtoCKernel = platform->kernelRequests.load("core-boxUtoC");
+    platform->boxCtoUKernel = platform->kernelRequests.load("core-boxCtoU");
 
     return;
   }
@@ -166,9 +167,6 @@ void registerCoreKernels()
 
     prop["defines/p_NC"] = 8;
 
-    fileName = oklpath + "/core/gatherRHS" + extension;
-    platform->kernelRequests.add(section + "gatherRHS", fileName, prop);
-
     fileName = oklpath + "/core/mapVtxToBox" + extension;
     platform->kernelRequests.add(section + "mapVtxToBox", fileName, prop);
 
@@ -183,6 +181,12 @@ void registerCoreKernels()
 
     fileName = oklpath + "/core/boxInvMul" + extension;
     platform->kernelRequests.add(section + "boxInvMul", fileName, prop);
+
+    fileName = oklpath + "/core/boxUtoC" + extension;
+    platform->kernelRequests.add(section + "boxUtoC", fileName, prop);
+
+    fileName = oklpath + "/core/boxCtoU" + extension;
+    platform->kernelRequests.add(section + "boxCtoU", fileName, prop);
   }
 
   registerLinAlgKernels();

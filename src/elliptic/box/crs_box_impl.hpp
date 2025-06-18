@@ -55,6 +55,7 @@ void asm1_cholmod_free(struct box *box);
 // ASM1: GPU BLAS interface.
 void asm1_gpu_setup(struct csr *A, unsigned null_space, struct box *box);
 void asm1_gpu_solve(void *x, struct box *box, const void *r);
+void asm1_gpu_solve(occa::memory &o_x, struct box *box, occa::memory &o_r);
 void asm1_gpu_free(struct box *box);
 
 #endif
