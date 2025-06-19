@@ -236,7 +236,7 @@ void jl_solve(occa::memory &o_x, occa::memory &o_rhs) {
   }
   DOMAIN_SWITCH(crs->dom, copy_from_buf);
 #undef copy_from_buf
-  timer_toc(COPY_RHS_FROM_GPU);
+  timer_toc(COPY_RHS);
 
   switch (crs->type) {
   case XXT:
@@ -259,7 +259,7 @@ void jl_solve(occa::memory &o_x, occa::memory &o_rhs) {
   DOMAIN_SWITCH(crs->dom, copy_to_buf);
 #undef copy_to_buf
   o_x.copyFrom(crs->wrk, crs->un, 0);
-  timer_toc(COPY_SOLUTION_TO_GPU);
+  timer_toc(COPY_SOLUTION);
 }
 
 void jl_solve2(occa::memory &o_x, occa::memory &o_rhs) {

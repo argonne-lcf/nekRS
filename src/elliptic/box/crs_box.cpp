@@ -10,8 +10,8 @@
 #include <unistd.h>
 
 #include <nekInterfaceAdapter.hpp>
-#include <nekrs_crs.hpp>
 
+#include "nekrs_crs.hpp"
 #include "crs_box_impl.hpp"
 
 static void crs_box_dump(uint n, const ulong *id, uint nnz, const uint *Ai,
@@ -536,9 +536,11 @@ void crs_box_solve2(occa::memory &o_x, struct box *box, occa::memory &o_rhs) {
   }
 
   // Multiply by inverse multiplicity
+  timer_tic(c);
   platform->boxInvMulKernel(box->un, o_rhs, o_invmul, o_srhs);
+  timer_toc(INV_MUL);
 
-  // Copy RHS.
+  // Copy RHS to CPU.
   timer_tic(c);
   o_srhs.copyTo(box->srhs, box->un);
   timer_toc(COPY_RHS);
@@ -548,18 +550,35 @@ void crs_box_solve2(occa::memory &o_x, struct box *box, occa::memory &o_rhs) {
   gs(box->srhs, box->dom, gs_add, 0, box->gsh, &(box->bfr));
   timer_toc(CRS_DSAVG1);
 
+  // Copy RHS back to GPU.
+  timer_tic(c);
   o_srhs.copyFrom(box->srhs, box->sn);
+  timer_toc(COPY_RHS);
+
+  timer_tic(c);
   platform->boxUtoCKernel(num_compressed, o_u2c_off, o_u2c_idx, o_srhs, o_cr);
+  timer_toc(U2C);
 
   // ASM1.
   timer_tic(c);
   asm1_gpu_solve(o_cx, box, o_cr);
   timer_toc(ASM1);
 
+  timer_tic(c);
   platform->boxZeroKernel(box->sn, o_sx);
+  timer_toc(ZERO);
+
+  timer_tic(c);
   platform->boxCtoUKernel(num_compressed, o_u2c_off, o_u2c_idx, o_cx, o_sx);
+  timer_toc(C2U);
+
+  timer_tic(c);
   platform->boxInvMulKernel(box->un, o_sx, o_invmul, o_sx);
+  timer_toc(INV_MUL);
+
+  timer_tic(c);
   o_sx.copyTo(box->sx, box->un);
+  timer_toc(COPY_SOLUTION);
 
   // crs_dsavg2.
   timer_tic(c);
@@ -567,13 +586,19 @@ void crs_box_solve2(occa::memory &o_x, struct box *box, occa::memory &o_rhs) {
   timer_toc(CRS_DSAVG1);
 
   // mult_rhs_update:  rhs = rhs - A*sx.
-  timer_tic(c);
   if (box->mult) {
+    timer_tic(c);
     o_sx.copyFrom(box->sx, box->un);
+    timer_toc(COPY_SOLUTION);
+
+    timer_tic(c);
     platform->boxMultRHSKernel(box->un / num_crs_1d_dof, num_crs_1d_dof, o_A, o_sx, o_srhs);
+    timer_toc(MULT_RHS_UPDATE);
+
+    timer_tic(c);
     o_srhs.copyTo(box->srhs, box->un);
+    timer_toc(COPY_RHS);
   }
-  timer_toc(MULT_RHS_UPDATE);
 
   // Copy to nek5000 to do the global solve.
   timer_tic(c);
@@ -612,24 +637,11 @@ void crs_box_solve2(occa::memory &o_x, struct box *box, occa::memory &o_rhs) {
 #undef copy_from_nek5000
   timer_toc(COPY_FROM_NEK5000);
 
-#if 0
-  timer_tic(c);
-  o_uc.copyFrom(box->srhs);
-  platform->boxZeroKernel(*(nekData.box_ne), o_ub);
-  platform->mapVtxToBoxKernel(nekData.nelv, o_iphi_e, o_phi_e, o_uc, o_ub);
-  o_ub.copyTo(nekData.box_r);
-  timer_toc(MAP_VTX_TO_BOX);
-
-  timer_tic(c);
-  o_ub.copyFrom(nekData.box_e);
-  platform->mapBoxToVtxKernel(nekData.nelv, o_iphi_e, o_phi_e, o_ub, o_uc);
-  o_uc.copyTo(box->sx);
-  timer_toc(MAP_BOX_TO_VTX);
-#endif
-
   // crs_dsavg3.
   timer_tic(c);
   gs(box->sx, box->dom, gs_add, 0, box->gsh, &box->bfr);
+  timer_toc(CRS_DSAVG1);
+
 #define avg(T)                                                                 \
   {                                                                            \
     T *sx = (T *)box->sx;                                                      \
@@ -638,7 +650,6 @@ void crs_box_solve2(occa::memory &o_x, struct box *box, occa::memory &o_rhs) {
   }
   BOX_DOMAIN_SWITCH(box->dom, avg);
 #undef avg
-  timer_toc(CRS_DSAVG1);
 
   // Copy solution.
   timer_tic(c);

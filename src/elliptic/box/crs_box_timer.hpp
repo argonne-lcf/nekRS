@@ -4,10 +4,13 @@
 #include <gslib.h>
 
 typedef enum {
-  COPY_RHS_FROM_GPU = 0,
+  INV_MUL,
   COPY_RHS,
   CRS_DSAVG1,
+  U2C,
   ASM1,
+  ZERO,
+  C2U,
   CRS_DSAVG2,
   MULT_RHS_UPDATE,
   COPY_TO_NEK5000,
@@ -17,7 +20,6 @@ typedef enum {
   COPY_FROM_NEK5000,
   CRS_DSAVG3,
   COPY_SOLUTION,
-  COPY_SOLUTION_TO_GPU,
   NONE,
 } BoxMetric;
 

@@ -1,5 +1,6 @@
 #include <stdio.h>
 
+#include "nekrs_crs.hpp"
 #include "crs_box_timer.hpp"
 
 #define MAX_METRICS 32
@@ -21,6 +22,7 @@ void timer_tic(const struct comm *c) {
 
 void timer_toc(BoxMetric m) {
   if (!timer_on || m == NONE) return;
+  platform->device.finish();
   time_box[m] += (comm_time() - start_time);
 }
 
@@ -37,7 +39,11 @@ void timer_print(MPI_Comm comm) {
 
   if (c.id == 0) {
     printf("box copy_rhs          : %e\n", time_box[COPY_RHS]);
+    printf("box u2c               : %e\n", time_box[U2C]);
     printf("box asm1              : %e\n", time_box[ASM1]);
+    printf("box zero              : %e\n", time_box[ZERO]);
+    printf("box c2u               : %e\n", time_box[C2U]);
+    printf("box inv_mul           : %e\n", time_box[INV_MUL]);
     printf("box mult_rhs_update   : %e\n", time_box[MULT_RHS_UPDATE]);
     printf("box copy_to_nek5000   : %e\n", time_box[COPY_TO_NEK5000]);
     printf("box map_vtx_to_box    : %e\n", time_box[MAP_VTX_TO_BOX]);
