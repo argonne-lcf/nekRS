@@ -227,7 +227,7 @@ void jl_timer_init() {
 
 void jl_solve(occa::memory &o_x, occa::memory &o_rhs) {
   timer_tic(&(crs->c));
-  o_rhs.copyTo(crs->wrk, crs->un, 0);
+  o_rhs.copyTo(crs->wrk, crs->un);
 #define copy_from_buf(T)                                                       \
   {                                                                            \
     T *rhs = (T *)crs->rhs;                                                    \
@@ -258,7 +258,7 @@ void jl_solve(occa::memory &o_x, occa::memory &o_rhs) {
   }
   DOMAIN_SWITCH(crs->dom, copy_to_buf);
 #undef copy_to_buf
-  o_x.copyFrom(crs->wrk, crs->un, 0);
+  o_x.copyFrom(crs->wrk, crs->un);
   timer_toc(COPY_SOLUTION);
 }
 

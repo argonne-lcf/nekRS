@@ -1,7 +1,7 @@
 @kernel void boxUtoC(const unsigned int n, @restrict const unsigned int *offsets,
                      @restrict const unsigned int *ids, @restrict const float *x, @restrict float *cx) {
   for (unsigned int i = 0; i < n; ++i; @tile(p_blockSize, @outer, @inner))  {
-    float s = 0;
+    double s = 0;
     for (unsigned int j = offsets[i]; j < offsets[i + 1]; j++)
       s += x[ids[j]];
     cx[i] = s;
