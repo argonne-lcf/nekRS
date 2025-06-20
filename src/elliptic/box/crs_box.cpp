@@ -105,7 +105,8 @@ void box_debug(const int verbose, const char *fmt, ...) {
   va_end(args);
 }
 
-/* Interpolation */
+/* Mesh (vertex) to box Interpolation */
+static int num_box, num_box_dofs;
 occa::memory o_phi_e, o_iphi_e;
 occa::memory o_ub, o_uc;
 /* multiplicative RHS update */
@@ -303,15 +304,21 @@ static void setup_gpu_implementation(const struct box *box) {
   // Copy the phi_e, and iphi_e to C.
   nek::box_copy_phi_e();
 
-  // Setup device memory
   num_crs_1d_dof = *(nekData.schwz_ncr);
   const int nelv = nekData.nelv;
-  const int v_size = num_crs_1d_dof * nelv;
-  assert(box->un == v_size);
-  const int m_size = num_crs_1d_dof * num_crs_1d_dof * nelv;
+  assert(box->un == (num_crs_1d_dof * nelv));
+  assert(box->sn >= box->un);
 
+  // Setup device memory for vtx-to-box and box-to-vtx interpolation.
+  const int m_size = num_crs_1d_dof * box->un;
   o_phi_e = platform->device.malloc<double>(m_size);
   o_phi_e.copyFrom(nekData.box_phi_e);
+
+  // box_ne = ncr * num_box
+  num_box_dofs = *(nekData.box_ne);
+  num_box = num_box_dofs / num_crs_1d_dof;
+  o_uc = platform->device.malloc<float>(box->un);
+  o_ub = platform->device.malloc<double>(num_box_dofs);
 
   o_iphi_e = platform->device.malloc<int>(nelv);
   int *wrki = (int *)calloc(nelv, sizeof(int));
@@ -319,9 +326,6 @@ static void setup_gpu_implementation(const struct box *box) {
     wrki[i] = nekData.box_iphi_e[i * num_crs_1d_dof];
   o_iphi_e.copyFrom(wrki);
   free(wrki);
-
-  o_uc = platform->device.malloc<float>(v_size);
-  o_ub = platform->device.malloc<double>(*(nekData.box_ne));
 
   /* multiplicative RHS update */
   o_sx = platform->device.malloc<float>(box->sn);
@@ -542,7 +546,7 @@ void crs_box_solve2(occa::memory &o_x, struct box *box, occa::memory &o_rhs) {
 
   // Copy RHS to CPU.
   timer_tic(c);
-  o_srhs.copyTo(box->srhs, box->un);
+  o_srhs.copyTo(box->srhs, box->un, 0);
   timer_toc(COPY_RHS);
 
   // crs_dsavg1.
@@ -594,64 +598,48 @@ void crs_box_solve2(occa::memory &o_x, struct box *box, occa::memory &o_rhs) {
     timer_tic(c);
     platform->boxMultRHSKernel(box->un / num_crs_1d_dof, num_crs_1d_dof, o_A, o_sx, o_srhs);
     timer_toc(MULT_RHS_UPDATE);
-
-    timer_tic(c);
-    o_srhs.copyTo(box->srhs, box->un);
-    timer_toc(COPY_RHS);
   }
 
-  // Copy to nek5000 to do the global solve.
-  timer_tic(c);
-#define copy_to_nek5000(T)                                                     \
-  {                                                                            \
-    const T *srhs = (T *)box->srhs;                                            \
-    for (uint i = 0; i < box->un; i++)                                         \
-      nekData.box_r[i] = srhs[i];                                              \
-  }
-  BOX_DOMAIN_SWITCH(box->dom, copy_to_nek5000);
-#undef copy_to_nek5000
-  timer_toc(COPY_TO_NEK5000);
+  platform->boxCopyKernel(box->un, o_srhs, o_uc);
 
-  // Solve on nek5000.
   timer_tic(c);
-  nek::box_map_vtx_to_box();
+  platform->boxZeroDoubleKernel(num_box_dofs, o_ub);
+  timer_toc(ZERO);
+
+  timer_tic(c);
+  platform->mapVtxToBoxKernel(nekData.nelv, o_iphi_e, num_crs_1d_dof, o_phi_e, o_uc, o_ub);
   timer_toc(MAP_VTX_TO_BOX);
 
   timer_tic(c);
-  nek::box_crs_solve();
+  o_ub.copyTo(nekData.box_r);
+  timer_toc(COPY_RHS);
+
+  timer_tic(c);
+  nek::box_crs_solve2();
   timer_toc(ASM2);
 
   timer_tic(c);
-  nek::box_map_box_to_vtx();
+  o_ub.copyFrom(nekData.box_e);
+  timer_toc(COPY_SOLUTION);
+
+  timer_tic(c);
+  platform->mapBoxToVtxKernel(nekData.nelv, o_iphi_e, num_crs_1d_dof, o_phi_e, o_ub, o_uc);
   timer_toc(MAP_BOX_TO_VTX);
 
-  // Copy from nek5000.
-  timer_tic(c);
-#define copy_from_nek5000(T)                                                   \
-  {                                                                            \
-    T *sx = (T *)box->sx;                                                      \
-    for (uint i = 0; i < box->un; i++)                                         \
-      sx[i] += nekData.box_e[i];                                               \
-  }
-  BOX_DOMAIN_SWITCH(box->dom, copy_from_nek5000);
-#undef copy_from_nek5000
-  timer_toc(COPY_FROM_NEK5000);
+  platform->boxUpdateSolutionKernel(box->un, o_uc, o_sx);
 
-  // crs_dsavg3.
   timer_tic(c);
-  gs(box->sx, box->dom, gs_add, 0, box->gsh, &box->bfr);
+  platform->boxInvMulKernel(box->un, o_sx, o_invmul, o_sx);
+  timer_toc(INV_MUL);
+
+  timer_tic(c);
+  o_sx.copyTo(box->sx);
+  timer_toc(COPY_SOLUTION);
+
+  timer_tic(c);
+  gs(box->sx, box->dom, gs_add, 0, box->gsh, &(box->bfr));
   timer_toc(CRS_DSAVG1);
 
-#define avg(T)                                                                 \
-  {                                                                            \
-    T *sx = (T *)box->sx;                                                      \
-    for (uint i = 0; i < box->un; i++)                                         \
-      sx[i] = box->inv_mul[i] * sx[i];                                         \
-  }
-  BOX_DOMAIN_SWITCH(box->dom, avg);
-#undef avg
-
-  // Copy solution.
   timer_tic(c);
   o_x.copyFrom(box->sx, box->un, 0);
   timer_toc(COPY_SOLUTION);

@@ -70,10 +70,13 @@ public:
   occa::kernel mapVtxToBoxKernel;
   occa::kernel mapBoxToVtxKernel;
   occa::kernel boxZeroKernel;
+  occa::kernel boxZeroDoubleKernel;
   occa::kernel boxMultRHSKernel;
   occa::kernel boxInvMulKernel;
   occa::kernel boxUtoCKernel;
   occa::kernel boxCtoUKernel;
+  occa::kernel boxCopyKernel;
+  occa::kernel boxUpdateSolutionKernel;
 };
 #endif
 

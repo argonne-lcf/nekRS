@@ -111,6 +111,8 @@ c-----------------------------------------------------------------------
       ! box solver
       call nekrs_registerPtr('box_e', box_e(1))
       call nekrs_registerPtr('box_r', box_r(1))
+      call nekrs_registerPtr('box_ub', box_ub(1))
+      call nekrs_registerPtr('box_vb', box_vb(1))
       call nekrs_registerPtr('box_mask', box_mask(1))
       call nekrs_registerPtr('box_phi_e', box_phi_e(1))
       call nekrs_registerPtr('box_iphi_e', box_iphi_e(1))
@@ -1470,6 +1472,15 @@ C----------------------------------------------------------------------
       include 'NEKINTF'
 
       call map_vtx_to_box(box_vb,box_r)
+
+      end
+C----------------------------------------------------------------------
+      subroutine nekf_box_crs_solve2
+      include 'SIZE'
+      include 'TOTAL'
+      include 'NEKINTF'
+
+      call box_crs_solve_h1(box_e,box_r)
 
       end
 C----------------------------------------------------------------------

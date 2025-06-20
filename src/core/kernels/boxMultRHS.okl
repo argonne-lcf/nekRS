@@ -16,6 +16,7 @@
           if (c < offset) s_r[k][c] = s_r[k][c] + s_r[k][c + offset];
         }
       }
+      @barrier();
     }
 
     for (dlong c = 0; c < p_NC; c++; @inner(0)) {

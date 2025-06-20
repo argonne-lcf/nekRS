@@ -1,0 +1,5 @@
+@kernel void boxZeroDouble(const unsigned int n, @restrict double *u) {
+  for (unsigned int e = 0; e < n; ++e; @tile(p_blockSize, @outer, @inner)) {
+    u[e] = 0;
+  }
+}
