@@ -21,6 +21,7 @@ typedef struct {
   gs_dom dom;
   box_algo_t asm1;
   unsigned mult;
+  unsigned aggressive;
   unsigned null_space;
 } jl_opts;
 

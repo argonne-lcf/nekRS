@@ -14,6 +14,7 @@ set -e
 : ${CRS_DOM:="gs_double"}
 : ${CRS_ASM1:="cholmod"}
 : ${CRS_TIMER:="1"}
+: ${CRS_AGGRESSIVE:="0"}
 #--------------------------------------
 
 source $NEKRS_HOME/bin/nrsqsub_utils
@@ -55,6 +56,7 @@ echo "export NEKRS_GPU_MPI=$NEKRS_GPU_MPI" >>$SFILE
 echo "export NEKRS_CRS_DOM=${CRS_DOM}" >>$SFILE
 echo "export NEKRS_CRS_ASM1=${CRS_ASM1}" >>$SFILE
 echo "export NEKRS_CRS_TIMER=${CRS_TIMER}" >>$SFILE
+echo "export NEKRS_CRS_AGGRESSIVE=${CRS_AGGRESSIVE}" >>$SFILE
 
 echo "export OCCA_DPCPP_COMPILER_FLAGS=\"$OCCA_DPCPP_COMPILER_FLAGS\"" >> $SFILE
 

@@ -278,16 +278,23 @@ void ellipticMultiGridSetup(elliptic_t *elliptic_)
         if (tmp)
           opts.mult = atoi(tmp);
 
+        opts.aggressive = 0;
+        tmp = getenv("NEKRS_CRS_AGGRESSIVE");
+        if (tmp)
+          opts.aggressive = atoi(tmp);
+
         int timer = 1;
         tmp = getenv("NEKRS_CRS_TIMER");
         if (tmp)
           timer = atoi(tmp);
 
         if (platform->comm.mpiRank == 0) {
-          printf("NEKRS_CRS_DOM   = %d (gs_double = %d, gs_float = %d)\n", opts.dom, gs_double, gs_float);
-          printf("NEKRS_CRS_ASM1  = %d (BOX_XXT = %d, BOX_CHOLMOD = %d, BOX_GPU = %d)\n", opts.asm1, BOX_XXT, BOX_CHOLMOD, BOX_GPU);
           printf("NEKRS_CRS_MULT  = %d\n", opts.mult);
+          printf("NEKRS_CRS_DOM   = %d (gs_double = %d, gs_float = %d)\n", opts.dom, gs_double, gs_float);
+          printf("NEKRS_CRS_ASM1  = %d (BOX_XXT = %d, BOX_CHOLMOD = %d, BOX_GPU = %d)\n", opts.asm1,
+            BOX_XXT, BOX_CHOLMOD, BOX_GPU);
           printf("NEKRS_CRS_TIMER = %d\n", timer);
+          printf("NEKRS_CRS_AGGRESSIVE = %d\n", opts.aggressive);
         }
         fflush(stdout);
 

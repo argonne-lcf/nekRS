@@ -22,7 +22,9 @@ struct box {
   uint un;
   uint ncr;
   gs_dom dom;
-  unsigned algo, mult;
+  unsigned algo;
+  unsigned mult;
+  unsigned aggressive;
   // Computed data structures for Schwarz.
   struct comm global, local;
   struct gs_data *gsh;

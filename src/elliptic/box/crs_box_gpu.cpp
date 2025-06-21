@@ -193,8 +193,6 @@ void asm1_gpu_setup(struct csr *A, unsigned null_space, struct box *box) {
   float *A_inv_f32 = 0;
   setup_inverse(&A_inv, &A_inv_f32, A);
   setup_core(A->nr);
-  printf("%s: rank: %2d, num_compressed: %u\n", __func__, box->global.id, A->nr);
-  fflush(stdout);
 
   const size_t size = nr * nr;
   d_A_inv = box_onemkl_device_malloc<double>(size);

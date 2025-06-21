@@ -210,8 +210,6 @@ static void setup_u2c_map(struct box *box, const ulong *const vtx) {
   array_free(&vids);
 
   setup_u2c_map_aux(box->sn, box->u2c, bfr);
-  printf("%s: rank: %2d, num_compressed: %u\n", __func__, box->global.id, num_compressed);
-  fflush(stdout);
 }
 
 static void setup_asm1(struct box *box, const jl_opts *opts, double tol, const struct comm *comm) {
@@ -350,6 +348,7 @@ struct box *crs_box_setup(uint n, const ulong *id, uint nnz, const uint *Ai, con
   box->dom = opts->dom;
   box->mult = opts->mult;
   box->algo = opts->asm1;
+  box->aggressive = opts->aggressive;
 
   // Allocate workspace.
   buffer_init(&(box->bfr), 1024);
@@ -546,7 +545,7 @@ void crs_box_solve2(occa::memory &o_x, struct box *box, occa::memory &o_rhs) {
 
   // Copy RHS to CPU.
   timer_tic(c);
-  o_srhs.copyTo(box->srhs, box->un, 0);
+  o_srhs.copyTo(box->srhs, box->un);
   timer_toc(COPY_RHS);
 
   // crs_dsavg1.
@@ -580,21 +579,23 @@ void crs_box_solve2(occa::memory &o_x, struct box *box, occa::memory &o_rhs) {
   platform->boxInvMulKernel(box->un, o_sx, o_invmul, o_sx);
   timer_toc(INV_MUL);
 
-  timer_tic(c);
-  o_sx.copyTo(box->sx, box->un);
-  timer_toc(COPY_SOLUTION);
+  if (!(box->aggressive)) {
+    timer_tic(c);
+    o_sx.copyTo(box->sx, box->un);
+    timer_toc(COPY_SOLUTION);
 
-  // crs_dsavg2.
-  timer_tic(c);
-  gs(box->sx, box->dom, gs_add, 0, box->gsh, &(box->bfr));
-  timer_toc(CRS_DSAVG1);
+    // crs_dsavg2.
+    timer_tic(c);
+    gs(box->sx, box->dom, gs_add, 0, box->gsh, &(box->bfr));
+    timer_toc(CRS_DSAVG1);
 
-  // mult_rhs_update:  rhs = rhs - A*sx.
-  if (box->mult) {
     timer_tic(c);
     o_sx.copyFrom(box->sx, box->un);
     timer_toc(COPY_SOLUTION);
+  }
 
+  // mult_rhs_update:  rhs = rhs - A*sx.
+  if (box->mult) {
     timer_tic(c);
     platform->boxMultRHSKernel(box->un / num_crs_1d_dof, num_crs_1d_dof, o_A, o_sx, o_srhs);
     timer_toc(MULT_RHS_UPDATE);
