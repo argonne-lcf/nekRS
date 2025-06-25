@@ -136,6 +136,7 @@ coarseSolver/semfemSolver   smoother
                               +cpu [D for multigrid]
                               +device [D for SEMFEM] 
                                 +overlap                               overlap coarse grid solve in additive MG cycle
+                            xxt                                        XXT sparse direct solver (runs on CPU)
 
 pMGSchedule                 p=<int>, degree=<int>, ...                 custom polynomial order and Chebyshev order for each pMG level
 

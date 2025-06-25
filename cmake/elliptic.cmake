@@ -5,7 +5,7 @@ set(ELLIPTIC_SOURCES
         ${ELLIPTIC_SOURCE_DIR}/ellipticWorkspace.cpp
         ${ELLIPTIC_SOURCE_DIR}/linearSolver/PCG.cpp
         ${ELLIPTIC_SOURCE_DIR}/linearSolver/PGMRES.cpp
-        ${ELLIPTIC_SOURCE_DIR}/amgSolver/amgx/AMGX.cpp
+        ${ELLIPTIC_SOURCE_DIR}/coarseSolver/amgx/AMGX.cpp
         ${ELLIPTIC_SOURCE_DIR}/ellipticApplyMask.cpp
         ${ELLIPTIC_SOURCE_DIR}/ellipticUpdateJacobi.cpp
         ${ELLIPTIC_SOURCE_DIR}/ellipticBuildMultigridLevelKernels.cpp
@@ -31,4 +31,6 @@ set(ELLIPTIC_SOURCES
         ${ELLIPTIC_SOURCE_DIR}/MG/coarseLevel.cpp
         ${ELLIPTIC_SOURCE_DIR}/MG/level.cpp
         ${ELLIPTIC_SOURCE_DIR}/MG/MGSolver.cpp
-        ${ELLIPTIC_SOURCE_DIR}/ellipticZeroMean.cpp)
+        ${ELLIPTIC_SOURCE_DIR}/ellipticZeroMean.cpp
+        ${ELLIPTIC_SOURCE_DIR}/coarseSolver/xxt/jl.cpp
+        ${ELLIPTIC_SOURCE_DIR}/coarseSolver/xxt/crs_xxt.cpp)

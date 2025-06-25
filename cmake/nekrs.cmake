@@ -148,9 +148,10 @@ set(NRS_INCLUDE
     ${FINDPTS_SOURCE_DIR}
     ${ELLIPTIC_SOURCE_DIR}
     PRIVATE
-    ${ELLIPTIC_SOURCE_DIR}/amgSolver/hypre
-    ${ELLIPTIC_SOURCE_DIR}/amgSolver/amgx
+    ${ELLIPTIC_SOURCE_DIR}/coarseSolver/hypre
+    ${ELLIPTIC_SOURCE_DIR}/coarseSolver/amgx
     ${ELLIPTIC_SOURCE_DIR}/MG
+    ${ELLIPTIC_SOURCE_DIR}/coarseSolver/xxt
 )
 
 add_library(nekrs-lib SHARED ${NRS_SRC})

@@ -24,7 +24,7 @@ defaults:
 jobs:
 
   install:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-22.04
     steps:
 
     - uses: actions/checkout@v4
@@ -60,7 +60,7 @@ jobs:
 
   ethier:
     needs: install
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-22.04
     steps:
 
     - uses: actions/checkout@v4
@@ -83,15 +83,23 @@ jobs:
 
     - name: 'ethier build-only'
       working-directory: ${{ env.NEKRS_EXAMPLES }}/build
-      run: ctest --output-on-failure -R ethier-buildOnly 
+      run: ctest --output-on-failure -R "^ethier-buildOnly$"
 
     - name: 'ethier'
       working-directory: ${{ env.NEKRS_EXAMPLES }}/build
-      run: ctest --output-on-failure -R ethier 
+      run: ctest --output-on-failure -R "^ethier_"
+
+    - name: 'ethierRefine build-only'
+      working-directory: ${{ env.NEKRS_EXAMPLES }}/build
+      run: ctest --output-on-failure -R "^ethierRefine-buildOnly"
+
+    - name: 'ethierRefine'
+      working-directory: ${{ env.NEKRS_EXAMPLES }}/build
+      run: ctest --output-on-failure -R "^ethierRefine_"
 
   lowMach:
     needs: install
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-22.04
     steps:
 
     - uses: actions/checkout@v4
@@ -118,7 +126,7 @@ jobs:
 
   mv_cyl:
     needs: install
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-22.04
     steps:
 
     - uses: actions/checkout@v4
@@ -141,7 +149,7 @@ jobs:
 
     - name: 'mv_cyl'
       working-directory: ${{ env.NEKRS_EXAMPLES }}/build
-      run: ctest --output-on-failure -R "^mv_cyl$"
+      run: ctest --output-on-failure -R "^mv_cyl_[0-9]"
 
     - name: 'mv_cyl_derived_bc'
       working-directory: ${{ env.NEKRS_EXAMPLES }}/build
@@ -149,7 +157,7 @@ jobs:
 
   conj_ht:
     needs: install
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-22.04
     steps:
 
     - uses: actions/checkout@v4
@@ -176,7 +184,7 @@ jobs:
 
   channel:
     needs: install
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-22.04
     steps:
 
     - uses: actions/checkout@v4
@@ -203,7 +211,7 @@ jobs:
 
   shlChannel:
     needs: install
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-22.04
     steps:
 
     - uses: actions/checkout@v4
@@ -230,7 +238,7 @@ jobs:
 
   eddyNekNek:
     needs: install
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-22.04
     steps:
 
     - uses: actions/checkout@v4
@@ -261,7 +269,7 @@ jobs:
 
   ktauChannel:
     needs: install
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-22.04
     steps:
 
     - uses: actions/checkout@v4

@@ -23,6 +23,8 @@ namespace occa {
       void* unwrap() override;
 
       occa::dpcpp::streamTag memcpy(void *dest, const void *src, occa::udim_t num_bytes);
+
+      occa::streamTag tag();
     };
   }
 }

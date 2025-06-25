@@ -1,0 +1,105 @@
+------------------------------------------------------------------------------------------------------------------------------------
+OLCF Frontier
+------------------------------------------------------------------------------------------------------------------------------------
+
+(PrgEnv-amd) (last tested: Jun. 23, 2025)
+
+  module reset
+  module load PrgEnv-amd
+  module load craype-accel-amd-gfx90a
+  module load cray-mpich
+  module load rocm
+  module load cmake
+  module load ascent
+  module unload cray-libsci
+
+  module list
+  
+  # path to target installed location
+  export NEKRS_HOME=<path-to-your-project>/.local/nekrs
+  
+  CC=cc CXX=CC FC=ftn ./build.sh \
+     -DCMAKE_INSTALL_PREFIX=$NEKRS_HOME
+
+
+(PrgEnv-gnu) (last tested: Jun. 23, 2025)
+
+  module reset
+  module load PrgEnv-gnu
+  module load gcc-native/13.2
+  module load craype-accel-amd-gfx90a
+  module load cray-mpich/8.1.31
+  module load rocm
+  module load cmake
+  module unload cray-libsci
+
+  module list
+  
+  # path to target installed location
+  export NEKRS_HOME=<path-to-your-project>/.local/nekrs
+  
+  CC=cc CXX=CC FC=ftn ./build.sh \
+     -DCMAKE_INSTALL_PREFIX=$NEKRS_HOME \
+     -DENABLE_HYPRE_GPU=off
+
+------------------------------------------------------------------------------------------------------------------------------------
+ALCF Aurora
+------------------------------------------------------------------------------------------------------------------------------------
+
+(oneapi/release/2025.0.5) (last tested: Jun. 23, 2025)
+
+  module load cmake
+  module list
+
+
+  # path to target installed location
+  export NEKRS_HOME=<path-to-your-project>/.local/nekrs
+
+  CC=mpicc CXX=mpic++ FC=mpif77 ./build.sh \
+     -DCMAKE_INSTALL_PREFIX=$NEKRS_HOME
+
+------------------------------------------------------------------------------------------------------------------------------------
+ALCF Polaris
+------------------------------------------------------------------------------------------------------------------------------------
+
+(PrgEnv-gnu) (last tested: Jun. 23, 2025)
+
+  module use /soft/modulefiles
+  module use /opt/cray/pe/lmod/modulefiles/mix_compilers
+  module load libfabric
+  module load PrgEnv-gnu
+  module load nvhpc-mixed
+  module load craype-x86-milan craype-accel-nvidia80
+  module load spack-pe-base cmake
+
+  module list
+
+
+  # path to target installed location
+  export NEKRS_HOME=<path-to-your-project>/.local/nekrs
+
+  CC=cc CXX=CC FC=ftn ./build.sh \
+     -DCMAKE_INSTALL_PREFIX=$NEKRS_HOME
+
+------------------------------------------------------------------------------------------------------------------------------------
+NERSC Perlmutter
+------------------------------------------------------------------------------------------------------------------------------------
+
+(PrgEnv-gnu) (last tested: Jun. 23, 2025)
+
+  module load PrgEnv-gnu
+  module load cudatoolkit
+  module load cpe-cuda
+  module load cmake
+  module unload cray-libsci
+  
+  module list
+
+
+  # path to target installed location
+  export NEKRS_HOME=<path-to-your-project>/.local/nekrs
+
+  CC=cc CXX=CC FC=ftn ./build.sh \
+     -DCMAKE_INSTALL_PREFIX=$NEKRS_HOME
+
+------------------------------------------------------------------------------------------------------------------------------------
