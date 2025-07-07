@@ -73,12 +73,12 @@ struct nekdata_private {
   double *wx, *wy, *wz;
 
   /* box solver */
-  double *box_e, *box_r, *box_mask, *box_phi_e, *box_ub, *box_vb;
-  int *box_iphi_e, *box_ne, *box_nnz;
+  int *box_ne, *box_nnz, *box_iphi_e;
+  double *box_e, *box_r, *box_mask, *box_phi_e;
 
-  double *schwz_mask, *schwz_amat, *schwz_xyz;
   int *schwz_ne, *schwz_nw, *schwz_ncr, *schwz_frontier;
   long long *schwz_vtx, *schwz_eids;
+  double *schwz_amat, *schwz_mask, *schwz_xyz;
 };
 
 extern nekdata_private nekData;
@@ -156,9 +156,6 @@ void printMeshMetrics();
 
 void box_crs_setup();
 void box_copy_phi_e();
-void box_map_vtx_to_box();
-void box_map_box_to_vtx();
-void box_crs_solve();
 void box_crs_solve2();
 
 const std::map<std::string, void*>& ptrList();

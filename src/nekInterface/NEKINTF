@@ -10,29 +10,29 @@
 C----------------------------------------------------------------------
 C     box solver
 C----------------------------------------------------------------------
-      integer lelmrs,lvrs
-      parameter(lelmrs=5*lelt+200, lvrs=2**ldim)
+      integer lelmrs,lvrs,lbmrs
+      parameter(lelmrs=5*lelt+200,lvrs=2**ldim,lbmrs=100000)
 
-      real box_e,box_r,box_mask,box_ub,box_vb,box_phi_e,
-     $  schwz_amat,schwz_mask,schwz_xyz
+      integer box_ne,box_nnz,box_iphi_e
+      real box_e,box_r,box_mask,box_phi_e
+
+      integer schwz_ne,schwz_nw,schwz_ncr,schwz_frontier
       integer*8 schwz_vtx, schwz_eids
-      integer schwz_ne,schwz_nw,schwz_ncr,schwz_frontier,box_iphi_e,
-     $  box_ne,box_nnz
-      common /BOXCRS/ box_e(lx1*ly1*lz1*lelmrs),
-     $                box_r(lx1*ly1*lz1*lelmrs),
-     $                box_mask(lvrs*lelmrs),
-     $                box_ub(lvrs*lelmrs),
-     $                box_vb(lvrs*lelmrs),
-     $                box_phi_e(lvrs*lvrs*lelt),
-     $                box_iphi_e(lvrs*lelt),
-     $                box_ne,
+      real schwz_amat,schwz_mask,schwz_xyz
+
+      common /BOXCRS/ box_ne,
      $                box_nnz,
-     $                schwz_amat(lvrs*lvrs*lelmrs),
-     $                schwz_mask(lvrs*lelmrs),
-     $                schwz_vtx(lvrs*lelmrs),
-     $                schwz_eids(lelmrs),
-     $                schwz_xyz(ldim*lvrs*lelmrs),
-     $                schwz_frontier(lvrs*lelmrs),
+     $                box_iphi_e(lvrs*lelt),
+     $                box_e(lvrs*lbmrs),
+     $                box_r(lvrs*lbmrs),
+     $                box_mask(lvrs*lelmrs),
+     $                box_phi_e(lvrs*lvrs*lelt),
      $                schwz_ne,
      $                schwz_nw,
      $                schwz_ncr
+     $                schwz_frontier(lvrs*lelmrs),
+     $                schwz_vtx(lvrs*lelmrs),
+     $                schwz_eids(lelmrs),
+     $                schwz_amat(lvrs*lvrs*lelmrs),
+     $                schwz_mask(lvrs*lelmrs),
+     $                schwz_xyz(ldim*lvrs*lelmrs),

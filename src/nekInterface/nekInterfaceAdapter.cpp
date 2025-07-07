@@ -86,9 +86,6 @@ static int (*nek_gllel_ptr)(int *);
 /* box solver */
 static void (*nek_box_crs_setup)(void);
 static void (*nek_box_copy_phi_e)(void);
-static void (*nek_box_map_vtx_to_box)(void);
-static void (*nek_box_map_box_to_vtx)(void);
-static void (*nek_box_crs_solve)(void);
 static void (*nek_box_crs_solve2)(void);
 
 static std::map<std::string, void *> ptrListData;
@@ -662,12 +659,6 @@ void set_usr_handles(const char *session_in, int verbose)
   check_error(dlerror());
   nek_box_copy_phi_e = (void (*)(void))dlsym(handle, fname("nekf_box_copy_phi_e"));
   check_error(dlerror());
-  nek_box_map_vtx_to_box = (void (*)())dlsym(handle, fname("nekf_box_map_vtx_to_box"));
-  check_error(dlerror());
-  nek_box_map_box_to_vtx = (void (*)())dlsym(handle, fname("nekf_box_map_box_to_vtx"));
-  check_error(dlerror());
-  nek_box_crs_solve = (void (*)())dlsym(handle, fname("nekf_box_crs_solve"));
-  check_error(dlerror());
   nek_box_crs_solve2 = (void (*)())dlsym(handle, fname("nekf_box_crs_solve2"));
   check_error(dlerror());
 
@@ -1172,24 +1163,23 @@ int setup(int numberActiveFields)
   nekData.wz = ptr<double>("wz");
 
   /* box solver */
-  nekData.box_e = ptr<double>("box_e");
-  nekData.box_r = ptr<double>("box_r");
-  nekData.box_ub = ptr<double>("box_ub");
-  nekData.box_vb = ptr<double>("box_vb");
-  nekData.box_phi_e = ptr<double>("box_phi_e");
-  nekData.box_iphi_e = ptr<int>("box_iphi_e");
-  nekData.box_mask = ptr<double>("box_mask");
   nekData.box_ne = ptr<int>("box_ne");
   nekData.box_nnz = ptr<int>("box_nnz");
-  nekData.schwz_mask = ptr<double>("schwz_mask");
-  nekData.schwz_amat = ptr<double>("schwz_amat");
-  nekData.schwz_xyz = ptr<double>("schwz_xyz");
+  nekData.box_iphi_e = ptr<int>("box_iphi_e");
+  nekData.box_e = ptr<double>("box_e");
+  nekData.box_r = ptr<double>("box_r");
+  nekData.box_mask = ptr<double>("box_mask");
+  nekData.box_phi_e = ptr<double>("box_phi_e");
+
   nekData.schwz_ne = ptr<int>("schwz_ne");
   nekData.schwz_nw = ptr<int>("schwz_nw");
   nekData.schwz_ncr = ptr<int>("schwz_ncr");
   nekData.schwz_frontier = ptr<int>("schwz_frontier");
   nekData.schwz_vtx = ptr<long long>("schwz_vtx");
   nekData.schwz_eids = ptr<long long>("schwz_eids");
+  nekData.schwz_amat = ptr<double>("schwz_amat");
+  nekData.schwz_mask = ptr<double>("schwz_mask");
+  nekData.schwz_xyz = ptr<double>("schwz_xyz");
 
   nekData.xm1 = ptr<double>("xm1");
   nekData.ym1 = ptr<double>("ym1");
@@ -1351,18 +1341,6 @@ void box_crs_setup() {
 
 void box_copy_phi_e() {
   (*nek_box_copy_phi_e)();
-}
-
-void box_map_vtx_to_box() {
-  (*nek_box_map_vtx_to_box)();
-}
-
-void box_map_box_to_vtx() {
-  (*nek_box_map_box_to_vtx)();
-}
-
-void box_crs_solve() {
-  (*nek_box_crs_solve)();
 }
 
 void box_crs_solve2() {
