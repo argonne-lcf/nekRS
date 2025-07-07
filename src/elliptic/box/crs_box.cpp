@@ -478,6 +478,9 @@ void crs_box_solve(void *x, struct box *box, const void *rhs) {
   timer_toc(COPY_TO_NEK5000);
 
   // Solve on nek5000.
+  // FIXME: broken due to box_map_vtx_to_box and box_map_box_to_vtx
+  // not being available anymore.
+#if 0
   timer_tic(c);
   nek::box_map_vtx_to_box();
   timer_toc(MAP_VTX_TO_BOX);
@@ -489,6 +492,7 @@ void crs_box_solve(void *x, struct box *box, const void *rhs) {
   timer_tic(c);
   nek::box_map_box_to_vtx();
   timer_toc(MAP_BOX_TO_VTX);
+#endif
 
   // Copy from nek5000.
   timer_tic(c);
