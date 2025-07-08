@@ -113,12 +113,8 @@ c-----------------------------------------------------------------------
       call nekrs_registerPtr('box_nnz', box_nnz)
       call nekrs_registerPtr('box_null_space', box_null_space)
       call nekrs_registerPtr('box_iphi_e', box_iphi_e(1))
-      call nekrs_registerPtr('box_ia', box_ia(1))
-      call nekrs_registerPtr('box_ja', box_ja(1))
       call nekrs_registerPtr('box_gcrs', box_gcrs(1))
       call nekrs_registerPtr('box_a', box_a(1))
-      call nekrs_registerPtr('box_e', box_e(1))
-      call nekrs_registerPtr('box_r', box_r(1))
       call nekrs_registerPtr('box_mask', box_mask(1))
       call nekrs_registerPtr('box_phi_e', box_phi_e(1))
 
@@ -1456,8 +1452,8 @@ C----------------------------------------------------------------------
 
       schwz_ncr=nxc*nxc*nxc
 
-      call nrs_set_global_crs(box_n,box_gcrs,box_nnz,box_ia,box_ja,
-     $  box_a,box_mask,box_null_space)
+      call nrs_set_global_crs(box_n,box_gcrs,box_nnz,box_a,box_mask,
+     $  box_null_space)
 
       return
       end
@@ -1468,15 +1464,6 @@ C----------------------------------------------------------------------
       include 'NEKINTF'
 
       call box_copy_phi_e(box_phi_e,box_iphi_e)
-
-      end
-C----------------------------------------------------------------------
-      subroutine nekf_box_crs_solve2
-      include 'SIZE'
-      include 'TOTAL'
-      include 'NEKINTF'
-
-      call box_crs_solve_h1(box_e,box_r)
 
       end
 C----------------------------------------------------------------------

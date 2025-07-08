@@ -512,6 +512,8 @@ void crs_box_solve(void *x, struct box *box, const void *rhs) {
   timer_toc(MULT_RHS_UPDATE);
 
   // Copy to nek5000 to do the global solve.
+  // FIXME: This doesn't work anymore as we don't use box_e and box_r anymore.
+#if 0
   timer_tic(c);
 #define copy_to_nek5000(T)                                                     \
   {                                                                            \
@@ -522,6 +524,7 @@ void crs_box_solve(void *x, struct box *box, const void *rhs) {
   BOX_DOMAIN_SWITCH(box->dom, copy_to_nek5000);
 #undef copy_to_nek5000
   timer_toc(COPY_TO_NEK5000);
+#endif
 
   // Solve on nek5000.
   // FIXME: broken due to box_map_vtx_to_box and box_map_box_to_vtx
@@ -541,6 +544,8 @@ void crs_box_solve(void *x, struct box *box, const void *rhs) {
 #endif
 
   // Copy from nek5000.
+  // FIXME: This doesn't work anymore as we don't use box_e and box_r anymore.
+#if 0
   timer_tic(c);
 #define copy_from_nek5000(T)                                                   \
   {                                                                            \
@@ -551,6 +556,7 @@ void crs_box_solve(void *x, struct box *box, const void *rhs) {
   BOX_DOMAIN_SWITCH(box->dom, copy_from_nek5000);
 #undef copy_from_nek5000
   timer_toc(COPY_FROM_NEK5000);
+#endif
 
   // crs_dsavg3.
   timer_tic(c);

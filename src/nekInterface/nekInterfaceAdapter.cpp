@@ -659,8 +659,6 @@ void set_usr_handles(const char *session_in, int verbose)
   check_error(dlerror());
   nek_box_copy_phi_e = (void (*)(void))dlsym(handle, fname("nekf_box_copy_phi_e"));
   check_error(dlerror());
-  nek_box_crs_solve2 = (void (*)())dlsym(handle, fname("nekf_box_crs_solve2"));
-  check_error(dlerror());
 
 #define postfix(x) x##_ptr
 #define load_or_noop(s)                                                                                      \
@@ -1167,12 +1165,8 @@ int setup(int numberActiveFields)
   nekData.box_nnz = ptr<int>("box_nnz");
   nekData.box_null_space = ptr<int>("box_null_space");
   nekData.box_iphi_e = ptr<int>("box_iphi_e");
-  nekData.box_ia = ptr<int>("box_ia");
-  nekData.box_ja = ptr<int>("box_ja");
   nekData.box_gcrs = ptr<long long>("box_gcrs");
   nekData.box_a = ptr<double>("box_a");
-  nekData.box_e = ptr<double>("box_e");
-  nekData.box_r = ptr<double>("box_r");
   nekData.box_mask = ptr<double>("box_mask");
   nekData.box_phi_e = ptr<double>("box_phi_e");
 
