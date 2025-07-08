@@ -1422,7 +1422,7 @@ C----------------------------------------------------------------------
       include 'TOTAL'
       include 'NEKINTF'
 
-      integer null_space,nxc,ncr
+      integer null_space,nxc,nzc,ncr
       integer ne,nv,nw
       logical ifdbg
 
