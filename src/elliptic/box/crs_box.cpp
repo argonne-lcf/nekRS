@@ -106,16 +106,22 @@ void box_debug(const int verbose, const char *fmt, ...) {
 }
 
 /* Mesh (vertex) to box Interpolation */
-static int num_box, num_box_dofs;
 occa::memory o_phi_e, o_iphi_e;
 occa::memory o_ub, o_uc;
 /* multiplicative RHS update */
-static int num_crs_1d_dof;
 occa::memory o_A;
 occa::memory o_sx, o_srhs, o_invmul;
 /* setup unassembled to assembled map*/
 static int num_compressed;
 static occa::memory o_u2c_off, o_u2c_idx, o_cr, o_cx;
+
+static inline int get_num_crs_dofs_1d() {
+  return *(nekData.schwz_ncr);
+}
+
+static inline int get_num_box_dofs() {
+  return *(nekData.box_ne);
+}
 
 static void setup_u2c_map_aux(unsigned un, const sint *u2c, buffer *bfr) {
   struct map_t {
@@ -302,26 +308,23 @@ static void setup_gpu_implementation(const struct box *box) {
   // Copy the phi_e, and iphi_e to C.
   nek::box_copy_phi_e();
 
-  num_crs_1d_dof = *(nekData.schwz_ncr);
   const int nelv = nekData.nelv;
-  assert(box->un == (num_crs_1d_dof * nelv));
+  const int num_crs_dofs_1d = get_num_crs_dofs_1d();
+  assert(box->un == (num_crs_dofs_1d * nelv));
   assert(box->sn >= box->un);
 
   // Setup device memory for vtx-to-box and box-to-vtx interpolation.
-  const int m_size = num_crs_1d_dof * box->un;
+  const int m_size = num_crs_dofs_1d * box->un;
   o_phi_e = platform->device.malloc<double>(m_size);
   o_phi_e.copyFrom(nekData.box_phi_e);
 
-  // box_ne = ncr * num_box
-  num_box_dofs = *(nekData.box_ne);
-  num_box = num_box_dofs / num_crs_1d_dof;
   o_uc = platform->device.malloc<float>(box->un);
-  o_ub = platform->device.malloc<double>(num_box_dofs);
+  o_ub = platform->device.malloc<double>(get_num_box_dofs());
 
   o_iphi_e = platform->device.malloc<int>(nelv);
   int *wrki = (int *)calloc(nelv, sizeof(int));
   for (int i = 0; i < nelv; i++)
-    wrki[i] = nekData.box_iphi_e[i * num_crs_1d_dof];
+    wrki[i] = nekData.box_iphi_e[i * num_crs_dofs_1d];
   o_iphi_e.copyFrom(wrki);
   free(wrki);
 
@@ -601,18 +604,19 @@ void crs_box_solve2(occa::memory &o_x, struct box *box, occa::memory &o_rhs) {
   // mult_rhs_update:  rhs = rhs - A*sx.
   if (box->mult) {
     timer_tic(c);
-    platform->boxMultRHSKernel(box->un / num_crs_1d_dof, num_crs_1d_dof, o_A, o_sx, o_srhs);
+    int num_crs_dofs_1d = get_num_crs_dofs_1d();
+    platform->boxMultRHSKernel(box->un / num_crs_dofs_1d, num_crs_dofs_1d, o_A, o_sx, o_srhs);
     timer_toc(MULT_RHS_UPDATE);
   }
 
   platform->boxCopyKernel(box->un, o_srhs, o_uc);
 
   timer_tic(c);
-  platform->boxZeroDoubleKernel(num_box_dofs, o_ub);
+  platform->boxZeroDoubleKernel(get_num_box_dofs(), o_ub);
   timer_toc(ZERO);
 
   timer_tic(c);
-  platform->mapVtxToBoxKernel(nekData.nelv, o_iphi_e, num_crs_1d_dof, o_phi_e, o_uc, o_ub);
+  platform->mapVtxToBoxKernel(nekData.nelv, o_iphi_e, get_num_crs_dofs_1d(), o_phi_e, o_uc, o_ub);
   timer_toc(MAP_VTX_TO_BOX);
 
   timer_tic(c);
@@ -628,7 +632,7 @@ void crs_box_solve2(occa::memory &o_x, struct box *box, occa::memory &o_rhs) {
   timer_toc(COPY_SOLUTION);
 
   timer_tic(c);
-  platform->mapBoxToVtxKernel(nekData.nelv, o_iphi_e, num_crs_1d_dof, o_phi_e, o_ub, o_uc);
+  platform->mapBoxToVtxKernel(nekData.nelv, o_iphi_e, get_num_crs_dofs_1d(), o_phi_e, o_ub, o_uc);
   timer_toc(MAP_BOX_TO_VTX);
 
   platform->boxUpdateSolutionKernel(box->un, o_uc, o_sx);
