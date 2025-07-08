@@ -109,13 +109,19 @@ c-----------------------------------------------------------------------
       call nekrs_registerPtr('cbc', cbc)
 
       ! box solver
-      call nekrs_registerPtr('box_ne', box_ne)
+      call nekrs_registerPtr('box_n', box_n)
       call nekrs_registerPtr('box_nnz', box_nnz)
+      call nekrs_registerPtr('box_null_space', box_null_space)
       call nekrs_registerPtr('box_iphi_e', box_iphi_e(1))
+      call nekrs_registerPtr('box_ia', box_ia(1))
+      call nekrs_registerPtr('box_ja', box_ja(1))
+      call nekrs_registerPtr('box_gcrs', box_gcrs(1))
+      call nekrs_registerPtr('box_a', box_a(1))
       call nekrs_registerPtr('box_e', box_e(1))
       call nekrs_registerPtr('box_r', box_r(1))
       call nekrs_registerPtr('box_mask', box_mask(1))
       call nekrs_registerPtr('box_phi_e', box_phi_e(1))
+
       call nekrs_registerPtr('schwz_ne', schwz_ne)
       call nekrs_registerPtr('schwz_nw', schwz_nw)
       call nekrs_registerPtr('schwz_ncr', schwz_ncr)
@@ -1422,12 +1428,12 @@ C----------------------------------------------------------------------
       include 'TOTAL'
       include 'NEKINTF'
 
-      integer null_space,nxc,nzc,ncr
+      integer nxc,nzc,ncr
       integer ne,nv,nw
       logical ifdbg
 
       call setup_schwz_2l_crs
-      call set_coarse_mask(box_mask,null_space) ! This is the Q1 mask
+      call set_coarse_mask(box_mask,box_null_space) ! This is the Q1 mask
 
       nxc=2
       nzc=1
@@ -1450,7 +1456,8 @@ C----------------------------------------------------------------------
 
       schwz_ncr=nxc*nxc*nxc
 
-      call nrs_set_global_crs(box_mask,box_ne,box_nnz)
+      call nrs_set_global_crs(box_n,box_gcrs,box_nnz,box_ia,box_ja,
+     $  box_a,box_mask,box_null_space)
 
       return
       end

@@ -193,7 +193,7 @@ void jl_setup(uint n, const ulong *id, uint nnz, const uint *Ai, const uint *Aj,
   struct comm *c = &(crs->c);
   switch (crs->type) {
   case XXT:
-    crs->solver = (void *)crs_xxt_setup(n, id, nnz, Ai, Aj, A, opts, c);
+    crs->solver = (void *)crs_xxt_setup(n, id, nnz, Ai, Aj, A, opts->dom, opts->null_space, c);
     break;
   case BOX:
     crs->solver = (void *)crs_box_setup(n, id, nnz, Ai, Aj, A, opts, c);

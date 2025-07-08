@@ -37,6 +37,8 @@ struct box {
   buffer bfr;
   // Pointer to the asm1 solver.
   void *ss;
+  // Pointer to the asm2 solver.
+  void *asm2;
 };
 
 void box_debug(const int verbose, const char *fmt, ...);

@@ -94,11 +94,10 @@ struct xxt {
 };
 
 struct xxt *crs_xxt_setup(uint n, const ulong *id, uint nz, const uint *Ai,
-                          const uint *Aj, const double *A, const jl_opts *opts,
-                          const struct comm *comm) {
+                          const uint *Aj, const double *A, gs_dom dom,
+                          uint null_space, const struct comm *comm) {
   struct xxt *xxt = tcalloc(struct xxt, 1);
-  gs_dom dom = xxt->dom = opts->dom;
-  uint null_space = opts->null_space;
+  xxt->dom = dom;
   switch (dom) {
   case gs_double:
     xxt->solver =

@@ -13,26 +13,32 @@ C----------------------------------------------------------------------
       integer lelmrs,lvrs,lbmrs
       parameter(lelmrs=5*lelt+200,lvrs=2**ldim,lbmrs=100000)
 
-      integer box_ne,box_nnz,box_iphi_e
-      real box_e,box_r,box_mask,box_phi_e
+      integer box_n,box_nnz,box_null_space,box_iphi_e,box_ia,box_ja
+      integer*8 box_gcrs
+      real box_a,box_e,box_r,box_mask,box_phi_e
 
       integer schwz_ne,schwz_nw,schwz_ncr,schwz_frontier
       integer*8 schwz_vtx, schwz_eids
       real schwz_amat,schwz_mask,schwz_xyz
 
-      common /BOXCRS/ box_ne,
+      common /BOXCRS/ box_n,
      $                box_nnz,
+     $                box_null_space,
      $                box_iphi_e(lvrs*lelt),
+     $                box_ia(lvrs*lvrs*lbmrs),
+     $                box_ja(lvrs*lvrs*lbmrs),
+     $                box_gcrs(lvrs*lbmrs),
+     $                box_a(lvrs*lvrs*lbmrs),
      $                box_e(lvrs*lbmrs),
      $                box_r(lvrs*lbmrs),
      $                box_mask(lvrs*lelmrs),
      $                box_phi_e(lvrs*lvrs*lelt),
      $                schwz_ne,
      $                schwz_nw,
-     $                schwz_ncr
+     $                schwz_ncr,
      $                schwz_frontier(lvrs*lelmrs),
      $                schwz_vtx(lvrs*lelmrs),
      $                schwz_eids(lelmrs),
      $                schwz_amat(lvrs*lvrs*lelmrs),
      $                schwz_mask(lvrs*lelmrs),
-     $                schwz_xyz(ldim*lvrs*lelmrs),
+     $                schwz_xyz(ldim*lvrs*lelmrs)

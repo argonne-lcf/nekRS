@@ -14,6 +14,9 @@
 #include "nekrs_crs.hpp"
 #include "crs_box_impl.hpp"
 
+
+#define MAX(a, b) ((a) > (b) ? (a) : (b))
+
 static void crs_box_dump(uint n, const ulong *id, uint nnz, const uint *Ai,
                          const uint *Aj, const double *A, uint null_space,
                          const struct comm *comm) {
@@ -120,7 +123,7 @@ static inline int get_num_crs_dofs_1d() {
 }
 
 static inline int get_num_box_dofs() {
-  return *(nekData.box_ne);
+  return *(nekData.box_n);
 }
 
 static void setup_u2c_map_aux(unsigned un, const sint *u2c, buffer *bfr) {
@@ -218,7 +221,46 @@ static void setup_u2c_map(struct box *box, const ulong *const vtx) {
   setup_u2c_map_aux(box->sn, box->u2c, bfr);
 }
 
-static void setup_asm1(struct box *box, const jl_opts *opts, double tol, const struct comm *comm) {
+static void setup_ij(uint **ia, uint **ja, uint n, uint nnz) {
+  uint ncr = nnz / n;
+  uint ne = n / ncr;
+
+  *ia = tcalloc(uint, nnz);
+  *ja = tcalloc(uint, nnz);
+  for (uint e = 0; e < ne; e++) {
+    for (uint j = 0; j < ncr; j++) {
+      for (uint i = 0; i < ncr; i++) {
+        (*ia)[e * ncr * ncr + j * ncr + i] = e * ncr + i;
+        (*ja)[e * ncr * ncr + j * ncr + i] = e * ncr + j;
+      }
+    }
+  }
+}
+
+static void asm2_setup(struct box *box) {
+  nek::box_crs_setup();
+
+  uint n = *(nekData.box_n);
+  uint nnz = *(nekData.box_nnz);
+  const long long *gcrs = (const long long *)nekData.box_gcrs;
+  const double *va = (const double *)nekData.box_a;
+  uint null_space = *(nekData.box_null_space);
+
+  uint *ia, *ja;
+  setup_ij(&ia, &ja, n, nnz);
+  ulong *gcrs_ul = tcalloc(ulong, n);
+  for (uint i = 0; i < n; i++)
+    gcrs_ul[i] = gcrs[i];
+  box->asm2 = (void *)crs_xxt_setup(n, gcrs_ul, nnz, ia, ja, va, gs_float, null_space, &(box->global));
+
+  free(ia), free(ja), free(gcrs_ul);
+}
+
+static void asm2_solve(const struct box *box) {
+  crs_xxt_solve(box->sx, (struct xxt *)box->asm2, box->srhs);
+}
+
+static void asm1_setup(struct box *box, const jl_opts *opts, double tol, const struct comm *comm) {
   uint ne = *(nekData.schwz_ne);
   uint nw = *(nekData.schwz_nw);
   const long long *vtx = (const long long *)nekData.schwz_vtx;
@@ -270,7 +312,7 @@ static void setup_asm1(struct box *box, const jl_opts *opts, double tol, const s
   // Setup ASM1 solver.
   box->ss = NULL;
   if (box->algo == BOX_XXT)
-    box->ss = (void *)crs_xxt_setup(box->sn, tmp_vtx, nnz, ia, ja, va, opts, &(box->local));
+    box->ss = (void *)crs_xxt_setup(box->sn, tmp_vtx, nnz, ia, ja, va, opts->dom, opts->null_space, &(box->local));
   if (box->algo == BOX_CHOLMOD)
     asm1_cholmod_setup(A, null_space, box);
   if (box->algo == BOX_GPU)
@@ -293,15 +335,6 @@ static void setup_asm1(struct box *box, const jl_opts *opts, double tol, const s
   gs(box->inv_mul, gs_double, gs_add, 0, box->gsh, &box->bfr);
   for (uint i = 0; i < box->sn; i++)
     box->inv_mul[i] = 1.0 / box->inv_mul[i];
-
-    // Allocate work arrays.
-#define allocate_work_arrays(T)                                                \
-  {                                                                            \
-    box->sx = malloc(sizeof(T) * 2 * box->sn);                                 \
-    box->srhs = (void *)((T *)box->sx + box->sn);                              \
-  }
-  BOX_DOMAIN_SWITCH(box->dom, allocate_work_arrays);
-#undef allocate_work_arrays
 }
 
 static void setup_gpu_implementation(const struct box *box) {
@@ -319,7 +352,7 @@ static void setup_gpu_implementation(const struct box *box) {
   o_phi_e.copyFrom(nekData.box_phi_e);
 
   o_uc = platform->device.malloc<float>(box->un);
-  o_ub = platform->device.malloc<double>(get_num_box_dofs());
+  o_ub = platform->device.malloc<float>(get_num_box_dofs());
 
   o_iphi_e = platform->device.malloc<int>(nelv);
   int *wrki = (int *)calloc(nelv, sizeof(int));
@@ -365,12 +398,22 @@ struct box *crs_box_setup(uint n, const ulong *id, uint nnz, const uint *Ai, con
   comm_init(&(box->local), local);
   MPI_Comm_free(&local);
 
-  // ASM2 setup using Fortran. We should port this to C.
-  nek::box_crs_setup();
+  // ASM2 setup on C side.
+  asm2_setup(box);
 
   // ASM1 setup on C side.
   box->sn = *(nekData.schwz_ne) * box->ncr;
-  setup_asm1(box, opts, 1e-12, comm);
+  asm1_setup(box, opts, 1e-12, comm);
+
+  // Allocate work arrays.
+  uint work_array_size = MAX(box->sn, *(nekData.box_n));
+#define allocate_work_arrays(T)                                                \
+  {                                                                            \
+    box->sx = malloc(sizeof(T) * 2 * work_array_size);                         \
+    box->srhs = (void *)((T *)box->sx + work_array_size);                      \
+  }
+  BOX_DOMAIN_SWITCH(box->dom, allocate_work_arrays);
+#undef allocate_work_arrays
 
   // Setup interpolation between ASM1 and ASM2 on C.
   setup_gpu_implementation(box);
@@ -612,7 +655,7 @@ void crs_box_solve2(occa::memory &o_x, struct box *box, occa::memory &o_rhs) {
   platform->boxCopyKernel(box->un, o_srhs, o_uc);
 
   timer_tic(c);
-  platform->boxZeroDoubleKernel(get_num_box_dofs(), o_ub);
+  platform->boxZeroKernel(get_num_box_dofs(), o_ub);
   timer_toc(ZERO);
 
   timer_tic(c);
@@ -620,15 +663,15 @@ void crs_box_solve2(occa::memory &o_x, struct box *box, occa::memory &o_rhs) {
   timer_toc(MAP_VTX_TO_BOX);
 
   timer_tic(c);
-  o_ub.copyTo(nekData.box_r);
+  o_ub.copyTo(box->srhs);
   timer_toc(COPY_RHS);
 
   timer_tic(c);
-  nek::box_crs_solve2();
+  asm2_solve(box);
   timer_toc(ASM2);
 
   timer_tic(c);
-  o_ub.copyFrom(nekData.box_e);
+  o_ub.copyFrom(box->sx);
   timer_toc(COPY_SOLUTION);
 
   timer_tic(c);
@@ -671,6 +714,7 @@ void crs_box_free(struct box *box) {
     break;
   }
 
+  crs_xxt_free((struct xxt *)box->asm2);
   gs_free(box->gsh);
   buffer_free(&box->bfr);
   comm_free(&box->local);
@@ -679,3 +723,5 @@ void crs_box_free(struct box *box) {
   free(box->inv_mul);
   free(box->sx);
 }
+
+#undef MAX

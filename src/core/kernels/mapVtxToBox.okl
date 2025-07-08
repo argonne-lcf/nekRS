@@ -1,5 +1,5 @@
 @kernel void mapVtxToBox(const dlong ne, @restrict const int *iphi_e, const dlong nc,
-                         @restrict const double *phi_e, @restrict const float *uv, @restrict double *ub) {
+                         @restrict const double *phi_e, @restrict const float *uv, @restrict float *ub) {
   for (dlong e = 0; e < ne; ++e; @outer(0)) {
     int ibox = iphi_e[e] - 1;
     @shared double s_r[p_NC][p_NC];

@@ -30,7 +30,6 @@ void registerCoreKernels()
     platform->mapVtxToBoxKernel = platform->kernelRequests.load("core-mapVtxToBox");
     platform->mapBoxToVtxKernel = platform->kernelRequests.load("core-mapBoxToVtx");
     platform->boxZeroKernel = platform->kernelRequests.load("core-boxZero");
-    platform->boxZeroDoubleKernel = platform->kernelRequests.load("core-boxZeroDouble");
     platform->boxMultRHSKernel = platform->kernelRequests.load("core-boxMultRHS");
     platform->boxInvMulKernel = platform->kernelRequests.load("core-boxInvMul");
     platform->boxUtoCKernel = platform->kernelRequests.load("core-boxUtoC");
@@ -178,9 +177,6 @@ void registerCoreKernels()
 
     fileName = oklpath + "/core/boxZero" + extension;
     platform->kernelRequests.add(section + "boxZero", fileName, prop);
-
-    fileName = oklpath + "/core/boxZeroDouble" + extension;
-    platform->kernelRequests.add(section + "boxZeroDouble", fileName, prop);
 
     fileName = oklpath + "/core/boxMultRHS" + extension;
     platform->kernelRequests.add(section + "boxMultRHS", fileName, prop);
