@@ -1,4 +1,4 @@
-@kernel void boxZero(const unsigned int n, @restrict float *u) {
+@kernel void boxZero(const unsigned int n, @restrict scalar *u) {
   for (unsigned int e = 0; e < n; ++e; @tile(p_blockSize, @outer, @inner)) {
     u[e] = 0;
   }

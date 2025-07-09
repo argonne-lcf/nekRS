@@ -1,4 +1,4 @@
-@kernel void boxUpdateSolution(const unsigned int n, @restrict const float *ub, @restrict float *uv) {
+@kernel void boxUpdateSolution(const unsigned int n, @restrict const scalar *ub, @restrict scalar *uv) {
   for (unsigned int i = 0; i < n; ++i; @tile(p_blockSize, @outer, @inner)) {
     uv[i] += ub[i];
   }

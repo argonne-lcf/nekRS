@@ -1,4 +1,4 @@
-@kernel void boxCopy(const unsigned int n, @restrict const float *src, @restrict float *dest) {
+@kernel void boxCopy(const unsigned int n, @restrict const scalar *src, @restrict scalar *dest) {
   for (unsigned int e = 0; e < n; ++e; @tile(p_blockSize, @outer, @inner)) {
     dest[e] = src[e];
   }

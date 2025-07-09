@@ -429,7 +429,7 @@ void crs_box_solve(occa::memory &o_x, struct box *box, occa::memory &o_rhs) {
   timer_toc(ZERO);
 
   timer_tic(c);
-  platform->mapVtxToBoxKernel(nekData.nelv, o_iphi_e, get_num_crs_dofs_1d(), o_phi_e, o_uc, o_ub);
+  platform->boxMapVtxToBoxKernel(nekData.nelv, o_iphi_e, get_num_crs_dofs_1d(), o_phi_e, o_uc, o_ub);
   timer_toc(MAP_VTX_TO_BOX);
 
   timer_tic(c);
@@ -445,7 +445,7 @@ void crs_box_solve(occa::memory &o_x, struct box *box, occa::memory &o_rhs) {
   timer_toc(COPY_SOLUTION);
 
   timer_tic(c);
-  platform->mapBoxToVtxKernel(nekData.nelv, o_iphi_e, get_num_crs_dofs_1d(), o_phi_e, o_ub, o_uc);
+  platform->boxMapBoxToVtxKernel(nekData.nelv, o_iphi_e, get_num_crs_dofs_1d(), o_phi_e, o_ub, o_uc);
   timer_toc(MAP_BOX_TO_VTX);
 
   platform->boxUpdateSolutionKernel(box->un, o_uc, o_sx);

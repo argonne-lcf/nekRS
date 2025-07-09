@@ -1,8 +1,8 @@
-@kernel void mapBoxToVtx(const dlong ne, @restrict const int *iphi_e, const dlong nc,
-                         @restrict const double *phi_e, @restrict const float *ub, @restrict float *uv) {
+@kernel void boxMapBoxToVtx(const dlong ne, @restrict const int *iphi_e, const dlong nc,
+                         @restrict const scalar *phi_e, @restrict const scalar *ub, @restrict scalar *uv) {
   for (dlong e = 0; e < ne; ++e; @outer(0)) {
     int ibox = iphi_e[e] - 1;
-    @shared double s_r[p_NC][p_NC];
+    @shared scalar s_r[p_NC][p_NC];
 
     for (int i = 0; i < nc; ++i; @inner(0)) {
       for (int j = 0; j < nc; ++j; @inner(1)) {

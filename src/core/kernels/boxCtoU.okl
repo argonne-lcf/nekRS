@@ -1,6 +1,6 @@
 @kernel void boxCtoU(const unsigned int n, @restrict const unsigned int *offsets,
-                     @restrict const unsigned int *ids, @restrict const float *cx,
-                     @restrict float *x) {
+                     @restrict const unsigned int *ids, @restrict const scalar *cx,
+                     @restrict scalar *x) {
   for (unsigned int i = 0; i < n; ++i; @tile(p_blockSize, @outer, @inner))  {
     for (unsigned int j = offsets[i]; j < offsets[i + 1]; j++)
       x[ids[j]] = cx[i];

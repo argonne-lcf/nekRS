@@ -27,8 +27,8 @@ void registerCoreKernels()
     kernelName = "core-copyFloatToDfloat";
     platform->copyFloatToDfloatKernel = platform->kernelRequests.load(kernelName);
 
-    platform->mapVtxToBoxKernel = platform->kernelRequests.load("core-mapVtxToBox");
-    platform->mapBoxToVtxKernel = platform->kernelRequests.load("core-mapBoxToVtx");
+    platform->boxMapVtxToBoxKernel = platform->kernelRequests.load("core-boxMapVtxToBox");
+    platform->boxMapBoxToVtxKernel = platform->kernelRequests.load("core-boxMapBoxToVtx");
     platform->boxZeroKernel = platform->kernelRequests.load("core-boxZero");
     platform->boxMultRHSKernel = platform->kernelRequests.load("core-boxMultRHS");
     platform->boxInvMulKernel = platform->kernelRequests.load("core-boxInvMul");
@@ -169,11 +169,16 @@ void registerCoreKernels()
 
     prop["defines/p_NC"] = 8;
 
-    fileName = oklpath + "/core/mapVtxToBox" + extension;
-    platform->kernelRequests.add(section + "mapVtxToBox", fileName, prop);
+    prop["defines/scalar"] = "float";
+    const char *dom = getenv("NEKRS_CRS_DOM");
+    if (dom && strncmp(dom, "gs_double", 32) == 0)
+      prop["defines/scalar"] = "double";
 
-    fileName = oklpath + "/core/mapBoxToVtx" + extension;
-    platform->kernelRequests.add(section + "mapBoxToVtx", fileName, prop);
+    fileName = oklpath + "/core/boxMapVtxToBox" + extension;
+    platform->kernelRequests.add(section + "boxMapVtxToBox", fileName, prop);
+
+    fileName = oklpath + "/core/boxMapBoxToVtx" + extension;
+    platform->kernelRequests.add(section + "boxMapBoxToVtx", fileName, prop);
 
     fileName = oklpath + "/core/boxZero" + extension;
     platform->kernelRequests.add(section + "boxZero", fileName, prop);

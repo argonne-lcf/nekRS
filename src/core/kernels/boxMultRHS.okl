@@ -1,7 +1,7 @@
-@kernel void boxMultRHS(const dlong ne, const dlong ncr, @restrict const float *A, @restrict const float *x,
-                         @restrict float *rhs) {
+@kernel void boxMultRHS(const dlong ne, const dlong ncr, @restrict const scalar *A, @restrict const scalar *x,
+                         @restrict scalar *rhs) {
   for (dlong e = 0; e < ne; e++; @outer(0)) {
-    @shared float s_r[p_NC][p_NC];
+    @shared scalar s_r[p_NC][p_NC];
 
     for (dlong c = 0; c < ncr; c++; @inner(0)) {
       for (dlong k = 0; k < ncr; k++; @inner(1)) {
