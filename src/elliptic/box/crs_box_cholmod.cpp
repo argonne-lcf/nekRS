@@ -21,7 +21,8 @@ struct cholmod_csr {
   gs_dom dom;
 };
 
-static int asm1_initialized = 0;
+static int initialied = 0;
+static gs_dom dom;
 
 #define TT double
 #define SUFFIX _double
@@ -49,11 +50,12 @@ static void csr_finalize(struct cholmod_csr *B) {
   free(B);
 }
 
-void asm1_cholmod_setup(struct csr *A, unsigned null_space, struct box *box) {
-  if (asm1_initialized)
+void asm1_cholmod_setup(struct csr *A, unsigned null_space, struct box *box, const jl_opts *opts) {
+  if (initialied)
     return;
 
-  switch (box->dom) {
+  dom = opts->dom;
+  switch (dom) {
   case gs_double:
     box->ss = (void *)csr_setup_double(A, null_space, &box->global);
     break;
@@ -64,16 +66,16 @@ void asm1_cholmod_setup(struct csr *A, unsigned null_space, struct box *box) {
     break;
   }
 
-  asm1_initialized = 1;
+  initialied = 1;
 }
 
 void asm1_cholmod_solve(void *x, struct box *box, const void *r) {
-  if (!asm1_initialized) {
+  if (!initialied) {
     fprintf(stderr, "CHOLMOD solve is not initialized.\n");
     exit(EXIT_FAILURE);
   }
 
-  switch (box->dom) {
+  switch (dom) {
   case gs_double:
     solve_double((double *)x, box, (double *)r);
     break;
@@ -86,9 +88,9 @@ void asm1_cholmod_solve(void *x, struct box *box, const void *r) {
 }
 
 void asm1_cholmod_free(struct box *box) {
-  if (asm1_initialized) {
+  if (initialied) {
     csr_finalize((struct cholmod_csr *)box->ss), box->ss = NULL;
-    asm1_initialized = 0;
+    initialied = 0;
   }
 }
 

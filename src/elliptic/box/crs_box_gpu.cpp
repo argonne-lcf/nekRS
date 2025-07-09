@@ -9,6 +9,7 @@ static const double one = 1.0, zero = 0.0;
 static const float one_f32 = 1.0f, zero_f32 = 0.0f;
 
 static int initialized = 0;
+static gs_dom dom;
 static int nr = 0;
 static void *h_r = NULL, *h_x = NULL;
 
@@ -184,7 +185,7 @@ void asm1_gpu_free(struct box *box) {
 #elif defined(ENABLE_ONEMKL)
 #include "crs_box_gpu_onemkl.hpp"
 
-void asm1_gpu_setup(struct csr *A, unsigned null_space, struct box *box) {
+void asm1_gpu_setup(struct csr *A, unsigned null_space, struct box *box, const jl_opts *opts) {
   assert(null_space == 0);
 
   if (initialized) return;
@@ -207,6 +208,7 @@ void asm1_gpu_setup(struct csr *A, unsigned null_space, struct box *box) {
   d_x = box_onemkl_device_malloc<double>(nr);
 
   initialized = 1;
+  dom = opts->dom;
 }
 
 template <typename T>
@@ -241,7 +243,7 @@ void asm1_gpu_solve(void *x, struct box *box, const void *r) {
     MPI_Abort(MPI_COMM_WORLD, EXIT_FAILURE);
   }
 
-  switch(box->dom) {
+  switch(dom) {
     case gs_double:
       asm1_gpu_solve_aux<double>((double *)x, box, d_A_inv, (double *)r);
       break;
@@ -259,7 +261,7 @@ void asm1_gpu_solve(occa::memory &o_x, struct box *box, occa::memory &o_r) {
     MPI_Abort(MPI_COMM_WORLD, EXIT_FAILURE);
   }
 
-  switch(box->dom) {
+  switch(dom) {
     case gs_double:
       box_onemkl_device_gemv<double>((double *)o_x.ptr(), nr, d_A_inv, (double *)o_r.ptr());
       break;

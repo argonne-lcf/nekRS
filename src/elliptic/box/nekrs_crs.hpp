@@ -17,8 +17,9 @@ typedef enum {
 } box_algo_t;
 
 typedef struct {
-  jl_algo_t algo;
   gs_dom dom;
+  jl_algo_t algo;
+  /* box solver related */
   box_algo_t asm1;
   unsigned mult;
   unsigned aggressive;
