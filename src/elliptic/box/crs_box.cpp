@@ -17,12 +17,6 @@
 
 #define MAX(a, b) ((a) > (b) ? (a) : (b))
 
-/* Mesh (vertex) to box Interpolation */
-occa::memory o_phi_e, o_iphi_e;
-occa::memory o_ub, o_uc;
-/* multiplicative RHS update */
-occa::memory o_A;
-occa::memory o_sx, o_srhs, o_invmul;
 /* setup unassembled to assembled map*/
 static int num_compressed;
 static occa::memory o_u2c_off, o_u2c_idx, o_cr, o_cx;
@@ -248,8 +242,23 @@ static void asm1_setup(struct box *box, const jl_opts *opts, double tol, const s
   csr_free(A), free(ia), free(ja);
 }
 
-static void setup_gpu_implementation(const struct box *box) {
-  // Copy the phi_e, and iphi_e to C.
+template <typename T>
+static void cpu_setup(struct box *box, const jl_opts *opts) {
+  uint work_array_size = MAX(box->sn, *(nekData.box_n));
+  box->sx = malloc(sizeof(T) * 2 * work_array_size);
+  box->srhs = (void *)((T *)box->sx + work_array_size);
+}
+
+/* Mesh (vertex) to box Interpolation */
+occa::memory o_phi_e, o_iphi_e;
+occa::memory o_ub, o_uc;
+/* multiplicative RHS update */
+occa::memory o_A;
+occa::memory o_sx, o_srhs, o_invmul;
+
+template <typename T>
+static void gpu_setup(struct box *box, const jl_opts *opts) {
+  /* Copy the phi_e, and iphi_e to C */
   nek::box_copy_phi_e();
 
   const int nelv = nekData.nelv;
@@ -257,13 +266,10 @@ static void setup_gpu_implementation(const struct box *box) {
   assert(box->un == (num_crs_dofs_1d * nelv));
   assert(box->sn >= box->un);
 
-  // Setup device memory for vtx-to-box and box-to-vtx interpolation.
+  /* Setup device memory for vtx-to-box and box-to-vtx interpolation */
   const int m_size = num_crs_dofs_1d * box->un;
-  o_phi_e = platform->device.malloc<double>(m_size);
+  o_phi_e = platform->device.malloc<T>(m_size);
   o_phi_e.copyFrom(nekData.box_phi_e);
-
-  o_uc = platform->device.malloc<float>(box->un);
-  o_ub = platform->device.malloc<float>(get_num_box_dofs());
 
   o_iphi_e = platform->device.malloc<int>(nelv);
   int *wrki = (int *)calloc(nelv, sizeof(int));
@@ -272,19 +278,29 @@ static void setup_gpu_implementation(const struct box *box) {
   o_iphi_e.copyFrom(wrki);
   free(wrki);
 
-  /* multiplicative RHS update */
-  o_sx = platform->device.malloc<float>(box->sn);
-  o_srhs = platform->device.malloc<float>(box->sn);
+  o_uc = platform->device.malloc<T>(box->un);
+  o_ub = platform->device.malloc<T>(get_num_box_dofs());
 
-  o_A = platform->device.malloc<float>(m_size);
-  float *wrkf = (float *)calloc(m_size, sizeof(float));
+  /* multiplicative RHS update */
+  o_sx = platform->device.malloc<T>(box->sn);
+  o_srhs = platform->device.malloc<T>(box->sn);
+
+  o_A = platform->device.malloc<T>(m_size);
+  T *wrkf = (T *)calloc(m_size, sizeof(T));
   for (uint i = 0; i < m_size; i++)
     wrkf[i] = nekData.schwz_amat[i];
   o_A.copyFrom(wrkf);
   free(wrkf);
 
-  o_invmul = platform->device.malloc<double>(box->un);
-  o_invmul.copyFrom(box->inv_mul);
+  o_invmul = platform->device.malloc<T>(box->un);
+  T *inv_mul = tcalloc(T, box->sn);
+  for (uint i = 0; i < box->un; i++)
+    inv_mul[i] = 1.0;
+  gs(inv_mul, opts->dom, gs_add, 0, box->gsh, &(box->bfr));
+  for (uint i = 0; i < box->sn; i++)
+    inv_mul[i] = 1.0 / inv_mul[i];
+  o_invmul.copyFrom(inv_mul);
+  free(inv_mul);
 }
 
 struct box *crs_box_setup(uint n, const ulong *id, uint nnz, const uint *Ai, const uint *Aj,
