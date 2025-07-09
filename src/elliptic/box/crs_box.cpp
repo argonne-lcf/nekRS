@@ -351,166 +351,11 @@ struct box *crs_box_setup(uint n, const ulong *id, uint nnz, const uint *Ai, con
   return box;
 }
 
-void crs_box_solve(void *x, struct box *box, const void *rhs) {
+void crs_box_solve(occa::memory &o_x, struct box *box, occa::memory &o_rhs) {
+#if 0
   struct comm *c = &(box->global);
 
-  // Copy RHS.
-  timer_tic(c);
-#define copy_rhs(T)                                                            \
-  {                                                                            \
-    const T *rhsi = (const T *)rhs;                                            \
-    T *srhs = (T *)box->srhs;                                                  \
-    for (uint i = 0; i < box->un; i++)                                         \
-      srhs[i] = rhsi[i];                                                       \
-  }
-  BOX_DOMAIN_SWITCH(box->dom, copy_rhs);
-#undef copy_rhs
-  timer_toc(COPY_RHS);
-
-  // crs_dsavg1.
-  timer_tic(c);
-  gs(box->srhs, box->dom, gs_add, 0, box->gsh, &(box->bfr));
-#define avg(T)                                                                 \
-  {                                                                            \
-    T *srhs = (T *)box->srhs;                                                  \
-    for (uint i = 0; i < box->sn; i++)                                         \
-      srhs[i] = box->inv_mul[i] * srhs[i];                                     \
-  }
-  BOX_DOMAIN_SWITCH(box->dom, avg);
-#undef avg
-  timer_toc(CRS_DSAVG1);
-
-  // ASM1.
-  timer_tic(c);
-  switch (box->algo) {
-  case BOX_XXT:
-    crs_xxt_solve(box->sx, (struct xxt *)box->ss, box->srhs);
-    break;
-  case BOX_CHOLMOD:
-    asm1_cholmod_solve(box->sx, box, box->srhs);
-    break;
-  case BOX_GPU:
-    asm1_gpu_solve(box->sx, box, box->srhs);
-    break;
-  default:
-    break;
-  }
-  timer_toc(ASM1);
-
-  // crs_dsavg2.
-  timer_tic(c);
-  gs(box->sx, box->dom, gs_add, 0, box->gsh, &box->bfr);
-#define avg(T)                                                                 \
-  {                                                                            \
-    T *sx = (T *)box->sx;                                                      \
-    for (uint i = 0; i < box->sn; i++)                                         \
-      sx[i] = box->inv_mul[i] * sx[i];                                         \
-  }
-  BOX_DOMAIN_SWITCH(box->dom, avg);
-#undef avg
-  timer_toc(CRS_DSAVG1);
-
-  // mult_rhs_update.
-  timer_tic(c);
-  if (box->mult) {
-    // rhs = rhs - A*sx.
-#define update_rhs(T)                                                          \
-  {                                                                            \
-    const double *A = (const double *)nekData.schwz_amat;                      \
-    const T *sx = (T *)box->sx;                                                \
-    T *srhs = (T *)box->srhs;                                                  \
-    uint ncr = box->ncr, ue = box->un / ncr;                                   \
-    for (uint e = 0; e < ue; e++) {                                            \
-      for (uint c = 0; c < ncr; c++) {                                         \
-        for (uint k = 0; k < ncr; k++) {                                       \
-          srhs[k + ncr * e] -=                                                 \
-              sx[c + ncr * e] * A[k + c * ncr + ncr * ncr * e];                \
-        }                                                                      \
-      }                                                                        \
-    }                                                                          \
-  }
-    BOX_DOMAIN_SWITCH(box->dom, update_rhs);
-#undef update_rhs
-  }
-  timer_toc(MULT_RHS_UPDATE);
-
-  // Copy to nek5000 to do the global solve.
-  // FIXME: This doesn't work anymore as we don't use box_e and box_r anymore.
-#if 0
-  timer_tic(c);
-#define copy_to_nek5000(T)                                                     \
-  {                                                                            \
-    const T *srhs = (T *)box->srhs;                                            \
-    for (uint i = 0; i < box->un; i++)                                         \
-      nekData.box_r[i] = srhs[i];                                              \
-  }
-  BOX_DOMAIN_SWITCH(box->dom, copy_to_nek5000);
-#undef copy_to_nek5000
-  timer_toc(COPY_TO_NEK5000);
-#endif
-
-  // Solve on nek5000.
-  // FIXME: broken due to box_map_vtx_to_box and box_map_box_to_vtx
-  // not being available anymore.
-#if 0
-  timer_tic(c);
-  nek::box_map_vtx_to_box();
-  timer_toc(MAP_VTX_TO_BOX);
-
-  timer_tic(c);
-  nek::box_crs_solve();
-  timer_toc(ASM2);
-
-  timer_tic(c);
-  nek::box_map_box_to_vtx();
-  timer_toc(MAP_BOX_TO_VTX);
-#endif
-
-  // Copy from nek5000.
-  // FIXME: This doesn't work anymore as we don't use box_e and box_r anymore.
-#if 0
-  timer_tic(c);
-#define copy_from_nek5000(T)                                                   \
-  {                                                                            \
-    T *sx = (T *)box->sx;                                                      \
-    for (uint i = 0; i < box->un; i++)                                         \
-      sx[i] += nekData.box_e[i];                                               \
-  }
-  BOX_DOMAIN_SWITCH(box->dom, copy_from_nek5000);
-#undef copy_from_nek5000
-  timer_toc(COPY_FROM_NEK5000);
-#endif
-
-  // crs_dsavg3.
-  timer_tic(c);
-  gs(box->sx, box->dom, gs_add, 0, box->gsh, &box->bfr);
-#define avg(T)                                                                 \
-  {                                                                            \
-    T *sx = (T *)box->sx;                                                      \
-    for (uint i = 0; i < box->un; i++)                                         \
-      sx[i] = box->inv_mul[i] * sx[i];                                         \
-  }
-  BOX_DOMAIN_SWITCH(box->dom, avg);
-#undef avg
-  timer_toc(CRS_DSAVG1);
-
-  // Copy solution.
-  timer_tic(c);
-#define copy_to_x(T)                                                           \
-  {                                                                            \
-    T *sx = (T *)box->sx, *xi = (T *)x;                                        \
-    for (uint i = 0; i < box->un; i++)                                         \
-      xi[i] = sx[i];                                                           \
-  }
-  BOX_DOMAIN_SWITCH(box->dom, copy_to_x);
-#undef copy_to_x
-  timer_toc(COPY_SOLUTION);
-}
-
-void crs_box_solve2(occa::memory &o_x, struct box *box, occa::memory &o_rhs) {
-  struct comm *c = &(box->global);
-
-  if ((box->dom != gs_float) || (box->algo != BOX_GPU)) {
+  if ((box->dom != gs_float) || (box->asm1 != BOX_GPU)) {
     if (c->id == 0)
       fprintf(stderr, "Wrong domain and/or wrong solver!\n");
     fflush(stderr);
@@ -624,12 +469,13 @@ void crs_box_solve2(occa::memory &o_x, struct box *box, occa::memory &o_rhs) {
   timer_tic(c);
   o_x.copyFrom(box->sx, box->un, 0);
   timer_toc(COPY_SOLUTION);
+#endif
 }
 
 void crs_box_free(struct box *box) {
   if (!box) return;
 
-  switch (box->algo) {
+  switch (box->asm1) {
   case BOX_XXT:
     crs_xxt_free((struct xxt *)box->ss);
     break;

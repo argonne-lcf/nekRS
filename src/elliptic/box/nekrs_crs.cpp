@@ -225,45 +225,8 @@ void jl_timer_init() {
     }                                                                          \
   }
 
-void jl_solve(occa::memory &o_x, occa::memory &o_rhs) {
-  timer_tic(&(crs->c));
-  o_rhs.copyTo(crs->wrk, crs->un);
-#define copy_from_buf(T)                                                       \
-  {                                                                            \
-    T *rhs = (T *)crs->rhs;                                                    \
-    for (uint i = 0; i < crs->un; i++)                                         \
-      rhs[i] = crs->wrk[i];                                                    \
-  }
-  DOMAIN_SWITCH(crs->dom, copy_from_buf);
-#undef copy_from_buf
-  timer_toc(COPY_RHS);
-
-  switch (crs->type) {
-  case XXT:
-    crs_xxt_solve(crs->x, (struct xxt *)crs->solver, crs->rhs);
-    break;
-  case BOX:
-    crs_box_solve(crs->x, (struct box *)crs->solver, crs->rhs);
-    break;
-  default:
-    break;
-  }
-
-  timer_tic(&(crs->c));
-#define copy_to_buf(T)                                                         \
-  {                                                                            \
-    T *x = (T *)crs->x;                                                        \
-    for (uint i = 0; i < crs->un; i++)                                         \
-      crs->wrk[i] = x[i];                                                      \
-  }
-  DOMAIN_SWITCH(crs->dom, copy_to_buf);
-#undef copy_to_buf
-  o_x.copyFrom(crs->wrk, crs->un);
-  timer_toc(COPY_SOLUTION);
-}
-
 void jl_solve2(occa::memory &o_x, occa::memory &o_rhs) {
-  crs_box_solve2(o_x, (struct box *)crs->solver, o_rhs);
+  crs_box_solve(o_x, (struct box *)crs->solver, o_rhs);
 }
 
 #undef DOMAIN_SWITCH
