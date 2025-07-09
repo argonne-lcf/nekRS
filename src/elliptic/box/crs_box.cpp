@@ -126,36 +126,34 @@ static void u2c_setup(struct box *box, const ulong *const vtx) {
   u2c_setup_aux<T>(box->sn, box->u2c, bfr);
 }
 
-static void setup_ij(uint **ia, uint **ja, uint n, uint nnz) {
-  uint ncr = nnz / n;
-  uint ne = n / ncr;
+static void asm2_setup(struct box *box, const jl_opts *opts) {
+  nek::box_crs_setup();
 
-  *ia = tcalloc(uint, nnz);
-  *ja = tcalloc(uint, nnz);
+  const uint n = *(nekData.box_n);
+  const uint nnz = *(nekData.box_nnz);
+  const long long *gcrs = (const long long *)nekData.box_gcrs;
+  const double *va = (const double *)nekData.box_a;
+  const uint null_space = *(nekData.box_null_space);
+
+  const uint ncr = box->ncr;
+  const uint ne = nnz / ncr;
+
+  uint *ia = tcalloc(uint, nnz);
+  uint *ja = tcalloc(uint, nnz);
   for (uint e = 0; e < ne; e++) {
     for (uint j = 0; j < ncr; j++) {
       for (uint i = 0; i < ncr; i++) {
-        (*ia)[e * ncr * ncr + j * ncr + i] = e * ncr + i;
-        (*ja)[e * ncr * ncr + j * ncr + i] = e * ncr + j;
+        ia[e * ncr * ncr + j * ncr + i] = e * ncr + i;
+        ja[e * ncr * ncr + j * ncr + i] = e * ncr + j;
       }
     }
   }
 
-static void asm2_setup(struct box *box) {
-  nek::box_crs_setup();
-
-  uint n = *(nekData.box_n);
-  uint nnz = *(nekData.box_nnz);
-  const long long *gcrs = (const long long *)nekData.box_gcrs;
-  const double *va = (const double *)nekData.box_a;
-  uint null_space = *(nekData.box_null_space);
-
-  uint *ia, *ja;
-  setup_ij(&ia, &ja, n, nnz);
   ulong *gcrs_ul = tcalloc(ulong, n);
   for (uint i = 0; i < n; i++)
     gcrs_ul[i] = gcrs[i];
-  box->asm2 = (void *)crs_xxt_setup(n, gcrs_ul, nnz, ia, ja, va, gs_float, null_space, &(box->global));
+
+  box->asm2 = (void *)crs_xxt_setup(n, gcrs_ul, nnz, ia, ja, va, opts->dom, null_space, &(box->global));
 
   free(ia), free(ja), free(gcrs_ul);
 }
