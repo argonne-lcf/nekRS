@@ -18,27 +18,25 @@
   }
 
 struct box {
-  // User input.
-  uint un;
-  uint ncr;
-  gs_dom dom;
-  unsigned algo;
-  unsigned mult;
-  unsigned aggressive;
-  // Computed data structures for Schwarz.
-  struct comm global, local;
-  struct gs_data *gsh;
-  double *inv_mul;
+  /* User input */
+  box_algo_t asm1;
+  uint un, ncr;
+  /* u2c map for ASM1 */
   uint cn;
   sint *u2c;
-  // Work arrays.
+  /* ASM1 Schwarz overlapped domain*/
   uint sn;
   void *sx, *srhs;
-  buffer bfr;
-  // Pointer to the asm1 solver.
+  /* Pointer to the asm1 solver */
   void *ss;
-  // Pointer to the asm2 solver.
+  /* Pointer to the asm2 solver */
   void *asm2;
+  /* RAS */
+  struct gs_data *gsh;
+  /* communicators */
+  struct comm global, local;
+  /* Work buffers for gslib */
+  buffer bfr;
 };
 
 void box_debug(const int verbose, const char *fmt, ...);
