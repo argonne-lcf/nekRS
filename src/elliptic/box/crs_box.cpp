@@ -492,11 +492,8 @@ void crs_box_free(struct box *box) {
   crs_xxt_free((struct xxt *)box->asm2);
   gs_free(box->gsh);
   buffer_free(&box->bfr);
-  comm_free(&box->local);
-  comm_free(&box->global);
-  free(box->u2c);
-  free(box->inv_mul);
-  free(box->sx);
+  comm_free(&box->local), comm_free(&box->global);
+  free(box->u2c), free(box->sx);
 }
 
 #undef MAX
