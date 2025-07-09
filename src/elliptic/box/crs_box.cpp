@@ -17,10 +17,6 @@
 
 #define MAX(a, b) ((a) > (b) ? (a) : (b))
 
-/* setup unassembled to assembled map*/
-static int num_compressed;
-static occa::memory o_u2c_off, o_u2c_idx, o_cr, o_cx;
-
 static inline int get_num_crs_dofs_1d() {
   return *(nekData.schwz_ncr);
 }
@@ -29,7 +25,12 @@ static inline int get_num_box_dofs() {
   return *(nekData.box_n);
 }
 
-static void setup_u2c_map_aux(unsigned un, const sint *u2c, buffer *bfr) {
+/* setup unassembled to assembled map*/
+static int num_compressed;
+static occa::memory o_u2c_off, o_u2c_idx, o_cr, o_cx;
+
+template <typename T>
+static void u2c_setup_aux(unsigned un, const sint *u2c, buffer *bfr) {
   struct map_t {
     uint u, c;
   };
@@ -43,9 +44,9 @@ static void setup_u2c_map_aux(unsigned un, const sint *u2c, buffer *bfr) {
     m.u = i, m.c = u2c[i];
     array_cat(struct map_t, &map, &m, 1);
   }
-  sarray_sort_2(struct map_t, map.ptr, map.n, c, 0, u, 0, bfr);
 
   uint gs_n = 0;
+  sarray_sort_2(struct map_t, map.ptr, map.n, c, 0, u, 0, bfr);
   struct map_t *pm = (struct map_t *)map.ptr;
   if (map.n > 0) {
     gs_n = 1;
@@ -79,12 +80,16 @@ static void setup_u2c_map_aux(unsigned un, const sint *u2c, buffer *bfr) {
   o_u2c_off.copyFrom(gs_off);
   o_u2c_idx = platform->device.malloc<unsigned>(map.n);
   o_u2c_idx.copyFrom(gs_idx);
-  o_cr = platform->device.malloc<float>(gs_n);
-  o_cx = platform->device.malloc<float>(gs_n);
+  o_cr = platform->device.malloc<T>(gs_n);
+  o_cx = platform->device.malloc<T>(gs_n);
   free(gs_off), free(gs_idx), array_free(&map);
 }
 
-static void setup_u2c_map(struct box *box, const ulong *const vtx) {
+template <typename T>
+static void u2c_setup(struct box *box, const ulong *const vtx) {
+  const uint n = box->sn;
+  buffer *bfr = &(box->bfr);
+
   struct vid_t {
     ulong id;
     uint idx;
@@ -92,7 +97,6 @@ static void setup_u2c_map(struct box *box, const ulong *const vtx) {
   };
 
   struct array vids;
-  uint n = box->sn;
   array_init(struct vid_t, &vids, n);
 
   struct vid_t vid;
@@ -101,27 +105,25 @@ static void setup_u2c_map(struct box *box, const ulong *const vtx) {
     array_cat(struct vid_t, &vids, &vid, 1);
   }
 
-  buffer *bfr = &(box->bfr);
-  sarray_sort(struct vid_t, vids.ptr, vids.n, id, 1, bfr);
-
-  struct vid_t *pv = (struct vid_t *)vids.ptr;
   ulong lid = 0;
   sint cn = 0;
+  sarray_sort(struct vid_t, vids.ptr, vids.n, id, 1, bfr);
+  struct vid_t *pv = (struct vid_t *)vids.ptr;
   for (uint i = 0; i < vids.n; i++) {
     if (pv[i].id != lid)
       lid = pv[i].id, cn++;
     pv[i].perm = cn - 1;
   }
-  box->cn = cn;
-  sarray_sort(struct vid_t, vids.ptr, vids.n, idx, 0, bfr);
 
-  pv = (struct vid_t *)vids.ptr;
+  box->cn = cn;
   box->u2c = tcalloc(sint, n);
+  sarray_sort(struct vid_t, vids.ptr, vids.n, idx, 0, bfr);
+  pv = (struct vid_t *)vids.ptr;
   for (uint i = 0; i < n; i++)
     box->u2c[i] = pv[i].perm;
   array_free(&vids);
 
-  setup_u2c_map_aux(box->sn, box->u2c, bfr);
+  u2c_setup_aux<T>(box->sn, box->u2c, bfr);
 }
 
 static void setup_ij(uint **ia, uint **ja, uint n, uint nnz) {
@@ -138,7 +140,6 @@ static void setup_ij(uint **ia, uint **ja, uint n, uint nnz) {
       }
     }
   }
-}
 
 static void asm2_setup(struct box *box) {
   nek::box_crs_setup();
