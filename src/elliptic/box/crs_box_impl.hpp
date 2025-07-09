@@ -18,8 +18,8 @@
   }
 
 struct box {
-  /* User input */
-  box_algo_t asm1;
+  jl_opts opts;
+  /* User domain size */
   uint un, ncr;
   /* u2c map for ASM1 */
   uint cn;

@@ -10,10 +10,8 @@
 #include <unistd.h>
 
 #include <nekInterfaceAdapter.hpp>
-
 #include "nekrs_crs.hpp"
 #include "crs_box_impl.hpp"
-
 
 #define MAX(a, b) ((a) > (b) ? (a) : (b))
 
@@ -307,7 +305,7 @@ struct box *crs_box_setup(uint n, const ulong *id, uint nnz, const uint *Ai, con
   struct box *box = tcalloc(struct box, 1);
   box->un = n;
   box->ncr = nnz / n;
-  box->asm1 = opts->asm1;
+  box->opts = *opts;
 
   /* Allocate workspace */
   buffer_init(&(box->bfr), 1024);
@@ -344,7 +342,7 @@ struct box *crs_box_setup(uint n, const ulong *id, uint nnz, const uint *Ai, con
   /* Print some info */
   if (box->global.id == 0) {
     printf("%s: mult = %u, algo = %u, ne = %u, nw = %u\n", __func__,
-           opts->mult, box->asm1, *(nekData.schwz_ne), *(nekData.schwz_nw));
+           opts->mult, opts->asm1, *(nekData.schwz_ne), *(nekData.schwz_nw));
     fflush(stdout);
   }
 
@@ -352,12 +350,10 @@ struct box *crs_box_setup(uint n, const ulong *id, uint nnz, const uint *Ai, con
 }
 
 void crs_box_solve(occa::memory &o_x, struct box *box, occa::memory &o_rhs) {
-#if 0
   struct comm *c = &(box->global);
 
-  if ((box->dom != gs_float) || (box->asm1 != BOX_GPU)) {
-    if (c->id == 0)
-      fprintf(stderr, "Wrong domain and/or wrong solver!\n");
+  if ((box->opts.asm1 != BOX_GPU)) {
+    if (c->id == 0) fprintf(stderr, "Wrong solver!\n");
     fflush(stderr);
     MPI_Abort(c->c, EXIT_FAILURE);
   }
@@ -374,7 +370,7 @@ void crs_box_solve(occa::memory &o_x, struct box *box, occa::memory &o_rhs) {
 
   // crs_dsavg1.
   timer_tic(c);
-  gs(box->srhs, box->dom, gs_add, 0, box->gsh, &(box->bfr));
+  gs(box->srhs, box->opts.dom, gs_add, 0, box->gsh, &(box->bfr));
   timer_toc(CRS_DSAVG1);
 
   // Copy RHS back to GPU.
@@ -403,14 +399,14 @@ void crs_box_solve(occa::memory &o_x, struct box *box, occa::memory &o_rhs) {
   platform->boxInvMulKernel(box->un, o_sx, o_invmul, o_sx);
   timer_toc(INV_MUL);
 
-  if (!(box->aggressive)) {
+  if (!(box->opts.aggressive)) {
     timer_tic(c);
     o_sx.copyTo(box->sx, box->un);
     timer_toc(COPY_SOLUTION);
 
     // crs_dsavg2.
     timer_tic(c);
-    gs(box->sx, box->dom, gs_add, 0, box->gsh, &(box->bfr));
+    gs(box->sx, box->opts.dom, gs_add, 0, box->gsh, &(box->bfr));
     timer_toc(CRS_DSAVG1);
 
     timer_tic(c);
@@ -419,7 +415,7 @@ void crs_box_solve(occa::memory &o_x, struct box *box, occa::memory &o_rhs) {
   }
 
   // mult_rhs_update:  rhs = rhs - A*sx.
-  if (box->mult) {
+  if (box->opts.mult) {
     timer_tic(c);
     int num_crs_dofs_1d = get_num_crs_dofs_1d();
     platform->boxMultRHSKernel(box->un / num_crs_dofs_1d, num_crs_dofs_1d, o_A, o_sx, o_srhs);
@@ -463,19 +459,18 @@ void crs_box_solve(occa::memory &o_x, struct box *box, occa::memory &o_rhs) {
   timer_toc(COPY_SOLUTION);
 
   timer_tic(c);
-  gs(box->sx, box->dom, gs_add, 0, box->gsh, &(box->bfr));
+  gs(box->sx, box->opts.dom, gs_add, 0, box->gsh, &(box->bfr));
   timer_toc(CRS_DSAVG1);
 
   timer_tic(c);
   o_x.copyFrom(box->sx, box->un, 0);
   timer_toc(COPY_SOLUTION);
-#endif
 }
 
 void crs_box_free(struct box *box) {
   if (!box) return;
 
-  switch (box->asm1) {
+  switch (box->opts.asm1) {
   case BOX_XXT:
     crs_xxt_free((struct xxt *)box->asm1);
     break;
