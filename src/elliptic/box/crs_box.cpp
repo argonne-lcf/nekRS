@@ -215,10 +215,10 @@ static void asm1_setup(struct box *box, const jl_opts *opts, double tol, const s
   struct csr *A = csr_setup(nnz, ia, ja, va, box->u2c, tol, bfr);
 
   // Setup ASM1 solver.
-  box->ss = NULL;
+  box->asm1 = NULL;
   switch(opts->asm1) {
   case BOX_XXT:
-    box->ss = (void *)crs_xxt_setup(box->sn, tmp_vtx, nnz, ia, ja, va, opts->dom, opts->null_space, local);
+    box->asm1 = (void *)crs_xxt_setup(box->sn, tmp_vtx, nnz, ia, ja, va, opts->dom, opts->null_space, local);
     break;
   case BOX_CHOLMOD:
     asm1_cholmod_setup(A, null_space, box, opts);
@@ -477,7 +477,7 @@ void crs_box_free(struct box *box) {
 
   switch (box->asm1) {
   case BOX_XXT:
-    crs_xxt_free((struct xxt *)box->ss);
+    crs_xxt_free((struct xxt *)box->asm1);
     break;
   case BOX_CHOLMOD:
     asm1_cholmod_free(box);

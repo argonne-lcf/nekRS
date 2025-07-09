@@ -57,10 +57,10 @@ void asm1_cholmod_setup(struct csr *A, unsigned null_space, struct box *box, con
   dom = opts->dom;
   switch (dom) {
   case gs_double:
-    box->ss = (void *)csr_setup_double(A, null_space, &box->global);
+    box->asm1 = (void *)csr_setup_double(A, null_space, &box->global);
     break;
   case gs_float:
-    box->ss = (void *)csr_setup_float(A, null_space, &box->global);
+    box->asm1 = (void *)csr_setup_float(A, null_space, &box->global);
     break;
   default:
     break;
@@ -89,7 +89,7 @@ void asm1_cholmod_solve(void *x, struct box *box, const void *r) {
 
 void asm1_cholmod_free(struct box *box) {
   if (initialied) {
-    csr_finalize((struct cholmod_csr *)box->ss), box->ss = NULL;
+    csr_finalize((struct cholmod_csr *)box->asm1), box->asm1 = NULL;
     initialied = 0;
   }
 }

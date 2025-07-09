@@ -28,7 +28,7 @@ struct box {
   uint sn;
   void *sx, *srhs;
   /* Pointer to the asm1 solver */
-  void *ss;
+  void *asm1;
   /* Pointer to the asm2 solver */
   void *asm2;
   /* RAS */

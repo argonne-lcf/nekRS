@@ -168,7 +168,7 @@ static struct cholmod_csr *csr_setup(struct csr *A, const int null,
 
 #define solve SUFFIXED_NAME(solve)
 static void solve(TT *x, struct box *const box, const TT *r) {
-  struct cholmod_csr *B = (struct cholmod_csr *)box->ss;
+  struct cholmod_csr *B = (struct cholmod_csr *)box->asm1;
 
   TT *rx = (TT *)B->r->x;
   for (uint i = 0; i < B->nr; i++)
