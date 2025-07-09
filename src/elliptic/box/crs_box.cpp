@@ -169,17 +169,23 @@ static void asm2_solve(const struct box *box) {
   crs_xxt_solve(box->sx, (struct xxt *)box->asm2, box->srhs);
 }
 
+template <typename T>
 static void asm1_setup(struct box *box, const jl_opts *opts, double tol, const struct comm *comm) {
-  uint ne = *(nekData.schwz_ne);
-  uint nw = *(nekData.schwz_nw);
+  buffer *bfr = &(box->bfr);
+  struct comm *local = &(box->local);
+
+  const uint ncr = box->ncr;
+  const uint ne = *(nekData.schwz_ne);
+  const uint nw = *(nekData.schwz_nw);
   const long long *vtx = (const long long *)nekData.schwz_vtx;
   const double *mask = (const double *)nekData.schwz_mask;
   const int *frontier = (const int *)nekData.schwz_frontier;
   const double *const xyz = nekData.schwz_xyz;
   const double *va = (const double *)nekData.schwz_amat;
 
-  const uint ncr = box->ncr, sn = box->sn;
-  const uint nnz = sn * ncr;
+  box->sn = ne * ncr;
+
+  const uint nnz = box->sn * ncr;
   uint *ia = tcalloc(uint, nnz);
   uint *ja = tcalloc(uint, nnz);
   for (uint e = 0; e < ne; e++) {
@@ -192,7 +198,7 @@ static void asm1_setup(struct box *box, const jl_opts *opts, double tol, const s
   }
 
   ulong *tmp_vtx = tcalloc(ulong, box->sn);
-  double *const tmp_mask = tcalloc(double, box->sn);
+  double *tmp_mask = tcalloc(double, box->sn);
   double mask_min = DBL_MAX;
   for (unsigned i = 0; i < box->sn; i++) {
     tmp_vtx[i] = vtx[i];
@@ -205,28 +211,29 @@ static void asm1_setup(struct box *box, const jl_opts *opts, double tol, const s
     if (tmp_mask[i] < mask_min)
       mask_min = tmp_mask[i];
   }
-  free(tmp_mask);
 
-  uint null_space = 1;
-  if (mask_min < 1e-10)
-    null_space = 0;
+  uint null_space = (mask_min > 1e-10);
   assert(null_space == 0);
 
   // Setup unassembled to assembled map.
-  setup_u2c_map(box, tmp_vtx);
+  u2c_setup<T>(box, tmp_vtx);
 
   // Create the assembled matrix in CSR format.
-  struct csr *A = csr_setup(nnz, ia, ja, va, box->u2c, tol, &(box->bfr));
+  struct csr *A = csr_setup(nnz, ia, ja, va, box->u2c, tol, bfr);
 
   // Setup ASM1 solver.
   box->ss = NULL;
-  if (box->algo == BOX_XXT)
-    box->ss = (void *)crs_xxt_setup(box->sn, tmp_vtx, nnz, ia, ja, va, opts->dom, opts->null_space, &(box->local));
-  if (box->algo == BOX_CHOLMOD)
-    asm1_cholmod_setup(A, null_space, box);
-  if (box->algo == BOX_GPU)
-    asm1_gpu_setup(A, null_space, box);
-  csr_free(A), free(ia), free(ja);
+  switch(opts->asm1) {
+  case BOX_XXT:
+    box->ss = (void *)crs_xxt_setup(box->sn, tmp_vtx, nnz, ia, ja, va, opts->dom, opts->null_space, local);
+    break;
+  case BOX_CHOLMOD:
+    asm1_cholmod_setup(A, null_space, box, opts);
+    break;
+  case BOX_GPU:
+    asm1_gpu_setup(A, null_space, box, opts);
+    break;
+  }
 
   // Setup the crs_dsavg which basically average the solution of original
   // parRSB domains.
@@ -236,14 +243,9 @@ static void asm1_setup(struct box *box, const jl_opts *opts, double tol, const s
   for (uint i = box->un; i < box->sn; i++)
     gs_vtx[i] = -tmp_vtx[i];
   box->gsh = gs_setup((const slong *)gs_vtx, box->sn, comm, 0, gs_auto, 0);
-  free(gs_vtx), free(tmp_vtx);
 
-  box->inv_mul = tcalloc(double, box->sn);
-  for (uint i = 0; i < box->un; i++)
-    box->inv_mul[i] = 1.0;
-  gs(box->inv_mul, gs_double, gs_add, 0, box->gsh, &box->bfr);
-  for (uint i = 0; i < box->sn; i++)
-    box->inv_mul[i] = 1.0 / box->inv_mul[i];
+  free(tmp_mask), free(tmp_vtx), free(gs_vtx);
+  csr_free(A), free(ia), free(ja);
 }
 
 static void setup_gpu_implementation(const struct box *box) {
