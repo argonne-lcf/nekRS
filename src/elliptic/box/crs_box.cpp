@@ -306,48 +306,45 @@ struct box *crs_box_setup(uint n, const ulong *id, uint nnz, const uint *Ai, con
                           const double *A, const jl_opts *opts, const struct comm *comm) {
   struct box *box = tcalloc(struct box, 1);
   box->un = n;
-  box->ncr = (n != 0) ? (nnz / n) : 0;
-  box->dom = opts->dom;
-  box->mult = opts->mult;
-  box->algo = opts->asm1;
-  box->aggressive = opts->aggressive;
+  box->ncr = nnz / n;
+  box->asm1 = opts->asm1;
 
-  // Allocate workspace.
+  /* Allocate workspace */
   buffer_init(&(box->bfr), 1024);
 
-  // Copy the global communicator.
+  /* Copy the global communicator */
   comm_dup(&(box->global), comm);
 
-  // Copy the local communicator.
+  /* Copy the local communicator */
   MPI_Comm local;
   MPI_Comm_split(comm->c, comm->id, 1, &local);
   comm_init(&(box->local), local);
   MPI_Comm_free(&local);
 
-  // ASM2 setup on C side.
-  asm2_setup(box);
+  /* ASM2 setup on C side */
+  asm2_setup(box, opts);
 
-  // ASM1 setup on C side.
-  box->sn = *(nekData.schwz_ne) * box->ncr;
-  asm1_setup(box, opts, 1e-12, comm);
-
-  // Allocate work arrays.
-  uint work_array_size = MAX(box->sn, *(nekData.box_n));
-#define allocate_work_arrays(T)                                                \
-  {                                                                            \
-    box->sx = malloc(sizeof(T) * 2 * work_array_size);                         \
-    box->srhs = (void *)((T *)box->sx + work_array_size);                      \
+  /* ASM1, CPU and GPU setup on C side */
+  const double tol = 1e-12;
+  switch(opts->dom) {
+    case gs_double:
+      asm1_setup<double>(box, opts, tol, comm);
+      cpu_setup<double>(box, opts);
+      gpu_setup<double>(box, opts);
+      break;
+    case gs_float:
+      asm1_setup<float>(box, opts, tol, comm);
+      cpu_setup<float>(box, opts);
+      gpu_setup<float>(box, opts);
+      break;
+    default:
+      break;
   }
-  BOX_DOMAIN_SWITCH(box->dom, allocate_work_arrays);
-#undef allocate_work_arrays
 
-  // Setup interpolation between ASM1 and ASM2 on C.
-  setup_gpu_implementation(box);
-
-  // Print some info.
+  /* Print some info */
   if (box->global.id == 0) {
     printf("%s: mult = %u, algo = %u, ne = %u, nw = %u\n", __func__,
-           box->mult, box->algo, *(nekData.schwz_ne), *(nekData.schwz_nw));
+           opts->mult, box->asm1, *(nekData.schwz_ne), *(nekData.schwz_nw));
     fflush(stdout);
   }
 
