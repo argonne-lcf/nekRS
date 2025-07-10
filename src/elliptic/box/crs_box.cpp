@@ -254,14 +254,14 @@ occa::memory o_A;
 occa::memory o_sx, o_srhs, o_invmul;
 
 template <typename T>
-static void gpu_setup(struct box *box, const jl_opts *opts) {
-  /* Copy the phi_e, and iphi_e to C */
-  nek::box_copy_phi_e();
-
+static void gpu_setup(struct box *box) {
   const int nelv = nekData.nelv;
   const int num_crs_dofs_1d = get_num_crs_dofs_1d();
   assert(box->un == (num_crs_dofs_1d * nelv));
   assert(box->sn >= box->un);
+
+  /* Copy the phi_e, and iphi_e to C */
+  nek::box_copy_phi_e();
 
   /* Setup device memory for vtx-to-box and box-to-vtx interpolation */
   const int m_size = num_crs_dofs_1d * box->un;
@@ -269,11 +269,11 @@ static void gpu_setup(struct box *box, const jl_opts *opts) {
   o_phi_e.copyFrom(nekData.box_phi_e);
 
   o_iphi_e = platform->device.malloc<int>(nelv);
-  int *wrki = (int *)calloc(nelv, sizeof(int));
+  int *box_iphi_e = (int *)calloc(nelv, sizeof(int));
   for (int i = 0; i < nelv; i++)
-    wrki[i] = nekData.box_iphi_e[i * num_crs_dofs_1d];
-  o_iphi_e.copyFrom(wrki);
-  free(wrki);
+    box_iphi_e[i] = nekData.box_iphi_e[i * num_crs_dofs_1d];
+  o_iphi_e.copyFrom(box_iphi_e);
+  free(box_iphi_e);
 
   o_uc = platform->device.malloc<T>(box->un);
   o_ub = platform->device.malloc<T>(get_num_box_dofs());
@@ -283,11 +283,11 @@ static void gpu_setup(struct box *box, const jl_opts *opts) {
   o_srhs = platform->device.malloc<T>(box->sn);
 
   o_A = platform->device.malloc<T>(m_size);
-  T *wrkf = (T *)calloc(m_size, sizeof(T));
+  T *amat = (T *)calloc(m_size, sizeof(T));
   for (uint i = 0; i < m_size; i++)
-    wrkf[i] = nekData.schwz_amat[i];
-  o_A.copyFrom(wrkf);
-  free(wrkf);
+    amat[i] = nekData.schwz_amat[i];
+  o_A.copyFrom(amat);
+  free(amat);
 
   o_invmul = platform->device.malloc<T>(box->un);
   T *inv_mul = tcalloc(T, box->sn);
