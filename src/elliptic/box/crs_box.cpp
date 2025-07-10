@@ -359,10 +359,11 @@ void crs_box_solve(occa::memory &o_x, struct box *box, occa::memory &o_rhs) {
     MPI_Abort(c->c, EXIT_FAILURE);
   }
 
+  timer_tic(c);
   if (box->opts.dom == gs_double) platform->boxCopyFloatToDoubleKernel(box->un, o_rhs, o_srhs);
   else platform->boxCopyKernel(box->un, o_rhs, o_srhs);
+  timer_toc(COPY_D2D);
 
-  // Multiply by inverse multiplicity
   timer_tic(c);
   platform->boxInvMul2Kernel(box->un, o_srhs, o_invmul);
   timer_toc(INV_MUL);
@@ -470,8 +471,10 @@ void crs_box_solve(occa::memory &o_x, struct box *box, occa::memory &o_rhs) {
   o_x.copyFrom(box->sx, box->un, 0);
   timer_toc(COPY_SOLUTION);
 
+  timer_tic(c);
   if (box->opts.dom == gs_double) platform->boxCopyDoubleToFloatKernel(box->un, o_sx, o_x);
   else platform->boxCopyKernel(box->un, o_sx, o_x);
+  timer_toc(COPY_D2D);
 }
 
 void crs_box_free(struct box *box) {

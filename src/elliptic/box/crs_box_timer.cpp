@@ -38,6 +38,7 @@ void timer_print(MPI_Comm comm) {
   comm_allreduce(&c, gs_double, gs_max, max, MAX_METRICS, wrk);
 
   if (c.id == 0) {
+    printf("box copy_d2d          : %e\n", time_box[COPY_D2D]);
     printf("box copy_rhs          : %e\n", time_box[COPY_RHS]);
     printf("box u2c               : %e\n", time_box[U2C]);
     printf("box asm1              : %e\n", time_box[ASM1]);
