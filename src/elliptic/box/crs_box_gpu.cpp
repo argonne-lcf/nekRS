@@ -11,46 +11,24 @@ static const float one_f32 = 1.0f, zero_f32 = 0.0f;
 static int initialized = 0;
 static gs_dom dom;
 static int nr = 0;
-static void *h_r = NULL, *h_x = NULL;
+static void *d_A_inv = NULL;
 
-static double *d_A_inv = NULL;
-static float *d_A_inv_f32 = NULL;
-static void *d_r = NULL, *d_x = NULL;
-
-static void setup_core(uint nr_) {
-  nr = nr_;
-  h_r = calloc(nr, sizeof(double));
-  h_x = calloc(nr, sizeof(double));
-}
-
-static void finalize_core(void) {
-  free(h_r), h_r = NULL;
-  free(h_x), h_x = NULL;
-  nr = 0;
-  initialized = 0;
-}
-
-static void setup_inverse(double **A_inv, float **A_inv_f32, const struct csr *A) {
+template <typename T>
+static void setup_inverse(T *A_inv, const struct csr *A) {
   assert(sizeof(dfloat) == sizeof(double));
 
-  int N = A->nr;
+  const int N = A->nr;
   std::vector<dfloat> B(N * N);
   for (uint i = 0; i < A->nr; i++) {
-    for (uint j = A->offs[i]; j < A->offs[i + 1]; j++) {
-      // B[i * A->nr + A->cols[j] - A->base] = A->vals[j];
+    for (uint j = A->offs[i]; j < A->offs[i + 1]; j++)
       B[(A->cols[j] - A->base) * A->nr + i] = A->vals[j];
-    }
   }
 
   auto invA = platform->linAlg->matrixInverse(N, B);
 
-  *A_inv = tcalloc(double, A->nr * A->nr);
-  *A_inv_f32 = tcalloc(float, A->nr * A->nr);
   for (int i = 0; i < N; i++) {
-    for (int j = 0; j < N; j++) {
-      (*A_inv)[i * N + j] = (double)invA[j * N + i];
-      (*A_inv_f32)[i * N + j] = (float)invA[j * N + i];
-    }
+    for (int j = 0; j < N; j++)
+      A_inv[i * N + j] = (T)invA[j * N + i];
   }
 }
 
@@ -185,102 +163,43 @@ void asm1_gpu_free(struct box *box) {
 #elif defined(ENABLE_ONEMKL)
 #include "crs_box_gpu_onemkl.hpp"
 
+template <typename T>
 void asm1_gpu_setup(struct csr *A, unsigned null_space, struct box *box) {
-  assert(null_space == 0);
-
   if (initialized) return;
 
-  double *A_inv = 0;
-  float *A_inv_f32 = 0;
-  setup_inverse(&A_inv, &A_inv_f32, A);
-  setup_core(A->nr);
+  assert(null_space == 0);
 
-  const size_t size = nr * nr;
-  d_A_inv = box_onemkl_device_malloc<double>(size);
-  box_onemkl_device_copyto<double>(d_A_inv, A_inv, size);
+  const size_t size = A->nr * A->nr;
+  T *A_inv = tcalloc(T, size);
+  setup_inverse(A_inv, A);
 
-  d_A_inv_f32 = box_onemkl_device_malloc<float>(size);
-  box_onemkl_device_copyto<float>(d_A_inv_f32, A_inv_f32, size);
-
-  free(A_inv), free(A_inv_f32);
-
-  d_r = box_onemkl_device_malloc<double>(nr);
-  d_x = box_onemkl_device_malloc<double>(nr);
+  d_A_inv = static_cast<void *>(box_onemkl_device_malloc<T>(size));
+  box_onemkl_device_copyto<T>(static_cast<T *>(d_A_inv), A_inv, size);
+  free(A_inv);
 
   initialized = 1;
   dom = box->opts.dom;
-}
-
-template <typename T>
-static void asm1_gpu_solve_aux(T *x, struct box *box, const T *d_A, const T *r) {
-  T *h_r_T = static_cast<T *>(h_r);
-  T *d_r_T = static_cast<T *>(d_r);
-  T *h_x_T = static_cast<T *>(h_x);
-  T *d_x_T = static_cast<T *>(d_x);
-
-  for (uint i = 0; i < nr; i++)
-    h_r_T[i] = 0;
-  for (uint i = 0; i < box->sn; i++) {
-    if (box->u2c[i] >= 0)
-      h_r_T[box->u2c[i]] += r[i];
-  }
-
-  box_onemkl_device_copyto<T>(d_r_T, h_r_T, nr);
-  box_onemkl_device_gemv(d_x_T, nr, d_A, d_r_T);
-  box_onemkl_device_copyfrom<T>(d_x_T, h_x_T, nr);
-
-  for (uint i = 0; i < box->sn; i++) {
-    if (box->u2c[i] >= 0)
-      x[i] = h_x_T[box->u2c[i]];
-    else
-      x[i] = 0;
-  }
-}
-
-void asm1_gpu_solve(void *x, struct box *box, const void *r) {
-  if (!initialized) {
-    fprintf(stderr, "oneMKL is not initialized.\n");
-    MPI_Abort(MPI_COMM_WORLD, EXIT_FAILURE);
-  }
-
-  switch(dom) {
-    case gs_double:
-      asm1_gpu_solve_aux<double>((double *)x, box, d_A_inv, (double *)r);
-      break;
-    case gs_float:
-      asm1_gpu_solve_aux<float>((float *)x, box, d_A_inv_f32, (float *)r);
-      break;
-    default:
-      break;
-  }
+  nr = A->nr;
 }
 
 void asm1_gpu_solve(occa::memory &o_x, struct box *box, occa::memory &o_r) {
-  if (!initialized) {
-    fprintf(stderr, "oneMKL is not initialized.\n");
-    MPI_Abort(MPI_COMM_WORLD, EXIT_FAILURE);
-  }
+  if (!initialized) MPI_Abort(MPI_COMM_WORLD, EXIT_FAILURE);
 
-  switch(dom) {
-    case gs_double:
-      box_onemkl_device_gemv<double>((double *)o_x.ptr(), nr, d_A_inv, (double *)o_r.ptr());
-      break;
-    case gs_float:
-      box_onemkl_device_gemv<float>((float *)o_x.ptr(), nr, d_A_inv_f32, (float *)o_r.ptr());
-      break;
-    default:
-      break;
-  }
+  if (box->opts.dom == gs_double)
+    box_onemkl_device_gemv<double>((double *)o_x.ptr(), nr, (double *)d_A_inv, (double *)o_r.ptr());
+  else
+    box_onemkl_device_gemv<float>((float *)o_x.ptr(), nr, (float *)d_A_inv, (float *)o_r.ptr());
 }
 
 void asm1_gpu_free(struct box *box) {
   box_onemkl_free(static_cast<void *>(d_A_inv));
-  box_onemkl_free(static_cast<void *>(d_A_inv_f32));
-  box_onemkl_free(static_cast<void *>(d_r));
-  box_onemkl_free(static_cast<void *>(d_r));
-  finalize_core();
 }
+
+template void asm1_gpu_setup<float>(struct csr *A, unsigned null_space, struct box *box);
+template void asm1_gpu_setup<double>(struct csr *A, unsigned null_space, struct box *box);
+
 #else
+
 void asm1_gpu_setup(struct csr *A, unsigned null_space, struct box *box) {
   fprintf(stderr, "GPU BLAS not enabled.\n");
   exit(EXIT_FAILURE);

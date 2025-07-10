@@ -223,7 +223,7 @@ static void asm1_setup(struct box *box, double tol, const struct comm *comm) {
     asm1_cholmod_setup(A, null_space, box);
     break;
   case BOX_GPU:
-    asm1_gpu_setup(A, null_space, box);
+    asm1_gpu_setup<T>(A, null_space, box);
     break;
   }
 
