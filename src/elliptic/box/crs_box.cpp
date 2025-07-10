@@ -134,7 +134,7 @@ static void asm2_setup(struct box *box, const jl_opts *opts) {
   const uint null_space = *(nekData.box_null_space);
 
   const uint ncr = box->ncr;
-  const uint ne = nnz / ncr;
+  const uint ne = n / ncr;
 
   uint *ia = tcalloc(uint, nnz);
   uint *ja = tcalloc(uint, nnz);
@@ -203,7 +203,7 @@ static void asm1_setup(struct box *box, const jl_opts *opts, double tol, const s
       mask_min = tmp_mask[i];
   }
 
-  uint null_space = (mask_min > 1e-10);
+  uint null_space = !(mask_min < 1e-10);
   assert(null_space == 0);
 
   // Setup unassembled to assembled map.
