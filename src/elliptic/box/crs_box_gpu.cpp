@@ -185,7 +185,7 @@ void asm1_gpu_free(struct box *box) {
 #elif defined(ENABLE_ONEMKL)
 #include "crs_box_gpu_onemkl.hpp"
 
-void asm1_gpu_setup(struct csr *A, unsigned null_space, struct box *box, const jl_opts *opts) {
+void asm1_gpu_setup(struct csr *A, unsigned null_space, struct box *box) {
   assert(null_space == 0);
 
   if (initialized) return;
@@ -208,7 +208,7 @@ void asm1_gpu_setup(struct csr *A, unsigned null_space, struct box *box, const j
   d_x = box_onemkl_device_malloc<double>(nr);
 
   initialized = 1;
-  dom = opts->dom;
+  dom = box->opts.dom;
 }
 
 template <typename T>

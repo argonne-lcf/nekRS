@@ -161,7 +161,7 @@ static void asm2_solve(const struct box *box) {
 }
 
 template <typename T>
-static void asm1_setup(struct box *box, const jl_opts *opts, double tol, const struct comm *comm) {
+static void asm1_setup(struct box *box, double tol, const struct comm *comm) {
   buffer *bfr = &(box->bfr);
   struct comm *local = &(box->local);
 
@@ -214,15 +214,16 @@ static void asm1_setup(struct box *box, const jl_opts *opts, double tol, const s
 
   // Setup ASM1 solver.
   box->asm1 = NULL;
-  switch(opts->asm1) {
+  switch(box->opts.asm1) {
   case BOX_XXT:
-    box->asm1 = (void *)crs_xxt_setup(box->sn, tmp_vtx, nnz, ia, ja, va, opts->dom, opts->null_space, local);
+    box->asm1 = (void *)crs_xxt_setup(box->sn, tmp_vtx, nnz, ia, ja, va,
+        box->opts.dom, box->opts.null_space, local);
     break;
   case BOX_CHOLMOD:
-    asm1_cholmod_setup(A, null_space, box, opts);
+    asm1_cholmod_setup(A, null_space, box);
     break;
   case BOX_GPU:
-    asm1_gpu_setup(A, null_space, box, opts);
+    asm1_gpu_setup(A, null_space, box);
     break;
   }
 
@@ -240,7 +241,7 @@ static void asm1_setup(struct box *box, const jl_opts *opts, double tol, const s
 }
 
 template <typename T>
-static void cpu_setup(struct box *box, const jl_opts *opts) {
+static void cpu_setup(struct box *box) {
   uint work_array_size = MAX(box->sn, *(nekData.box_n));
   box->sx = malloc(sizeof(T) * 2 * work_array_size);
   box->srhs = (void *)((T *)box->sx + work_array_size);
@@ -293,7 +294,7 @@ static void gpu_setup(struct box *box) {
   T *inv_mul = tcalloc(T, box->sn);
   for (uint i = 0; i < box->un; i++)
     inv_mul[i] = 1.0;
-  gs(inv_mul, opts->dom, gs_add, 0, box->gsh, &(box->bfr));
+  gs(inv_mul, box->opts.dom, gs_add, 0, box->gsh, &(box->bfr));
   for (uint i = 0; i < box->sn; i++)
     inv_mul[i] = 1.0 / inv_mul[i];
   o_invmul.copyFrom(inv_mul);
@@ -326,14 +327,14 @@ struct box *crs_box_setup(uint n, const ulong *id, uint nnz, const uint *Ai, con
   const double tol = 1e-12;
   switch(opts->dom) {
     case gs_double:
-      asm1_setup<double>(box, opts, tol, comm);
-      cpu_setup<double>(box, opts);
-      gpu_setup<double>(box, opts);
+      asm1_setup<double>(box, tol, comm);
+      cpu_setup<double>(box);
+      gpu_setup<double>(box);
       break;
     case gs_float:
-      asm1_setup<float>(box, opts, tol, comm);
-      cpu_setup<float>(box, opts);
-      gpu_setup<float>(box, opts);
+      asm1_setup<float>(box, tol, comm);
+      cpu_setup<float>(box);
+      gpu_setup<float>(box);
       break;
     default:
       break;

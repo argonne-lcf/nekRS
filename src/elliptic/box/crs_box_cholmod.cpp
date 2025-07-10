@@ -50,17 +50,17 @@ static void csr_finalize(struct cholmod_csr *B) {
   free(B);
 }
 
-void asm1_cholmod_setup(struct csr *A, unsigned null_space, struct box *box, const jl_opts *opts) {
+void asm1_cholmod_setup(struct csr *A, unsigned null_space, struct box *box) {
   if (initialied)
     return;
 
-  dom = opts->dom;
+  dom = box->opts.dom;
   switch (dom) {
   case gs_double:
-    box->asm1 = (void *)csr_setup_double(A, null_space, &box->global);
+    box->asm1 = (void *)csr_setup_double(A, null_space, &(box->global));
     break;
   case gs_float:
-    box->asm1 = (void *)csr_setup_float(A, null_space, &box->global);
+    box->asm1 = (void *)csr_setup_float(A, null_space, &(box->global));
     break;
   default:
     break;
