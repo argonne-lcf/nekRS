@@ -32,10 +32,13 @@ void registerCoreKernels()
     platform->boxZeroKernel = platform->kernelRequests.load("core-boxZero");
     platform->boxMultRHSKernel = platform->kernelRequests.load("core-boxMultRHS");
     platform->boxInvMulKernel = platform->kernelRequests.load("core-boxInvMul");
+    platform->boxInvMul2Kernel = platform->kernelRequests.load("core-boxInvMul2");
     platform->boxUtoCKernel = platform->kernelRequests.load("core-boxUtoC");
     platform->boxCtoUKernel = platform->kernelRequests.load("core-boxCtoU");
     platform->boxCopyKernel = platform->kernelRequests.load("core-boxCopy");
     platform->boxUpdateSolutionKernel = platform->kernelRequests.load("core-boxUpdateSolution");
+    platform->boxCopyFloatToDoubleKernel = platform->kernelRequests.load("core-boxCopyFloatToDouble");
+    platform->boxCopyDoubleToFloatKernel = platform->kernelRequests.load("core-boxCopyDoubleToFloat");
 
     return;
   }
@@ -189,6 +192,9 @@ void registerCoreKernels()
     fileName = oklpath + "/core/boxInvMul" + extension;
     platform->kernelRequests.add(section + "boxInvMul", fileName, prop);
 
+    fileName = oklpath + "/core/boxInvMul2" + extension;
+    platform->kernelRequests.add(section + "boxInvMul2", fileName, prop);
+
     fileName = oklpath + "/core/boxUtoC" + extension;
     platform->kernelRequests.add(section + "boxUtoC", fileName, prop);
 
@@ -200,6 +206,12 @@ void registerCoreKernels()
 
     fileName = oklpath + "/core/boxUpdateSolution" + extension;
     platform->kernelRequests.add(section + "boxUpdateSolution", fileName, prop);
+
+    fileName = oklpath + "/core/boxCopyFloatToDouble" + extension;
+    platform->kernelRequests.add(section + "boxCopyFloatToDouble", fileName, prop);
+
+    fileName = oklpath + "/core/boxCopyDoubleToFloat" + extension;
+    platform->kernelRequests.add(section + "boxCopyDoubleToFloat", fileName, prop);
   }
 
   registerLinAlgKernels();

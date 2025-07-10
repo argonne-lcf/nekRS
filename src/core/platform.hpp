@@ -72,10 +72,13 @@ public:
   occa::kernel boxZeroKernel;
   occa::kernel boxMultRHSKernel;
   occa::kernel boxInvMulKernel;
+  occa::kernel boxInvMul2Kernel;
   occa::kernel boxUtoCKernel;
   occa::kernel boxCtoUKernel;
   occa::kernel boxCopyKernel;
   occa::kernel boxUpdateSolutionKernel;
+  occa::kernel boxCopyFloatToDoubleKernel;
+  occa::kernel boxCopyDoubleToFloatKernel;
 };
 #endif
 

@@ -1,0 +1,5 @@
+@kernel void boxCopyDoubleToFloat(const unsigned int n, @restrict const double *src, @restrict float *dest) {
+  for (unsigned int e = 0; e < n; ++e; @tile(p_blockSize, @outer, @inner)) {
+    dest[e] = src[e];
+  }
+}

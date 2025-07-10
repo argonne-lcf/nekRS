@@ -20,6 +20,7 @@ typedef enum {
   COPY_FROM_NEK5000,
   CRS_DSAVG3,
   COPY_SOLUTION,
+  COPY_D2D,
   NONE,
 } BoxMetric;
 
