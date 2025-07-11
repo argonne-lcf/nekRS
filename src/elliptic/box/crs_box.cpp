@@ -13,14 +13,18 @@
 #include "nekrs_crs.hpp"
 #include "crs_box_impl.hpp"
 
-#define MAX(a, b) ((a) > (b) ? (a) : (b))
-
 static inline int get_num_crs_dofs_1d() {
   return *(nekData.schwz_ncr);
 }
 
 static inline int get_num_box_dofs() {
   return *(nekData.box_n);
+}
+
+static inline unsigned get_wrk_size(const struct box *box) {
+#define MAX(a, b) ((a) > (b) ? (a) : (b))
+  return MAX(box->sn, *(nekData.box_n));
+#undef MAX
 }
 
 /* setup unassembled to assembled map*/
@@ -242,9 +246,9 @@ static void asm1_setup(struct box *box, double tol, const struct comm *comm) {
 
 template <typename T>
 static void cpu_setup(struct box *box) {
-  uint work_array_size = MAX(box->sn, *(nekData.box_n));
-  box->sx = malloc(sizeof(T) * 2 * work_array_size);
-  box->srhs = (void *)((T *)box->sx + work_array_size);
+  unsigned wrk_size = get_wrk_size(box);
+  box->sx = malloc(sizeof(T) * 2 * wrk_size);
+  box->srhs = (void *)((T *)box->sx + wrk_size);
 }
 
 /* Mesh (vertex) to box Interpolation */
@@ -280,8 +284,9 @@ static void gpu_setup(struct box *box) {
   o_ub = platform->device.malloc<T>(get_num_box_dofs());
 
   /* multiplicative RHS update */
-  o_sx = platform->device.malloc<T>(box->sn);
-  o_srhs = platform->device.malloc<T>(box->sn);
+  uint wrk_size = get_wrk_size(box);
+  o_sx = platform->device.malloc<T>(wrk_size);
+  o_srhs = platform->device.malloc<T>(wrk_size);
 
   o_A = platform->device.malloc<T>(m_size);
   T *amat = (T *)calloc(m_size, sizeof(T));
@@ -352,15 +357,14 @@ struct box *crs_box_setup(uint n, const ulong *id, uint nnz, const uint *Ai, con
 
 void crs_box_solve(occa::memory &o_x, struct box *box, occa::memory &o_rhs) {
   struct comm *c = &(box->global);
+  buffer *bfr = &(box->bfr);
+  const gs_dom dom = box->opts.dom;
+  const box_algo_t asm1 = box->opts.asm1;
 
-  if ((box->opts.asm1 != BOX_GPU)) {
-    if (c->id == 0) fprintf(stderr, "Wrong solver!\n");
-    fflush(stderr);
-    MPI_Abort(c->c, EXIT_FAILURE);
-  }
+  if (asm1 != BOX_GPU) MPI_Abort(c->c, EXIT_FAILURE);
 
   timer_tic(c);
-  if (box->opts.dom == gs_double) platform->boxCopyFloatToDoubleKernel(box->un, o_rhs, o_srhs);
+  if (dom == gs_double) platform->boxCopyFloatToDoubleKernel(box->un, o_rhs, o_srhs);
   else platform->boxCopyKernel(box->un, o_rhs, o_srhs);
   timer_toc(COPY_D2D);
 
@@ -368,17 +372,14 @@ void crs_box_solve(occa::memory &o_x, struct box *box, occa::memory &o_rhs) {
   platform->boxInvMul2Kernel(box->un, o_srhs, o_invmul);
   timer_toc(INV_MUL);
 
-  // Copy RHS to CPU.
   timer_tic(c);
   o_srhs.copyTo(box->srhs, box->un);
   timer_toc(COPY_RHS);
 
-  // crs_dsavg1.
   timer_tic(c);
-  gs(box->srhs, box->opts.dom, gs_add, 0, box->gsh, &(box->bfr));
+  gs(box->srhs, dom, gs_add, 0, box->gsh, bfr);
   timer_toc(CRS_DSAVG1);
 
-  // Copy RHS back to GPU.
   timer_tic(c);
   o_srhs.copyFrom(box->srhs, box->sn);
   timer_toc(COPY_RHS);
@@ -387,7 +388,6 @@ void crs_box_solve(occa::memory &o_x, struct box *box, occa::memory &o_rhs) {
   platform->boxUtoCKernel(num_compressed, o_u2c_off, o_u2c_idx, o_srhs, o_cr);
   timer_toc(U2C);
 
-  // ASM1.
   timer_tic(c);
   asm1_gpu_solve(o_cx, box, o_cr);
   timer_toc(ASM1);
@@ -401,7 +401,7 @@ void crs_box_solve(occa::memory &o_x, struct box *box, occa::memory &o_rhs) {
   timer_toc(C2U);
 
   timer_tic(c);
-  platform->boxInvMulKernel(box->un, o_sx, o_invmul, o_sx);
+  platform->boxInvMul2Kernel(box->un, o_sx, o_invmul);
   timer_toc(INV_MUL);
 
   if (!(box->opts.aggressive)) {
@@ -409,9 +409,8 @@ void crs_box_solve(occa::memory &o_x, struct box *box, occa::memory &o_rhs) {
     o_sx.copyTo(box->sx, box->un);
     timer_toc(COPY_SOLUTION);
 
-    // crs_dsavg2.
     timer_tic(c);
-    gs(box->sx, box->opts.dom, gs_add, 0, box->gsh, &(box->bfr));
+    gs(box->sx, dom, gs_add, 0, box->gsh, bfr);
     timer_toc(CRS_DSAVG1);
 
     timer_tic(c);
@@ -419,15 +418,16 @@ void crs_box_solve(occa::memory &o_x, struct box *box, occa::memory &o_rhs) {
     timer_toc(COPY_SOLUTION);
   }
 
-  // mult_rhs_update:  rhs = rhs - A*sx.
+  timer_tic(c);
   if (box->opts.mult) {
-    timer_tic(c);
-    int num_crs_dofs_1d = get_num_crs_dofs_1d();
+    unsigned num_crs_dofs_1d = get_num_crs_dofs_1d();
     platform->boxMultRHSKernel(box->un / num_crs_dofs_1d, num_crs_dofs_1d, o_A, o_sx, o_srhs);
-    timer_toc(MULT_RHS_UPDATE);
   }
+  timer_toc(MULT_RHS_UPDATE);
 
+  timer_tic(c);
   platform->boxCopyKernel(box->un, o_srhs, o_uc);
+  timer_toc(COPY_D2D);
 
   timer_tic(c);
   platform->boxZeroKernel(get_num_box_dofs(), o_ub);
@@ -456,23 +456,23 @@ void crs_box_solve(occa::memory &o_x, struct box *box, occa::memory &o_rhs) {
   platform->boxUpdateSolutionKernel(box->un, o_uc, o_sx);
 
   timer_tic(c);
-  platform->boxInvMulKernel(box->un, o_sx, o_invmul, o_sx);
+  platform->boxInvMul2Kernel(box->un, o_sx, o_invmul);
   timer_toc(INV_MUL);
 
   timer_tic(c);
-  o_sx.copyTo(box->sx);
+  o_sx.copyTo(box->sx, box->un);
   timer_toc(COPY_SOLUTION);
 
   timer_tic(c);
-  gs(box->sx, box->opts.dom, gs_add, 0, box->gsh, &(box->bfr));
+  gs(box->sx, dom, gs_add, 0, box->gsh, bfr);
   timer_toc(CRS_DSAVG1);
 
   timer_tic(c);
-  o_x.copyFrom(box->sx, box->un, 0);
+  o_sx.copyFrom(box->sx, box->un);
   timer_toc(COPY_SOLUTION);
 
   timer_tic(c);
-  if (box->opts.dom == gs_double) platform->boxCopyDoubleToFloatKernel(box->un, o_sx, o_x);
+  if (dom == gs_double) platform->boxCopyDoubleToFloatKernel(box->un, o_sx, o_x);
   else platform->boxCopyKernel(box->un, o_sx, o_x);
   timer_toc(COPY_D2D);
 }
@@ -500,5 +500,3 @@ void crs_box_free(struct box *box) {
   comm_free(&box->local), comm_free(&box->global);
   free(box->u2c), free(box->sx);
 }
-
-#undef MAX
