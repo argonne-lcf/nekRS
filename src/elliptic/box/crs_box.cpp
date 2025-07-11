@@ -271,7 +271,11 @@ static void gpu_setup(struct box *box) {
   /* Setup device memory for vtx-to-box and box-to-vtx interpolation */
   const int m_size = num_crs_dofs_1d * box->un;
   o_phi_e = platform->device.malloc<T>(m_size);
-  o_phi_e.copyFrom(nekData.box_phi_e);
+  T * box_phi_e = tcalloc(T, m_size);
+  for (uint i = 0; i < m_size; i++)
+    box_phi_e[i] = nekData.box_phi_e[i];
+  o_phi_e.copyFrom(box_phi_e);
+  free(box_phi_e);
 
   o_iphi_e = platform->device.malloc<int>(nelv);
   int *box_iphi_e = tcalloc(int, nelv);
