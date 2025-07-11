@@ -165,9 +165,11 @@ static void asm2_solve(const struct box *box) {
 }
 
 template <typename T>
-static void asm1_setup(struct box *box, double tol, const struct comm *comm) {
-  buffer *bfr = &(box->bfr);
+static void asm1_setup(struct box *box) {
+  const double tol = 1e-12;
   struct comm *local = &(box->local);
+  struct comm *global = &(box->global);
+  buffer *bfr = &(box->bfr);
 
   const uint ncr = box->ncr;
   const uint ne = *(nekData.schwz_ne);
@@ -238,7 +240,7 @@ static void asm1_setup(struct box *box, double tol, const struct comm *comm) {
     gs_vtx[i] = tmp_vtx[i];
   for (uint i = box->un; i < box->sn; i++)
     gs_vtx[i] = -tmp_vtx[i];
-  box->gsh = gs_setup((const slong *)gs_vtx, box->sn, comm, 0, gs_auto, 0);
+  box->gsh = gs_setup((const slong *)gs_vtx, box->sn, global, 0, gs_auto, 0);
 
   free(tmp_mask), free(tmp_vtx), free(gs_vtx);
   csr_free(A), free(ia), free(ja);
@@ -333,15 +335,14 @@ struct box *crs_box_setup(uint n, const ulong *id, uint nnz, const uint *Ai, con
   asm2_setup(box);
 
   /* ASM1, CPU and GPU setup on C side */
-  const double tol = 1e-12;
   switch(opts->dom) {
     case gs_double:
-      asm1_setup<double>(box, tol, comm);
+      asm1_setup<double>(box);
       cpu_setup<double>(box);
       gpu_setup<double>(box);
       break;
     case gs_float:
-      asm1_setup<float>(box, tol, comm);
+      asm1_setup<float>(box);
       cpu_setup<float>(box);
       gpu_setup<float>(box);
       break;
