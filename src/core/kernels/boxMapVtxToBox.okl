@@ -1,6 +1,6 @@
-@kernel void boxMapVtxToBox(const dlong ne, @restrict const int *iphi_e, const dlong nc,
-                         @restrict const scalar *phi_e, @restrict const scalar *uv, @restrict scalar *ub) {
-  for (dlong e = 0; e < ne; ++e; @outer(0)) {
+@kernel void boxMapVtxToBox(const unsigned int ne, @restrict const int *iphi_e, const unsigned int nc,
+                            @restrict const scalar *phi_e, @restrict const scalar *uv, @restrict scalar *ub) {
+  for (unsigned int e = 0; e < ne; ++e; @outer(0)) {
     int ibox = iphi_e[e] - 1;
     @shared scalar s_r[p_NC][p_NC];
 

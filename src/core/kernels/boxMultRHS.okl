@@ -1,26 +1,26 @@
-@kernel void boxMultRHS(const dlong ne, const dlong ncr, @restrict const scalar *A, @restrict const scalar *x,
-                         @restrict scalar *rhs) {
-  for (dlong e = 0; e < ne; e++; @outer(0)) {
+@kernel void boxMultRHS(const unsigned int ne, const unsigned int ncr, @restrict const scalar *A,
+                        @restrict const scalar *x, @restrict scalar *rhs) {
+  for (unsigned int e = 0; e < ne; e++; @outer(0)) {
     @shared scalar s_r[p_NC][p_NC];
 
-    for (dlong c = 0; c < ncr; c++; @inner(0)) {
-      for (dlong k = 0; k < ncr; k++; @inner(1)) {
+    for (unsigned int c = 0; c < ncr; c++; @inner(0)) {
+      for (unsigned int k = 0; k < ncr; k++; @inner(1)) {
         s_r[k][c] = x[c + ncr * e] * A[k + c * ncr + ncr * ncr * e];
       }
     }
     @barrier();
 
-    for (dlong offset = ncr / 2; offset >= 1; offset /=2) {
-      for (dlong c = 0; c < ncr; c++; @inner(0)) {
-        for (dlong k = 0; k < ncr; k++; @inner(1)) {
+    for (unsigned int offset = ncr / 2; offset >= 1; offset /=2) {
+      for (unsigned int c = 0; c < ncr; c++; @inner(0)) {
+        for (unsigned int k = 0; k < ncr; k++; @inner(1)) {
           if (c < offset) s_r[k][c] = s_r[k][c] + s_r[k][c + offset];
         }
       }
       @barrier();
     }
 
-    for (dlong c = 0; c < p_NC; c++; @inner(0)) {
-      for (dlong k = 0; k < p_NC; k++; @inner(1)) {
+    for (unsigned int c = 0; c < p_NC; c++; @inner(0)) {
+      for (unsigned int k = 0; k < p_NC; k++; @inner(1)) {
         if (c == 0) rhs[k + p_NC * e] -= s_r[k][c];
       }
     }
