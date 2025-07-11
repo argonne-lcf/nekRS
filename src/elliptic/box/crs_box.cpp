@@ -129,8 +129,6 @@ static void u2c_setup(struct box *box, const ulong *const vtx) {
 }
 
 static void asm2_setup(struct box *box) {
-  nek::box_crs_setup();
-
   const uint n = *(nekData.box_n);
   const uint nnz = *(nekData.box_nnz);
   const long long *gcrs = (const long long *)nekData.box_gcrs;
@@ -330,6 +328,9 @@ struct box *crs_box_setup(uint n, const ulong *id, uint nnz, const uint *Ai, con
   MPI_Comm_split(comm->c, comm->id, 1, &local);
   comm_init(&(box->local), local);
   MPI_Comm_free(&local);
+
+  /* Setup box solver in Nek5000 */
+  nek::box_crs_setup();
 
   /* ASM2 setup on C side */
   asm2_setup(box);
