@@ -1428,9 +1428,6 @@ C----------------------------------------------------------------------
       integer ne,nv,nw
       logical ifdbg
 
-      call setup_schwz_2l_crs
-      call set_coarse_mask(box_mask,box_null_space) ! This is the Q1 mask
-
       nxc=2
       nzc=1
       if(if3d) then
@@ -1451,7 +1448,6 @@ C----------------------------------------------------------------------
      $  ifdbg)
 
       schwz_ncr=nxc*nxc*nxc
-
       call nrs_set_global_crs(box_n,box_gcrs,box_nnz,box_a,box_mask,
      $  box_null_space)
 
