@@ -128,7 +128,7 @@ static void u2c_setup(struct box *box, const ulong *const vtx) {
   u2c_setup_aux<T>(box->sn, box->u2c, bfr);
 }
 
-static void asm2_setup(struct box *box, const jl_opts *opts) {
+static void asm2_setup(struct box *box) {
   nek::box_crs_setup();
 
   const uint n = *(nekData.box_n);
@@ -155,7 +155,7 @@ static void asm2_setup(struct box *box, const jl_opts *opts) {
   for (uint i = 0; i < n; i++)
     gcrs_ul[i] = gcrs[i];
 
-  box->asm2 = (void *)crs_xxt_setup(n, gcrs_ul, nnz, ia, ja, va, opts->dom, null_space, &(box->global));
+  box->asm2 = (void *)crs_xxt_setup(n, gcrs_ul, nnz, ia, ja, va, box->opts.dom, null_space, &(box->global));
 
   free(ia), free(ja), free(gcrs_ul);
 }
@@ -260,8 +260,8 @@ occa::memory o_sx, o_srhs, o_invmul;
 
 template <typename T>
 static void gpu_setup(struct box *box) {
-  const int nelv = nekData.nelv;
-  const int num_crs_dofs_1d = get_num_crs_dofs_1d();
+  const uint nelv = nekData.nelv;
+  const uint num_crs_dofs_1d = get_num_crs_dofs_1d();
   assert(box->un == (num_crs_dofs_1d * nelv));
   assert(box->sn >= box->un);
 
@@ -274,8 +274,8 @@ static void gpu_setup(struct box *box) {
   o_phi_e.copyFrom(nekData.box_phi_e);
 
   o_iphi_e = platform->device.malloc<int>(nelv);
-  int *box_iphi_e = (int *)calloc(nelv, sizeof(int));
-  for (int i = 0; i < nelv; i++)
+  int *box_iphi_e = tcalloc(int, nelv);
+  for (uint i = 0; i < nelv; i++)
     box_iphi_e[i] = nekData.box_iphi_e[i * num_crs_dofs_1d];
   o_iphi_e.copyFrom(box_iphi_e);
   free(box_iphi_e);
@@ -289,7 +289,7 @@ static void gpu_setup(struct box *box) {
   o_srhs = platform->device.malloc<T>(wrk_size);
 
   o_A = platform->device.malloc<T>(m_size);
-  T *amat = (T *)calloc(m_size, sizeof(T));
+  T *amat = tcalloc(T, m_size);
   for (uint i = 0; i < m_size; i++)
     amat[i] = nekData.schwz_amat[i];
   o_A.copyFrom(amat);
@@ -326,7 +326,7 @@ struct box *crs_box_setup(uint n, const ulong *id, uint nnz, const uint *Ai, con
   MPI_Comm_free(&local);
 
   /* ASM2 setup on C side */
-  asm2_setup(box, opts);
+  asm2_setup(box);
 
   /* ASM1, CPU and GPU setup on C side */
   const double tol = 1e-12;
