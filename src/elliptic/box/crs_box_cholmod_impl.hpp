@@ -18,8 +18,7 @@ static struct cholmod_csr *sparse_cholmod_factor(uint n, const uint *Arp,
   B->nr = n;
 
   const uint nnz = Arp[n];
-  cholmod_triplet *T =
-      cholmod_allocate_triplet(n, n, nnz, -1, CHOLMOD_REAL, &B->cm);
+  cholmod_triplet *T = cholmod_allocate_triplet(n, n, nnz, -1, CHOLMOD_REAL, &B->cm);
 
   int32_t *Ti = (int32_t *)T->i, *Tj = (int32_t *)T->j;
   TT *Tx = (TT *)T->x;
