@@ -40,9 +40,9 @@ set(ELLIPTIC_SOURCES
         ${ELLIPTIC_SOURCE_DIR}/box/crs_box_timer.cpp
         ${ELLIPTIC_SOURCE_DIR}/box/nekrs_crs.cpp)
 
-if (ENABLE_ONEMKL)
+if (ENABLE_BOX_ONEMKL)
   add_library(crs_box_onemkl SHARED "${ELLIPTIC_SOURCE_DIR}/box/crs_box_gpu_onemkl.cpp")
-  target_compile_definitions(crs_box_onemkl PRIVATE -DENABLE_ONEMKL)
+  target_compile_definitions(crs_box_onemkl PRIVATE -DENABLE_BOX_ONEMKL)
   find_package(MKL CONFIG REQUIRED PATHS $ENV{MKLROOT})
   target_link_libraries(crs_box_onemkl PRIVATE MKL::MKL_SYCL::BLAS MKL::MKL_SYCL)
   install(TARGETS crs_box_onemkl LIBRARY DESTINATION lib ARCHIVE DESTINATION lib)

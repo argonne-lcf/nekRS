@@ -196,7 +196,7 @@ if (NEKRS_BUILD_FLOAT)
   set_target_properties(nekrs-bin-fp32 PROPERTIES LINKER_LANGUAGE CXX OUTPUT_NAME nekrs-fp32)
 endif()
 
-if (ENABLE_ONEMKL)
+if (ENABLE_BOX_ONEMKL)
   target_link_libraries(nekrs-lib PRIVATE crs_box_onemkl)
   if (NEKRS_BUILD_FLOAT)
     target_link_libraries(nekrs-lib-fp32 PRIVATE crs_box_onemkl)

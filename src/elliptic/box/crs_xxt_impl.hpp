@@ -969,12 +969,12 @@ struct xxt *crs_xxt_setup(uint n, const ulong *id, uint nz, const uint *Ai,
 
   sparse_cholesky_factor(A_ll.n, A_ll.Arp, A_ll.Aj, A_ll.A, &data->fac_A_ll,
                          &buf);
-#if defined(ENABLE_BOX_CHOLMOD)
+#if defined(ENABLE_BOX_XXT_CHOLMOD)
   fac_A_ll = sparse_cholmod_factor(A_ll.n, A_ll.Arp, A_ll.Aj,
                                    (const void *)A_ll.A, gs_domain, &buf);
 #endif
 
-#if defined(ENABLE_BLAS)
+#if defined(ENABLE_BOX_BLAS)
   A_ll_inv = (double *)memalign(64, sizeof(double) * A_ll.n * A_ll.n);
   for (uint i = 0; i < A_ll.n; i++) {
     for (uint j = A_ll.Arp[i]; j < A_ll.Arp[i + 1]; j++)
@@ -1039,7 +1039,7 @@ void crs_xxt_solve(T *x, struct xxt *data, const T *b) {
       --xn;
 
     t = MPI_Wtime();
-#if defined(ENABLE_BLAS)
+#if defined(ENABLE_BOX_BLAS)
     if (sizeof(T) == sizeof(double)) {
       cblas_dgemv(CblasRowMajor, CblasNoTrans, ln, ln, 1.0, A_ll_inv, ln,
                   (double *)vc, 1, 0.0, y_inv, 1);
@@ -1051,7 +1051,7 @@ void crs_xxt_solve(T *x, struct xxt *data, const T *b) {
       for (uint i = 0; i < ln; ++i)
         vc[i] = y_inv_f32[i];
     }
-#elif defined(ENABLE_BOX_CHOLMOD)
+#elif defined(ENABLE_BOX_XXT_CHOLMOD)
     sparse_cholmod_solve(vc, fac_A_ll, vc);
 #else
     sparse_cholesky_solve(vc, &data->fac_A_ll, vc);
@@ -1081,7 +1081,7 @@ void crs_xxt_solve(T *x, struct xxt *data, const T *b) {
     local_time += MPI_Wtime() - t;
 
     t = MPI_Wtime();
-#if defined(ENABLE_BLAS)
+#if defined(ENABLE_BOX_BLAS)
     if (sizeof(T) == sizeof(double)) {
       cblas_dgemv(CblasRowMajor, CblasNoTrans, ln, ln, 1.0, A_ll_inv, ln,
                   (double *)vl, 1, 0.0, y_inv, 1);
@@ -1093,7 +1093,7 @@ void crs_xxt_solve(T *x, struct xxt *data, const T *b) {
       for (uint i = 0; i < ln; ++i)
         vl[i] = y_inv_f32[i];
     }
-#elif defined(ENABLE_BOX_CHOLMOD)
+#elif defined(ENABLE_BOX_XXT_CHOLMOD)
     sparse_cholmod_solve(vl, fac_A_ll, vl);
 #else
     sparse_cholesky_solve(vl, &data->fac_A_ll, vl);
@@ -1105,7 +1105,7 @@ void crs_xxt_solve(T *x, struct xxt *data, const T *b) {
       vc[i] -= vl[i];
     local_time += MPI_Wtime() - t;
   } else {
-#if defined(ENABLE_BLAS)
+#if defined(ENABLE_BOX_BLAS)
     if (sizeof(T) == sizeof(double)) {
       cblas_dgemv(CblasRowMajor, CblasNoTrans, ln, ln, 1.0, A_ll_inv, ln,
                   (double *)vc, 1, 0.0, y_inv, 1);
@@ -1117,7 +1117,7 @@ void crs_xxt_solve(T *x, struct xxt *data, const T *b) {
       for (uint i = 0; i < ln; ++i)
         vc[i] = y_inv_f32[i];
     }
-#elif defined(ENABLE_BOX_CHOLMOD)
+#elif defined(ENABLE_BOX_XXT_CHOLMOD)
     sparse_cholmod_solve(vc, fac_A_ll, vc);
 #else
     sparse_cholesky_solve(vc, &data->fac_A_ll, vc);
@@ -1221,13 +1221,13 @@ void crs_xxt_free(struct xxt *data) {
   free(data->vl);
   free(data);
 
-#if defined(ENABLE_BLAS)
+#if defined(ENABLE_BOX_BLAS)
   free(A_ll_inv);
   free(A_ll_inv_f32);
   free(y_inv);
   free(y_inv_f32);
 #endif
-#if defined(ENABLE_BOX_CHOLMOD)
+#if defined(ENABLE_BOX_XXT_CHOLMOD)
   sparse_cholmod_free(fac_A_ll);
 #endif
 }

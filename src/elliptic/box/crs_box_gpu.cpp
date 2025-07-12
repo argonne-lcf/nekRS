@@ -160,7 +160,7 @@ void asm1_gpu_free(struct box *box) {
   initialized = 0;
 }
 
-#elif defined(ENABLE_ONEMKL)
+#elif defined(ENABLE_BOX_ONEMKL)
 #include "crs_box_gpu_onemkl.hpp"
 
 template <typename T>

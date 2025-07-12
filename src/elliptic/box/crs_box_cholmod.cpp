@@ -1,7 +1,7 @@
 #include "crs_box_impl.hpp"
 #include <assert.h>
 
-#if defined(ENABLE_CHOLMOD)
+#if defined(ENABLE_BOX_CHOLMOD)
 #include <cholmod.h>
 
 // Callback function to be called if there is an error.
@@ -136,7 +136,7 @@ void sparse_cholmod_free(struct cholmod_csr *factor) {
   }
 }
 
-#else  // ENABLE_CHOLMOD
+#else  // ENABLE_BOX_CHOLMOD
 void asm1_cholmod_setup(struct csr *A, unsigned null_space, struct box *box) {
   fprintf(stderr, "CHOLMOD not enabled !\n");
   exit(EXIT_FAILURE);
@@ -169,4 +169,4 @@ static void sparse_cholmod_free(struct cholmod_csr *factor) {
   fprintf(stderr, "CHOLMOD not enabled !\n");
   exit(EXIT_FAILURE);
 }
-#endif // ENABLE_CHOLMOD
+#endif // ENABLE_BOX_CHOLMOD
