@@ -171,12 +171,7 @@ static void solve(TT *x, struct box *const box, const TT *r) {
 
   TT *rx = (TT *)B->r->x;
   for (uint i = 0; i < B->nr; i++)
-    rx[i] = 0;
-
-  for (uint i = 0; i < box->sn; i++) {
-    if (box->u2c[i] >= 0)
-      rx[box->u2c[i]] += r[i];
-  }
+    rx[i] = r[i];
 
   cholmod_dense *xd = cholmod_solve(CHOLMOD_A, B->L, B->r, &B->cm);
 
@@ -191,12 +186,8 @@ static void solve(TT *x, struct box *const box, const TT *r) {
 #endif
 
   TT *xx = (TT *)xd->x;
-  for (unsigned i = 0; i < box->sn; i++) {
-    if (box->u2c[i] >= 0)
-      x[i] = xx[box->u2c[i]];
-    else
-      x[i] = 0;
-  }
+  for (unsigned i = 0; i < B->nr; i++)
+      x[i] = xx[i];
 
   cholmod_free_dense(&xd, &B->cm);
 }

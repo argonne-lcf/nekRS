@@ -9,7 +9,7 @@
 #include <cstring>
 #include <unistd.h>
 
-#include <nekInterfaceAdapter.hpp>
+#include "nekInterfaceAdapter.hpp"
 #include "nekrs_crs.hpp"
 #include "crs_box_impl.hpp"
 
@@ -28,7 +28,6 @@ static inline unsigned get_wrk_size(const struct box *box) {
 }
 
 /* setup unassembled to assembled map*/
-static int num_compressed;
 static occa::memory o_u2c_off, o_u2c_idx, o_cr, o_cx;
 
 template <typename T>
@@ -48,10 +47,10 @@ static void u2c_setup_aux(unsigned un, const sint *u2c, buffer *bfr) {
   }
 
   uint gs_n = 0;
-  sarray_sort_2(struct map_t, map.ptr, map.n, c, 0, u, 0, bfr);
-  struct map_t *pm = (struct map_t *)map.ptr;
   if (map.n > 0) {
     gs_n = 1;
+    sarray_sort_2(struct map_t, map.ptr, map.n, c, 0, u, 0, bfr);
+    struct map_t *pm = (struct map_t *)map.ptr;
     uint c = pm[0].c;
     for (uint i = 1; i < map.n; i++) {
       if (pm[i].c != c) {
@@ -65,6 +64,7 @@ static void u2c_setup_aux(unsigned un, const sint *u2c, buffer *bfr) {
   unsigned *gs_idx = tcalloc(unsigned, map.n);
   uint gs_n2 = 0;
   if (map.n > 0) {
+    struct map_t *pm = (struct map_t *)map.ptr;
     gs_idx[0] = pm[0].u;
     for (uint i = 1; i < map.n; i++) {
       if (pm[i].c != pm[i - 1].c) {
@@ -76,7 +76,6 @@ static void u2c_setup_aux(unsigned un, const sint *u2c, buffer *bfr) {
     gs_n2++;
   }
   assert(gs_n == gs_n2);
-  num_compressed = gs_n;
 
   o_u2c_off = platform->device.malloc<unsigned>(gs_n + 1);
   o_u2c_off.copyFrom(gs_off);
@@ -88,7 +87,7 @@ static void u2c_setup_aux(unsigned un, const sint *u2c, buffer *bfr) {
 }
 
 template <typename T>
-static void u2c_setup(struct box *box, const ulong *const vtx) {
+static sint *u2c_setup(struct box *box, const ulong *const vtx) {
   const uint n = box->sn;
   buffer *bfr = &(box->bfr);
 
@@ -116,16 +115,17 @@ static void u2c_setup(struct box *box, const ulong *const vtx) {
       lid = pv[i].id, cn++;
     pv[i].perm = cn - 1;
   }
-
   box->cn = cn;
-  box->u2c = tcalloc(sint, n);
+
+  sint *u2c = tcalloc(sint, n);
   sarray_sort(struct vid_t, vids.ptr, vids.n, idx, 0, bfr);
   pv = (struct vid_t *)vids.ptr;
   for (uint i = 0; i < n; i++)
-    box->u2c[i] = pv[i].perm;
+    u2c[i] = pv[i].perm;
   array_free(&vids);
 
-  u2c_setup_aux<T>(box->sn, box->u2c, bfr);
+  u2c_setup_aux<T>(box->sn, u2c, bfr);
+  return u2c;
 }
 
 static void asm2_setup(struct box *box) {
@@ -211,10 +211,10 @@ static void asm1_setup(struct box *box) {
   assert(null_space == 0);
 
   // Setup unassembled to assembled map.
-  u2c_setup<T>(box, tmp_vtx);
-
+  sint *u2c = u2c_setup<T>(box, tmp_vtx);
   // Create the assembled matrix in CSR format.
-  struct csr *A = csr_setup(nnz, ia, ja, va, box->u2c, tol, bfr);
+  struct csr *A = csr_setup(nnz, ia, ja, va, u2c, tol, bfr);
+  free(u2c);
 
   // Setup ASM1 solver.
   box->asm1 = NULL;
@@ -391,7 +391,7 @@ void crs_box_solve(occa::memory &o_x, struct box *box, occa::memory &o_rhs) {
   timer_toc(COPY_RHS);
 
   timer_tic(c);
-  platform->boxUtoCKernel(num_compressed, o_u2c_off, o_u2c_idx, o_srhs, o_cr);
+  platform->boxUtoCKernel(box->cn, o_u2c_off, o_u2c_idx, o_srhs, o_cr);
   timer_toc(U2C);
 
   timer_tic(c);
@@ -403,7 +403,7 @@ void crs_box_solve(occa::memory &o_x, struct box *box, occa::memory &o_rhs) {
   timer_toc(ZERO);
 
   timer_tic(c);
-  platform->boxCtoUKernel(num_compressed, o_u2c_off, o_u2c_idx, o_cx, o_sx);
+  platform->boxCtoUKernel(box->cn, o_u2c_off, o_u2c_idx, o_cx, o_sx);
   timer_toc(C2U);
 
   timer_tic(c);
@@ -504,5 +504,5 @@ void crs_box_free(struct box *box) {
   gs_free(box->gsh);
   buffer_free(&box->bfr);
   comm_free(&box->local), comm_free(&box->global);
-  free(box->u2c), free(box->sx);
+  free(box->sx);
 }

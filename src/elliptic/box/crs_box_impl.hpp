@@ -19,13 +19,9 @@
 
 struct box {
   jl_opts opts;
-  /* User domain size */
-  uint un, ncr;
-  /* u2c map for ASM1 */
-  uint cn;
-  sint *u2c;
-  /* ASM1 Schwarz overlapped domain*/
-  uint sn;
+  /* User size, compressed size, Schwarz size and 1D dofs */
+  uint un, cn, sn, ncr;
+  /* Schwarz work arrays */
   void *sx, *srhs;
   /* Pointer to the asm1 solver */
   void *asm1;
