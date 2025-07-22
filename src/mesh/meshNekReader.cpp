@@ -34,7 +34,7 @@ void meshNekReaderHex3D(int N, mesh_t *mesh)
   const int faceMap[] = {1, 2, 3, 4, 0, 5};
 
   // generate element vertex numbering
-  mesh->Nnodes = nek::set_glo_num(2, mesh->cht);
+  mesh->Nnodes = nek::set_glo_num(2, mesh->Nelements, mesh->isRefine);
 
   mesh->EToV = (hlong *)calloc(mesh->Nelements * mesh->Nverts, sizeof(hlong));
   for (int e = 0; e < mesh->Nelements; ++e) {

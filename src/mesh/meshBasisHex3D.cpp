@@ -31,12 +31,16 @@
 // ------------------------------------------------------------------------
 // HEX 3D NODES
 // ------------------------------------------------------------------------
-void NodesHex3D(int _N, dfloat *_r, dfloat *_s, dfloat *_t)
+void NodesHex3D(int _N, dfloat *_r, dfloat *_s, dfloat *_t, int uniform)
 {
   int _Nq = _N + 1;
 
   dfloat *r1D = (dfloat *)malloc(_Nq * sizeof(dfloat));
-  JacobiGLL(_N, r1D); // Gauss-Legendre-Lobatto nodes
+  if (unidorm) {
+    EquispacedNodes1D(_N, r1D);
+  } else {
+    JacobiGLL(_N, r1D); // Gauss-Legendre-Lobatto nodes
+  }
 
   // Tensor product
   for (int k = 0; k < _Nq; k++) {

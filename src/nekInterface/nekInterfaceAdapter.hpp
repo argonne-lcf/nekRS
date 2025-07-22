@@ -122,7 +122,7 @@ void writeFld(const std::string& filename,
               bool uniform = false);
 
 void finalize(void);
-void xm1N(dfloat *x, dfloat *y, dfloat *z, int Nq, dlong Nelements);
+void xm1N(dfloat *x, dfloat *y, dfloat *z, int Nq, dlong Nelements, int uniform = 0);
 long long int localElementIdToGlobal(int _id);
 int lglel(int e);
 int setup(int numberActiveFields);
@@ -138,7 +138,7 @@ int bcmap(int bid, int ifld);
 int globalElementIdToRank(long long id);
 int globalElementIdToLocal(long long id);
 
-long long set_glo_num(int npts, int isTMesh);
+long long set_glo_num(int npts, int nel, int isRefine);
 
 void bdfCoeff(dfloat *g0, dfloat *coeff, dfloat *dt, int order);
 void extCoeff(dfloat *coeff, dfloat *dt, int nAB, int nBDF);

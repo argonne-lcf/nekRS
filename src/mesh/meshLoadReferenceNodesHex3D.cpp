@@ -28,7 +28,7 @@
 #include "mesh3D.h"
 #define NODE_GEN
 
-void meshLoadReferenceNodesHex3D(mesh_t *mesh, int N, int cubN)
+void meshLoadReferenceNodesHex3D(mesh_t *mesh, int N, int cubN, int uniform)
 {
   mesh->N = N;
   mesh->Nq = N + 1;
@@ -51,7 +51,7 @@ void meshLoadReferenceNodesHex3D(mesh_t *mesh, int N, int cubN)
   mesh->r = (dfloat*) malloc(mesh->Np * sizeof(dfloat));
   mesh->s = (dfloat*) malloc(mesh->Np * sizeof(dfloat));
   mesh->t = (dfloat*) malloc(mesh->Np * sizeof(dfloat));
-  NodesHex3D(mesh->N, mesh->r, mesh->s, mesh->t);
+  NodesHex3D(mesh->N, mesh->r, mesh->s, mesh->t, uniform);
 
   mesh->faceNodes = (int*) malloc(mesh->Nfaces * mesh->Nfp * sizeof(int));
   FaceNodesHex3D(mesh->N, mesh->r, mesh->s, mesh->t, mesh->faceNodes);
@@ -59,10 +59,14 @@ void meshLoadReferenceNodesHex3D(mesh_t *mesh, int N, int cubN)
   //GLL quadrature
   mesh->gllz = (dfloat*) malloc((mesh->N + 1) * sizeof(dfloat));
   mesh->gllw = (dfloat*) malloc((mesh->N + 1) * sizeof(dfloat));
-  JacobiGLL(mesh->N, mesh->gllz, mesh->gllw);
+  if (uniform) {
+    EquispacedNodes1D(mesh->N, mesh->gllz, mesh->gllw);
+  } else {
+    JacobiGLL(mesh->N, mesh->gllz, mesh->gllw);
+  }
 
   mesh->D = (dfloat*) malloc(mesh->Nq * mesh->Nq * sizeof(dfloat));
-  Dmatrix1D(mesh->N, mesh->Nq, mesh->gllz, mesh->Nq, mesh->gllz, mesh->D);
+  Dmatrix1D(mesh->N, mesh->Nq, mesh->gllz, mesh->Nq, mesh->gllz, mesh->D); // TODO uniform? this is not used for now multilevel gMG
 
   mesh->DW = (dfloat*) malloc(mesh->Nq * mesh->Nq * sizeof(dfloat));
   DWmatrix1D(mesh->N, mesh->D, mesh->DW);

@@ -333,10 +333,12 @@ std::pair<mesh_t*, mesh_t*> createMesh(MPI_Comm comm, int N, int cubN, bool cht,
   return {mesh, meshV};
 }
 
-mesh_t *createMeshMG(mesh_t *_mesh, int Nc)
+mesh_t *createMeshMG(mesh_t *_mesh, int Nc, int isRefine_)
 {
   mesh_t *mesh = new mesh_t();
   memcpy(mesh, _mesh, sizeof(mesh_t));
+  isRefine = isRefine_;
+  uniform = (isRefine) ? 1 : 0;
 
   const int cubN = 0;
   meshLoadReferenceNodesHex3D(mesh, Nc, cubN);
