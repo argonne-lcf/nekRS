@@ -796,7 +796,7 @@ void nrs_t::init()
     this->o_filterRT = lowPassFilterSetup(mesh, nModes);
   }
 
-  if (platform->options.compareArgs("VELOCITY REGULARIZATION METHOD", "EXPLICIT FILTER")) {
+  if (platform->options.compareArgs("VELOCITY REGULARIZATION METHOD", "EXPLICIT")) {
     int nModes = -1;
     dfloat strength = 1.0;
     platform->options.getArgs("VELOCITY EXPLICIT FILTER STRENGTH", strength);
