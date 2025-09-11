@@ -63,6 +63,7 @@ static void (*nek_uic_ptr)(int *);
 static void (*nek_end_ptr)(void);
 static void (*nek_restart_ptr)(char *, int *);
 static void (*nek_map_m_to_n_ptr)(double *a, int *na, double *b, int *nb, int *if3d, double *w, int *nw);
+static void (*nek_map2reg_3di_e_ptr)(double *a, int *na, double *b, int *nb);
 static int (*nek_lglel_ptr)(int *);
 static void (*nek_bootstrap_ptr)(int *, char *, char *, char *, int, int, int);
 static void (*nek_setup_ptr)(int *,
@@ -526,7 +527,7 @@ void getIC(void)
   }
 }
 
-void xm1N(dfloat *_x, dfloat *_y, dfloat *_z, int N, dlong Nelements)
+void xm1N(dfloat *_x, dfloat *_y, dfloat *_z, int N, dlong Nelements, int uniform)
 {
   const int Np = (N + 1) * (N + 1) * (N + 1);
   const int nxyz = nekData.nx1 * nekData.nx1 * nekData.nx1;
@@ -544,14 +545,27 @@ void xm1N(dfloat *_x, dfloat *_y, dfloat *_z, int N, dlong Nelements)
   std::vector<double> y(Np);
   std::vector<double> z(Np);
 
-  for (dlong e = 0; e < Nelements; ++e) {
-    map_m_to_n(x.data(), N + 1, &nekData.xm1[e * nxyz], nekData.nx1);
-    map_m_to_n(y.data(), N + 1, &nekData.ym1[e * nxyz], nekData.nx1);
-    map_m_to_n(z.data(), N + 1, &nekData.zm1[e * nxyz], nekData.nx1);
-    for (int i = 0; i < Np; i++) {
-      _x[i + e * Np] = x[i];
-      _y[i + e * Np] = y[i];
-      _z[i + e * Np] = z[i];
+  if (uniform) {
+    for (dlong e = 0; e < Nelements; ++e) {
+      nek_map2reg_3di_e_ptr(x.data(), N + 1, &nekData.xm1[e * nxyz], nekData.nx1);
+      nek_map2reg_3di_e_ptr(y.data(), N + 1, &nekData.ym1[e * nxyz], nekData.nx1);
+      nek_map2reg_3di_e_ptr(z.data(), N + 1, &nekData.zm1[e * nxyz], nekData.nx1);
+      for (int i = 0; i < Np; i++) {
+        _x[i + e * Np] = x[i];
+        _y[i + e * Np] = y[i];
+        _z[i + e * Np] = z[i];
+      }
+    }
+  } else {
+    for (dlong e = 0; e < Nelements; ++e) {
+      map_m_to_n(x.data(), N + 1, &nekData.xm1[e * nxyz], nekData.nx1, uniform);
+      map_m_to_n(y.data(), N + 1, &nekData.ym1[e * nxyz], nekData.nx1, uniform);
+      map_m_to_n(z.data(), N + 1, &nekData.zm1[e * nxyz], nekData.nx1, uniform);
+      for (int i = 0; i < Np; i++) {
+        _x[i + e * Np] = x[i];
+        _y[i + e * Np] = y[i];
+        _z[i + e * Np] = z[i];
+      }
     }
   }
 }
@@ -701,6 +715,8 @@ void set_usr_handles(const char *session_in, int verbose)
   check_error(dlerror());
   nek_map_m_to_n_ptr =
       (void (*)(double *, int *, double *, int *, int *, double *, int *))dlsym(handle, fname("map_m_to_n"));
+  nek_map2reg_3di_e_ptr =
+      (void (*)(double *, int *, double *, int *))dlsym(handle, fname("map2reg_3di_e"));
   check_error(dlerror());
   nek_nbid_ptr = (int (*)(int *))dlsym(handle, fname("nekf_nbid"));
   check_error(dlerror());

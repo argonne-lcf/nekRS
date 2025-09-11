@@ -22,7 +22,7 @@ void meshNekParallelConnectNodes(mesh_t* mesh)
   dlong localNodeCount = mesh->Np * mesh->Nelements;
 
   mesh->globalIds = (hlong*) calloc(localNodeCount, sizeof(hlong));
-  hlong ngv = nek::set_glo_num(mesh->N + 1, mesh->cht);
+  hlong ngv = nek::set_glo_num(mesh->N + 1, mesh->Nelements, mesh->isRefine);
   for(dlong id = 0; id < localNodeCount; ++id)
     mesh->globalIds[id] = nekData.glo_num[id];
 }

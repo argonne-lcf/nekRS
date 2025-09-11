@@ -33,7 +33,7 @@ void meshPhysicalNodesHex3D(mesh_t *mesh)
   std::vector<dfloat> ym(mesh->Nlocal);
   std::vector<dfloat> zm(mesh->Nlocal);
 
-  nek::xm1N(xm.data(), ym.data(), zm.data(), mesh->N, mesh->Nelements);
+  nek::xm1N(xm.data(), ym.data(), zm.data(), mesh->N, mesh->Nelements, mesh->uniform);
 
   mesh->o_x =
     platform->device.malloc<dfloat>(mesh->Nlocal);

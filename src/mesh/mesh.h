@@ -102,6 +102,9 @@ struct mesh_t {
   int dim;
   int Nverts, Nfaces, NfaceVertices;
 
+  int uniform = 0;
+  int isRefine = 0;
+
   int Nbid;
 
   int cht;
@@ -260,7 +263,7 @@ struct mesh_t {
 };
 
 std::pair<mesh_t*, mesh_t*> createMesh(MPI_Comm comm, int N, int cubN, bool cht, occa::properties &kernelInfo);
-mesh_t *createMeshMG(mesh_t *_mesh, int Nc);
+mesh_t *createMeshMG(mesh_t *_mesh, int Nc, int isRefine = 0);
 
 occa::properties meshKernelProperties(int N);
 // serial sort
