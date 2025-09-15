@@ -2,44 +2,38 @@
 #define nekrs_bctype_h_
 
 /*
-    header file used in C++ and Fortran files
+    header file used in C++, Fortran and okl files
 
-    IDs need to be index-1 and contiguous
-    lower value wins on shared edges/corners
+    boundary type IDs need to be index-1
+    lower value have higher precedence  
 */
 
-#define p_bcTypeW 1
-#define p_bcTypeINT 2
-#define p_bcTypeV 3
+#define p_bcType_interpolation 1
+#define p_bcType_zeroDirichlet 2
+#define p_bcType_udfDirichlet 3
 
-#define p_bcTypeSYMX 4
-#define p_bcTypeSYMY 5
-#define p_bcTypeSYMZ 6
-#define p_bcTypeSYM 7
+#define p_bcType_zeroDirichletX_zeroNeumann 4
+#define p_bcType_zeroDirichletY_zeroNeumann 5
+#define p_bcType_zeroDirichletZ_zeroNeumann 6
+#define p_bcType_zeroDirichletN_zeroNeumann 7
 
-#define p_bcTypeSHLX 8
-#define p_bcTypeSHLY 9
-#define p_bcTypeSHLZ 10
-#define p_bcTypeSHL 11
+#define p_bcType_zeroDirichletX_udfNeumann 8
+#define p_bcType_zeroDirichletY_udfNeumann 9
+#define p_bcType_zeroDirichletZ_udfNeumann 10
+#define p_bcType_zeroDirichletN_udfNeumann 11
 
-#define p_bcTypeONX 12
-#define p_bcTypeONY 13
-#define p_bcTypeONZ 14
+#define p_bcType_zeroDirichletYZ_zeroNeumann 12
+#define p_bcType_zeroDirichletXZ_zeroNeumann 13
+#define p_bcType_zeroDirichletXY_zeroNeumann 14
+#define p_bcType_zeroDirichletT_zeroNeumann 15
 
-#define p_bcTypeON 15
-#define p_bcTypeO 16
+#define p_bcType_udfRobin 16
 
-#define p_bcTypeMV 17
+#define p_bcType_zeroNeumann 17
+#define p_bcType_udfNeumann 18
 
-#define p_velNBcType 17
+#define p_bcType_none 19 
 
-#define p_bcTypeNone 99
-
-#define p_bcTypeINTS 1
-#define p_bcTypeS 2
-#define p_bcTypeF0 3
-#define p_bcTypeF 4
-
-#define p_scalNBcType 4
+#define p_NBcType 19
 
 #endif

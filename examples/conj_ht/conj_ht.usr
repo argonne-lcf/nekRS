@@ -28,13 +28,15 @@ c-----------------------------------------------------------------------
       nv = nx1*ny1*nz1*nelv
       nt = nx1*ny1*nz1*nelt
 
+      ifldt = 2
+
       call copy(wrk(1,1,1,1,1),vx,nv)
       call copy(wrk(1,1,1,1,2),vy,nv)
-      call copy(wrk(1,1,1,1,3), t,nt)
+      call copy(wrk(1,1,1,1,3), t(1,1,1,1,ifldt),nt)
 c      call load_fld('nekSolution.fld')
 c      call sub2(wrk(1,1,1,1,1),vx,nv)
 c      call sub2(wrk(1,1,1,1,2),vy,nv)
-c      call sub2(wrk(1,1,1,1,3), t,nt)
+c      call sub2(wrk(1,1,1,1,3), t(1,1,1,1,ifldt,nt)
 
       err_inf = glamax(wrk(1,1,1,1,1),nv)
       err_l2  = glsc3(wrk(1,1,1,1,1),bm1,wrk(1,1,1,1,1),nv)

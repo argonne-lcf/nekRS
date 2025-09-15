@@ -1,3 +1,5 @@
+userSections = CASEDATA
+
 [GENERAL]
 #verbose = true 
 polynomialOrder = 9
@@ -13,20 +15,28 @@ usr = "ethier.usr"
 oudf = "ethier.oudf"
 udf = "ethier.udf"
 
+scalars = VELX_DIR, VELX_NEU
+
 [MESH]
 file = "ethier.re2"
 
-[SCALAR00]
-boundaryTypeMap = codedFixedValue 
-residualTol = 1e-12
+[FLUID VELOCITY]
+solver = none
 rho = 1.0
-diffusivity = 1/100
+viscosity = 1/100
 
-[SCALAR01]
-boundaryTypeMap = codedFixedGradient 
+[SCALAR VELX_DIR]
+solver = none
+boundaryTypeMap = udfDirichlet 
 residualTol = 1e-12
-rho = 1.0
-diffusivity = 1/100
+transportCoeff = 1.0
+diffusionCoeff = 1/100
+
+[SCALAR VELX_NEU]
+boundaryTypeMap = udfNeumann
+residualTol = 1e-12
+transportCoeff = 1.0
+diffusionCoeff = 1/100
 
 [CASEDATA]
 P_U0 = 0.5

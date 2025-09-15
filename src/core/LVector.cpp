@@ -110,23 +110,23 @@ private:
         return val > 0.0 && val <= 1.0;
       });
       int err = allPositive ? 0 : 1;
-      MPI_Allreduce(MPI_IN_PLACE, &err, 1, MPI_INT, MPI_MAX, platform->comm.mpiComm);
+      MPI_Allreduce(MPI_IN_PLACE, &err, 1, MPI_INT, MPI_MAX, platform->comm.mpiComm());
       nekrsCheck(err,
-                 platform->comm.mpiComm,
+                 platform->comm.mpiComm(),
                  EXIT_FAILURE,
                  "%s\n",
                  "Encountered invDegreeL value outside of (0,1]");
 
       // on a single processor, T-vector and L-vector are the same --> invDegreeL is unity everywhere
-      if (platform->comm.mpiCommSize == 1) {
+      if (platform->comm.mpiCommSize() == 1) {
         const auto tol = 1e4 * std::numeric_limits<dfloat>::epsilon();
         bool allUnity = std::all_of(invDegreeL.begin(), invDegreeL.end(), [tol](auto &&val) {
           return std::abs(val - 1.0) < tol;
         });
         int err = allUnity ? 0 : 1;
-        MPI_Allreduce(MPI_IN_PLACE, &err, 1, MPI_INT, MPI_MAX, platform->comm.mpiComm);
+        MPI_Allreduce(MPI_IN_PLACE, &err, 1, MPI_INT, MPI_MAX, platform->comm.mpiComm());
         nekrsCheck(err,
-                   platform->comm.mpiComm,
+                   platform->comm.mpiComm(),
                    EXIT_FAILURE,
                    "%s\n",
                    "Encountered non-unity invDegreeL when P=1");
@@ -147,9 +147,9 @@ private:
     // EToL has only non-negative values
     bool allNonNegative = std::all_of(EToL.begin(), EToL.end(), [](auto &&val) { return val >= 0; });
     int err = allNonNegative ? 0 : 1;
-    MPI_Allreduce(MPI_IN_PLACE, &err, 1, MPI_INT, MPI_MAX, platform->comm.mpiComm);
+    MPI_Allreduce(MPI_IN_PLACE, &err, 1, MPI_INT, MPI_MAX, platform->comm.mpiComm());
     nekrsCheck(err,
-               platform->comm.mpiComm,
+               platform->comm.mpiComm(),
                EXIT_FAILURE,
                "%s\n",
                "Encountered negative value in EToL mapping");
@@ -157,8 +157,8 @@ private:
     // range of EToL is [0, NL)
     auto minmax = std::minmax_element(EToL.begin(), EToL.end());
     err = (*minmax.first == 0 && *minmax.second == NL - 1) ? 0 : 1;
-    MPI_Allreduce(MPI_IN_PLACE, &err, 1, MPI_INT, MPI_MAX, platform->comm.mpiComm);
-    nekrsCheck(err, platform->comm.mpiComm, EXIT_FAILURE, "%s\n", "EToL mapping is not in range [0, NL)");
+    MPI_Allreduce(MPI_IN_PLACE, &err, 1, MPI_INT, MPI_MAX, platform->comm.mpiComm());
+    nekrsCheck(err, platform->comm.mpiComm(), EXIT_FAILURE, "%s\n", "EToL mapping is not in range [0, NL)");
 
     // every value in [0,NL) is covered in the range of EToL
     std::set<dlong> uniqueOutputs;
@@ -166,8 +166,8 @@ private:
       uniqueOutputs.insert(val);
     }
     err = (uniqueOutputs.size() == NL) ? 0 : 1;
-    MPI_Allreduce(MPI_IN_PLACE, &err, 1, MPI_INT, MPI_MAX, platform->comm.mpiComm);
-    nekrsCheck(err, platform->comm.mpiComm, EXIT_FAILURE, "%s\n", "EToL mapping is not surjective");
+    MPI_Allreduce(MPI_IN_PLACE, &err, 1, MPI_INT, MPI_MAX, platform->comm.mpiComm());
+    nekrsCheck(err, platform->comm.mpiComm(), EXIT_FAILURE, "%s\n", "EToL mapping is not surjective");
 
     o_Lids.free();
 
@@ -255,7 +255,7 @@ void LVector_t<FPType>::optr(const std::vector<dlong> &fieldOffsets, occa::memor
 template <typename FPType> void LVector_t<FPType>::optr(occa::memory &o_L)
 {
   nekrsCheck(o_L.byte_size() <= this->size(),
-             platform->comm.mpiComm,
+             platform->comm.mpiComm(),
              EXIT_FAILURE,
              "LVector_t::optr o_L.byte_size() = %llu, while expecting at least %d entries!\n",
              o_L.byte_size(),
@@ -276,7 +276,7 @@ template <typename FPType> void LVector_t<FPType>::fieldOffsets(const std::vecto
 
   // offsets size _must_ match the number of fields
   nekrsCheck(fieldOffsets.size() != this->nFields(),
-             platform->comm.mpiComm,
+             platform->comm.mpiComm(),
              EXIT_FAILURE,
              "LVector_t::offsets offsets.size() = %ld, while expecting %d entries!\n",
              fieldOffsets.size(),
@@ -292,7 +292,7 @@ template <typename FPType> void LVector_t<FPType>::fieldOffsets(const std::vecto
   }
 
   const auto errString = errLogger.str();
-  nekrsCheck(errString.size() != 0, platform->comm.mpiComm, EXIT_FAILURE, "%s", errString.c_str());
+  nekrsCheck(errString.size() != 0, platform->comm.mpiComm(), EXIT_FAILURE, "%s", errString.c_str());
 
   std::copy(fieldOffsets.begin(), fieldOffsets.end(), this->fieldOffset_.begin());
   this->fieldOffsetScan_[0] = 0;

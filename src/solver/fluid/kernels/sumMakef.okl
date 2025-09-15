@@ -1,0 +1,64 @@
+  // BF := -1/dt * v^* = sum{beta_j * nlt^n-j} + 1/dt * sum{alpha_j * v^n-j}
+@kernel void sumMakef(const dlong N,
+                      @ restrict const dfloat *massMatrix,
+                      const dfloat idt,
+                      @ restrict const dfloat *coeffEXT,
+                      @ restrict const dfloat *coeffBDF,
+                      const dlong fieldOffset,
+                      const dlong fieldSumOffset,
+                      const dlong fieldOffsetJW,
+                      @ restrict const dfloat *RHO,
+                      @ restrict const dfloat *U,
+                      @ restrict const dfloat *ADV,
+                      @ restrict const dfloat *FU,
+                      @ restrict dfloat *BF)
+{
+    for (dlong id = 0; id < N; ++id; @tile(p_blockSize, @outer, @inner)) {
+      dfloat JW = massMatrix[id];
+
+      dfloat bdfx = 0;
+      dfloat bdfy = 0;
+      dfloat bdfz = 0;
+
+#if p_SUBCYCLING
+      bdfx += BF[id + 0 * fieldOffset];
+      bdfy += BF[id + 1 * fieldOffset];
+      bdfz += BF[id + 2 * fieldOffset];
+#else
+
+#pragma unroll p_nBDF
+      for (int s = 0; s < p_nBDF; s++) {
+#if p_MovingMesh
+        JW = massMatrix[id + s * fieldOffsetJW];
+#endif
+        const dlong sOffset = s * fieldSumOffset;
+        bdfx += coeffBDF[s] * JW * U[id + 0 * fieldOffset + sOffset];
+        bdfy += coeffBDF[s] * JW * U[id + 1 * fieldOffset + sOffset];
+        bdfz += coeffBDF[s] * JW * U[id + 2 * fieldOffset + sOffset];
+     }
+#endif
+
+      dfloat nltx = 0;
+      dfloat nlty = 0;
+      dfloat nltz = 0;
+#pragma unroll p_nEXT
+      for (int s = 0; s < p_nEXT; s++) {
+#if p_MovingMesh
+        JW = massMatrix[id + s * fieldOffsetJW];
+#endif
+        const dlong sOffset = s * fieldSumOffset;
+        nltx += JW * coeffEXT[s] * FU[id + 0 * fieldOffset + sOffset];
+        nlty += JW * coeffEXT[s] * FU[id + 1 * fieldOffset + sOffset];
+        nltz += JW * coeffEXT[s] * FU[id + 2 * fieldOffset + sOffset];
+#if p_ADVECTION
+        nltx -= JW * coeffEXT[s] * ADV[id + 0 * fieldOffset + sOffset];
+        nlty -= JW * coeffEXT[s] * ADV[id + 1 * fieldOffset + sOffset];
+        nltz -= JW * coeffEXT[s] * ADV[id + 2 * fieldOffset + sOffset];
+#endif
+      }
+
+      BF[id + 0 * fieldOffset] = nltx + idt * bdfx;
+      BF[id + 1 * fieldOffset] = nlty + idt * bdfy;
+      BF[id + 2 * fieldOffset] = nltz + idt * bdfz;
+    }
+}

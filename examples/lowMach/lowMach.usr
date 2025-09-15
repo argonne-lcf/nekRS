@@ -57,17 +57,17 @@ c      call printdiverr
       err(1) = max_err
       l2_err  = glsc3(VX_err,bm1,VX_err,ntot)/VOLVM1
       if (l2_err.gt.0) l2_err = sqrt(l2_err)
-      if(nid.eq.0)
-     & write(6,1) istep,time,max_err,l2_err
-    1 format(i8,1p3e12.4,' ERROR VX: MAX/L2')
+c      if(nid.eq.0)
+c     & write(6,1) istep,time,max_err,l2_err
+c    1 format(i8,1p3e12.4,' ERROR VX: MAX/L2')
 
       max_err = glmax(T_err,ntot)
       err(3) = max_err
       l2_err  = glsc3(T_err,bm1,T_err,ntot)/VOLVM1
       if (l2_err.gt.0) l2_err = sqrt(l2_err)
-      if(nid.eq.0)
-     & write(6,2) istep,time,max_err,l2_err
-    2 format(i8,1p3e12.4,' ERROR T: MAX/L2')
+c      if(nid.eq.0)
+c     & write(6,2) istep,time,max_err,l2_err
+c    2 format(i8,1p3e12.4,' ERROR T: MAX/L2')
 
 c      max_err = glmax(QTL_err,ntot)
 c      l2_err  = glsc3(QTL_err,bm1,QTL_err,ntot)/VOLVM1
@@ -86,9 +86,9 @@ c    3 format(i8,1p3e12.4,' ERROR QTL: MAX/L2')
       err(2) = max_err
       l2_err  = glsc3(pr_err,bm1,pr_err,ntot)/VOLVM1
       if (l2_err.gt.0) l2_err = sqrt(l2_err)
-      if(nid.eq.0)
-     & write(6,4) istep,time,max_err,l2_err
-    4 format(i8,1p3e12.4,' ERROR PR: MAX/L2')
+c      if(nid.eq.0)
+c     & write(6,4) istep,time,max_err,l2_err
+c    4 format(i8,1p3e12.4,' ERROR PR: MAX/L2')
 
 
       RETURN

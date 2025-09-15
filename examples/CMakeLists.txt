@@ -64,6 +64,10 @@ function(add target num_processes par_file cimodes fp32 working_directory build_
                COMMAND ${LAUNCHER} ${par_file} ${num_processes} --cimode ${cimode})
     endif()
 
+    if("${name}" STREQUAL "ethier_14") 
+      set_tests_properties(${name} PROPERTIES ENVIRONMENT "NEKRS_MPI_THREAD_MULTIPLE=1")
+    endif()
+
     set_tests_properties(${name} PROPERTIES ENVIRONMENT "FP32=${fp32_value}")
     set_tests_properties(${name} PROPERTIES RESOURCE_LOCK ${working_directory})
   endforeach()
@@ -123,6 +127,8 @@ add("channel" 2 "channel.par" "1;2" "${USE_FP32}" "${dir}" "${BUILD_ONLY}")
 add("shlChannel" 2 "channel.par" "1;2" "${USE_FP32}" "${dir}" "${BUILD_ONLY}")
 
 add("ktauChannel" 2 "channel.par" "1;2" "${USE_FP32}" "${dir}" "${BUILD_ONLY}")
+
+add("periodicHill" 2 "periodicHill.par" "1;2;3" "${USE_FP32}" "${dir}" "${BUILD_ONLY}")
 
 add_eddy_neknek()
 add_eddy_nekneknek()

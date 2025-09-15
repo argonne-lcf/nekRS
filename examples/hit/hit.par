@@ -1,6 +1,11 @@
+userSections = CASEDATA 
+
 [GENERAL]
-polynomialOrder = 7
-cubaturePolynomialOrder = 9 
+polynomialOrder = 3
+cubaturePolynomialOrder = 4
+
+#polynomialOrder = 7
+#cubaturePolynomialOrder = 9 
 
 #startFrom = "r.fld"+time=0
 stopAt = endTime
@@ -14,26 +19,22 @@ checkpointInterval = 10
 
 regularization = hpfrt + nModes=1 + scalingCoeff=5
 
-[PRESSURE]
+[FLUID PRESSURE]
 residualTol = 1e-04
-
-solver = pfcg 
+solver = cg+flexible 
 smootherType = Jac+FourthOptChebyshev
 
-[VELOCITY]
+[FLUID VELOCITY]
 boundaryTypeMap = none
 rho = 1.0
 
 viscosity = 1 / 60  # based on Taylor-scale Re  
 residualTol = 1e-06
 
-[SCALAR00]
-solver = none
-
 [CASEDATA]
 uPrime = 1.0
 
-[BOOMERAMG]
+[FLUID PRESSURE BOOMERAMG]
 #smootherType = 18
 iterations = 1
 chebyshevRelaxOrder = 1

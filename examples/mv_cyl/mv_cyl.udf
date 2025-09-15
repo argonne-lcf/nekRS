@@ -19,20 +19,11 @@ deviceMemory<dfloat> o_kappa;
 
 #include "mv_cyl.oudf"
 
-void codedFixedValueMesh(bcData *bc)
-{
-  const dfloat vPiston = p_AMP*sin(p_OMEGA*bc->time);
-
-  bc->meshu = -vPiston * bc->nx;
-  bc->meshv = -vPiston * bc->ny;
-  bc->meshw = -vPiston * bc->nz;
-}
-
 #endif
 
 void userq(double time)
 {
-  lowMach::dpdt(nrs->cds->o_NLT);
+  lowMach::dpdt(nrs->scalar->o_EXT);
 }
 
 void qtl(double time)
@@ -42,24 +33,22 @@ void qtl(double time)
 
 void uservp(double time)
 {
-  auto mesh = nrs->mesh;
-  auto cds = nrs->cds;
+  auto mesh = nrs->meshV;
 
   fillProp(mesh->Nelements,
-           nrs->fieldOffset,
-           nrs->cds->fieldOffset[0],
+           nrs->fluid->fieldOffset,
+           nrs->scalar->fieldOffset(),
            nrs->p0th[0],
-           cds->o_S,
-           nrs->o_prop,
-           cds->o_prop,
+           nrs->scalar->o_S,
+           nrs->fluid->o_prop,
+           nrs->scalar->o_prop,
            o_beta,
            o_kappa);
 
-  if (!platform->options.compareArgs("MESH SOLVER", "NONE")) {
+  if (!platform->options.compareArgs("GEOM SOLVER", "NONE")) {
     // moving mesh parameters
     const dfloat nu = 1.0;
-    auto o_mesh_diff = nrs->o_prop + 2 * nrs->fieldOffset;
-    platform->linAlg->fill(nrs->mesh->Nlocal, nu, o_mesh_diff);
+    platform->linAlg->fill(nrs->meshV->Nlocal, nu, nrs->geom->o_prop);
   }
 }
 
@@ -101,7 +90,7 @@ void UDF_Setup0(MPI_Comm comm, setupAide &options)
 void UDF_Setup()
 {
   nrs->userProperties = &uservp;
-  nrs->userScalarSource = &userq;
+  nrs->userSource = &userq;
 
   o_beta.resize(nrs->fieldOffset);
   o_kappa.resize(nrs->fieldOffset);
@@ -116,12 +105,11 @@ void UDF_Setup()
 
 void UDF_ExecuteStep(double time, int tstep)
 {
-  auto mesh = nrs->mesh;
-  auto cds = nrs->cds;
+  auto mesh = nrs->meshV;
 
   *nek::ptr<double>("dp0thdt") = nrs->dp0thdt; // required for CI testing, not copied by default
 
-  if (platform->options.compareArgs("MESH SOLVER", "NONE")) {
+  if (platform->options.compareArgs("GEOM SOLVER", "NONE")) {
 
     // rotate back into reference frame
     poolDeviceMemory<dfloat> o_height(mesh->Nlocal);    
@@ -132,15 +120,16 @@ void UDF_ExecuteStep(double time, int tstep)
                              mesh->o_y,
                              o_height);
 
-    const dfloat hmin = platform->linAlg->min(mesh->Nlocal, o_height, platform->comm.mpiComm);
-    const dfloat hmax = platform->linAlg->max(mesh->Nlocal, o_height, platform->comm.mpiComm);
+    const dfloat hmin = platform->linAlg->min(mesh->Nlocal, o_height, platform->comm.mpiComm());
+    const dfloat hmax = platform->linAlg->max(mesh->Nlocal, o_height, platform->comm.mpiComm());
+
     userMeshVelocity(mesh->Nelements,
                      nrs->fieldOffset,
                      hmin,
                      hmax,
                      time,
                      o_height,
-                     mesh->o_U);
+                     nrs->geom->o_U);
   }
 
   if (nrs->checkpointStep) {

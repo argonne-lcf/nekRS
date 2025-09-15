@@ -1,3 +1,5 @@
+userSections = CASEDATA 
+
 [GENERAL]
 #verbose=true
 polynomialOrder = 7
@@ -7,25 +9,29 @@ dt = 1e-3
 timeStepper = tombo3
 checkpointInterval = 50
 
+scalars = TEMPERATURE 
+
 usr = "mv_cyl.usr"
 
 [MESH]
+file = "mv_cyl.re2"
+
+[GEOM]
 residualTol = 1e-6
 solver = pcg+block #user
 initialGuess = projection+nVector=1
-file = "mv_cyl.re2"
 
-[PRESSURE]
+[FLUID PRESSURE]
 residualTol = 1e-8
 initialGuess = previous
 
-[VELOCITY]
-boundaryTypeMap = codedFixedValue+moving, zeroValue, zeroNValue/zeroGradient  
+[FLUID VELOCITY]
+boundaryTypeMap = udfDirichlet+moving, zeroDirichlet, zeroDirichletN/zeroNeumann  
 residualTol = 1e-12
 
-[TEMPERATURE]
-boundaryTypeMap = zeroGradient, zeroGradient, zeroGradient
-residualTol = 1e-12
+[SCALAR TEMPERATURE]
+boundaryTypeMap = zeroNeumann, zeroNeumann, zeroNeumann
+residualTol = 1e-9
 
 [CASEDATA]
 XLEN = 1.0

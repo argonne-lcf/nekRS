@@ -50,7 +50,7 @@ c
       common /scrpre/ uc(lcr*lelt),w(2*lx1*ly1*lz1)
 
       call map_f_to_c_l2_bilin(uf,vf,w)
-      call fgslib_crs_solve(xxth(ifield),uc,uf)
+      call crs_solve(xxth(ifield),uc,uf)
       call map_c_to_f_l2_bilin(uf,uc,w)
 
       return
@@ -214,7 +214,7 @@ c      endif
       call chcopy(fname1(lamgn+1),char(0),1)
 
       ierr = 0
-      call fgslib_crs_setup(xxth(ifield),isolver,nekcomm,mp,ntot,
+      call crs_setup(xxth(ifield),isolver,nekcomm,mp,ntot,
      $     se_to_gcrs,nz,ia,ja,a, null_space, crs_param, 
      $     amgfile_c,ierr)
       ierr = iglmax(ierr,1)
@@ -1525,7 +1525,7 @@ c
 #ifdef TIMER
       etime1=dnekclock()
 #endif
-      call fgslib_crs_solve(xxth(ifield),uc,vc)
+      call crs_solve(xxth(ifield),uc,vc)
 #ifdef TIMER
       tcrsl=tcrsl+dnekclock()-etime1
 #endif
@@ -2348,7 +2348,7 @@ c     -------------------------------------------------
       endif
 
 c     Quick check on maximum #dofs:
-      m    = nxyz*nelt
+      m    = nxyz*nel
       ngvm = i8glmax(glo_num,m)
       ngvv = ngvv + ngve + ngvs  ! number of unique ids w/o interior 
       ngvi = ngvi + ngvv         ! total number of unique ids 
@@ -2445,7 +2445,7 @@ c     Assign a number (rank) to each unique edge
       do i=1,4*nel
          enum(i,1) = etuple(3,i)
       enddo
-      n_unique_edges = iglmax(enum,4*nel)
+      n_unique_edges = i8glmax(enum,4*nel)
 
 c= = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = =
 c     Assign global vertex numbers to SEM nodes on each edge
@@ -2521,7 +2521,7 @@ c
       endif
 
 c     Quick check on maximum #dofs:
-      m    = nxyz*nelt
+      m    = nxyz*nel
       ngvm = i8glmax(glo_num,m)
       ngvv = ngvv + ngve         ! number of unique ids w/o interior 
       ngvi = ngvi + ngvv         ! total number of unique ids 

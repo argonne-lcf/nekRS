@@ -2,40 +2,31 @@ deviceMemory<dfloat> o_qcriterion;
 
 #ifdef __okl__
 
-@kernel void
-magSqr(const dlong Ntotal, const dlong offset, @ restrict const dfloat *U, @ restrict dfloat *uSqr)
-{
-  for (dlong n = 0; n < Ntotal; ++n; @tile(p_blockSize, @outer, @inner)) {
-    uSqr[n + 0 * offset] = U[n + 0 * offset] * U[n + 0 * offset] + U[n + 1 * offset] * U[n + 1 * offset] +
-                           U[n + 2 * offset] * U[n + 2 * offset];
-  }
-}
-
 #endif
 
 void printDiagnostics(nrs_t *nrs, double time, int tstep)
 {
-  auto mesh = nrs->mesh;
+  auto mesh = nrs->meshV;
 
   dfloat mue, rho;
-  platform->options.getArgs("VISCOSITY", mue);
-  platform->options.getArgs("DENSITY", rho);
+  platform->options.getArgs("FLUID VISCOSITY", mue);
+  platform->options.getArgs("FLUID DENSITY", rho);
   const dfloat nu = mue / rho;
 
   const auto energy = [&]() {
     const dfloat scale = 0.5 / mesh->volume;
-    poolDeviceMemory<dfloat> o_magSqrU(nrs->fieldOffset);
-    magSqr(mesh->Nlocal, nrs->fieldOffset, nrs->o_U, o_magSqrU);
+    poolDeviceMemory<dfloat> o_magSqrU(mesh->Nlocal);
+    platform->linAlg->magSqrVector(mesh->Nlocal, nrs->fieldOffset, nrs->fluid->o_U, o_magSqrU);
     return scale * platform->linAlg->innerProd(mesh->Nlocal,
                        o_magSqrU,
                        mesh->o_Jw,
-                       platform->comm.mpiComm,
+                       platform->comm.mpiComm(),
                        0);
   }();
 
   const auto enstrophy = [&] () {
     const dfloat scale = 0.5 / mesh->volume;
-    auto o_curlU = opSEM::strongCurl(mesh, nrs->fieldOffset, nrs->o_U);
+    auto o_curlU = opSEM::strongCurl(mesh, nrs->fieldOffset, nrs->fluid->o_U);
 
     static poolDeviceMemory<dfloat> o_invJw;
     if (!o_invJw.isInitialized()) {
@@ -45,39 +36,41 @@ void printDiagnostics(nrs_t *nrs, double time, int tstep)
 
     platform->linAlg->axmyMany(mesh->Nlocal, mesh->dim, nrs->fieldOffset, 0, 1.0, o_invJw, o_curlU); 
     poolDeviceMemory<dfloat> o_magCurlU(nrs->fieldOffset);
-    magSqr(mesh->Nlocal, nrs->fieldOffset, o_curlU, o_magCurlU);
+    platform->linAlg->magSqrVector(mesh->Nlocal, nrs->fieldOffset, o_curlU, o_magCurlU);
 
     return scale * platform->linAlg->innerProd(mesh->Nlocal,
                        o_magCurlU,
                        mesh->o_Jw,
-                       platform->comm.mpiComm,
+                       platform->comm.mpiComm(),
                        0);
   }();
 
-  if (platform->comm.mpiRank == 0) {
+  if (platform->comm.mpiRank() == 0) {
     printf("  time= %g  enst= %g  energy= %g  -2*nu*enst= %g", time, enstrophy, energy, -2 * nu * enstrophy);
   }
 
   static dfloat energyComputed[3] = {0};
 
   if (tstep) {
+    static std::vector<dfloat> coeffBDF(nrs->fluid->o_coeffBDF.size());
+    nrs->fluid->o_coeffBDF.copyTo(coeffBDF.data());
     dfloat sum = 0.0;
-    for (int i = 0; i < nrs->nBDF; ++i) {
-      sum += nrs->coeffBDF[i] * energyComputed[i];
+    for (int i = 0; i < coeffBDF.size(); ++i) {
+      sum += coeffBDF[i] * energyComputed[i];
     }
     energyComputed[2] = energyComputed[1];
     energyComputed[1] = energyComputed[0];
     energyComputed[0] = energy;
     const dfloat dissipationRate = (nrs->g0 * energy - sum) / nrs->dt[0];
     const dfloat nuEff = -dissipationRate / (2 * enstrophy);
-    if (platform->comm.mpiRank == 0) {
+    if (platform->comm.mpiRank() == 0) {
       printf("  d(energy)/dt= %g  nuEff/nu= %g", dissipationRate, nuEff / nu);
     }
   } else {
     energyComputed[0] = energy;
   }
 
-  if (platform->comm.mpiRank == 0) {
+  if (platform->comm.mpiRank() == 0) {
     printf("\n");
   }
 }
@@ -95,7 +88,7 @@ void UDF_Setup0(MPI_Comm comm, setupAide &options)
 
 void UDF_Setup()
 {
-  auto mesh = nrs->mesh;
+  auto mesh = nrs->meshV;
 
   if (platform->options.getArgs("RESTART FILE NAME").empty()) {
     dfloat U0, V0, W0;
@@ -111,7 +104,7 @@ void UDF_Setup()
       U[n + 1 * nrs->fieldOffset] = -cos(x[n]) * sin(y[n]) * cos(z[n]) + V0;
       U[n + 2 * nrs->fieldOffset] = W0;
     }
-    nrs->o_U.copyFrom(U.data(), U.size());
+    nrs->fluid->o_U.copyFrom(U.data(), U.size());
   }
 
   o_qcriterion.resize(mesh->Nlocal);

@@ -11,29 +11,31 @@ checkpointInterval = 50
 
 constFlowRate = meanVelocity=1.0 + direction=X
 
+scalars = temperature, k, tau
+
 [PROBLEMTYPE]
 equation = navierStokes+variableViscosity
 
-[PRESSURE]
+[FLUID PRESSURE]
 residualTol = 1e-04
 
-[VELOCITY]
-boundaryTypeMap = zeroValue, zeroYValue/zeroGradient 
+[FLUID VELOCITY]
+boundaryTypeMap = zeroDirichlet, zeroDirichletY/zeroNeumann 
 residualTol = 1e-06
 rho = 1.0
 viscosity = 1/43500. 
 
-[SCALAR00]
+[SCALAR TEMPERATURE]
 #solver = none
-boundaryTypeMap = codedFixedValue, zeroGradient 
+boundaryTypeMap = udfDirichlet, zeroNeumann 
 residualTol = 1e-06
-rho = 1.0
-diffusivity = 1/43500. 
+transportCoeff = 1.0
+diffusionCoeff = 1/43500. 
 
-[SCALAR01] # k
-boundaryTypeMap = codedFixedValue, zeroGradient 
+[SCALAR TAU]  
+boundaryTypeMap = udfDirichlet, zeroNeumann 
 residualTol = 1e-08
 
-[SCALAR02] # tau
-boundaryTypeMap = codedFixedValue, zeroGradient 
-residualTol = 1e-06
+[SCALAR K]
+boundaryTypeMap = udfDirichlet, zeroNeumann 
+residualTol = 1e-08

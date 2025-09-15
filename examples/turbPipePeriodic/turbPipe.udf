@@ -6,20 +6,18 @@ static dfloat dt0;
 
 #ifdef __okl__
 
-#include "turbPipe.oudf"
-
 #endif
 
 void userf(double time)
 {
-  auto mesh = nrs->mesh;
+  auto mesh = nrs->meshV;
   dfloat mue, rho;
-  platform->options.getArgs("VISCOSITY", mue);
-  platform->options.getArgs("DENSITY", rho);
+  platform->options.getArgs("FLUID VISCOSITY", mue);
+  platform->options.getArgs("FLUID DENSITY", rho);
   const dfloat RE_B = rho / mue;
   const dfloat DPDZ = 4 * (2 * Re_tau / RE_B) * (2 * Re_tau / RE_B);
 
-  auto o_FUz = nrs->o_NLT + 2 * nrs->fieldOffset;
+  auto o_FUz = nrs->fluid->o_EXT + 2 * nrs->fluid->fieldOffset;
   platform->linAlg->fill(mesh->Nlocal, DPDZ, o_FUz);
 }
 
@@ -38,21 +36,21 @@ void UDF_Setup0(MPI_Comm comm, setupAide &options)
 
 void UDF_Setup()
 {
-  auto mesh = nrs->mesh;
+  auto mesh = nrs->meshV;
 
   if (platform->options.compareArgs("CONSTANT FLOW RATE", "FALSE")) {
     // assign function pointer to drive flow by constant mean pressure gradient
-    nrs->userVelocitySource = &userf;
+    nrs->userSource = &userf;
   }
 
   if (platform->options.getArgs("RESTART FILE NAME").empty()) {
-    platform->linAlg->rescale(0.0, zLength, mesh->o_z, platform->comm.mpiComm);
+    platform->linAlg->rescale(0.0, zLength, mesh->o_z, platform->comm.mpiComm());
 
     auto [x, y, z] = mesh->xyzHost();
 
     auto rand = randomVector<dfloat>(mesh->Nlocal, -1.0, 1.0, true);
 
-    std::vector<dfloat> U(mesh->dim * nrs->fieldOffset, 0.0);
+    std::vector<dfloat> U(mesh->dim * nrs->fluid->fieldOffset, 0.0);
 
     for (int n = 0; n < mesh->Nlocal; n++) {
       const auto R = 0.5;
@@ -82,12 +80,12 @@ void UDF_Setup()
       if (amp_sin < -amp_clip) amp_sin = -amp_clip;
       if (rr > (1 - blt)) uz += amp_sin;
 
-      U[n + 0 * nrs->fieldOffset] = 0.05 * pow(rand[n], 2);
-      U[n + 1 * nrs->fieldOffset] = 0.1  * pow(rand[n], 3);
-      U[n + 2 * nrs->fieldOffset] = uz + 0.01 * rand[n];
+      U[n + 0 * nrs->fluid->fieldOffset] = 0.05 * pow(rand[n], 2);
+      U[n + 1 * nrs->fluid->fieldOffset] = 0.1  * pow(rand[n], 3);
+      U[n + 2 * nrs->fluid->fieldOffset] = uz + 0.01 * rand[n];
     }
 
-    nrs->o_U.copyFrom(U.data(), U.size());
+    nrs->fluid->o_U.copyFrom(U.data(), U.size());
   }
 
 }

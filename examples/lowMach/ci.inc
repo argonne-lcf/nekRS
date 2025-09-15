@@ -19,9 +19,9 @@ void ciSetup(MPI_Comm comm, setupAide &options)
   }
   options.setArgs("BDF ORDER", "2");
   options.setArgs("ADVECTION TYPE", "CONVECTIVE+CUBATURE");
-  options.setArgs("VELOCITY SOLVER TOLERANCE", std::string("1e-12"));
-  options.setArgs("PRESSURE SOLVER TOLERANCE", std::string("1e-08"));
-  options.setArgs("SCALAR01 SOLVER TOLERANCE", std::string("1e-12"));
+  options.setArgs("FLUID VELOCITY SOLVER TOLERANCE", std::string("1e-12"));
+  options.setArgs("FLUID PRESSURE SOLVER TOLERANCE", std::string("1e-08"));
+  options.setArgs("SCALAR00 SOLVER TOLERANCE", std::string("1e-12"));
 
   // set up CVODE solver details
   if (ciMode == 3) {
@@ -47,16 +47,16 @@ void ciSetup(MPI_Comm comm, setupAide &options)
 
 dfloat computeLInfError(nrs_t *nrs, occa::memory o_a, occa::memory o_b)
 {
-  auto *mesh = nrs->mesh;
+  auto mesh = nrs->meshV;
   auto o_tmp = platform->device.malloc(o_a.byte_size());
-  platform->linAlg->axpbyzMany(mesh->Nlocal, nrs->NVfields, nrs->fieldOffset, 1.0, o_a, -1.0, o_b, o_tmp);
+  platform->linAlg->axpbyzMany(mesh->Nlocal, mesh->dim, nrs->fieldOffset, 1.0, o_a, -1.0, o_b, o_tmp);
 
   dfloat LInfError = 0.0;
 
-  for (int fld = 0; fld < nrs->NVfields; ++fld) {
+  for (int fld = 0; fld < mesh->dim; ++fld) {
     auto o_fld_slice = o_tmp + fld * nrs->fieldOffset;
     platform->linAlg->abs(mesh->Nlocal, o_fld_slice);
-    LInfError = std::max(LInfError, platform->linAlg->max(mesh->Nlocal, o_fld_slice, platform->comm.mpiComm));
+    LInfError = std::max(LInfError, platform->linAlg->max(mesh->Nlocal, o_fld_slice, platform->comm.mpiComm()));
   }
 
   o_tmp.free();
@@ -66,7 +66,7 @@ dfloat computeLInfError(nrs_t *nrs, occa::memory o_a, occa::memory o_b)
 
 void setField(nrs_t *nrs, occa::memory &o_fld, int field)
 {
-  auto *mesh = nrs->mesh;
+  auto mesh = nrs->meshV;
   occa::memory o_dir;
   if (field == 0) {
     o_dir = mesh->o_x;
@@ -78,20 +78,20 @@ void setField(nrs_t *nrs, occa::memory &o_fld, int field)
     o_dir = mesh->o_z;
   }
 
-  auto o_fld_slice = o_fld + field * nrs->fieldOffset;
+  auto o_fld_slice = o_fld + field * mesh->fieldOffset;
 
   o_fld_slice.copyFrom(o_dir, mesh->Nlocal);
 }
 
 void testDirection(nrs_t *nrs, std::string dir)
 {
-  auto *mesh = nrs->mesh;
-  auto o_fields = platform->device.malloc<dfloat>(nrs->NVfields * nrs->fieldOffset);
-  auto o_refFields = platform->device.malloc<dfloat>(nrs->NVfields * nrs->fieldOffset);
-  for (int fld = 0; fld < nrs->NVfields; ++fld) {
+  auto mesh = nrs->meshV;
+  auto o_fields = platform->device.malloc<dfloat>(mesh->dim * nrs->fieldOffset);
+  auto o_refFields = platform->device.malloc<dfloat>(mesh->dim * nrs->fieldOffset);
+  for (int fld = 0; fld < mesh->dim; ++fld) {
     setField(nrs, o_fields, fld);
   }
-  planarAvg(mesh, dir, NELGX, NELGY, NELGZ, nrs->NVfields, nrs->fieldOffset, o_fields);
+  planarAvg(mesh, dir, NELGX, NELGY, NELGZ, mesh->dim, nrs->fieldOffset, o_fields);
 
   if (dir == "x") {
     platform->linAlg->fill(mesh->Nlocal, 0.0, o_refFields);
@@ -115,7 +115,7 @@ void testDirection(nrs_t *nrs, std::string dir)
 
   auto LInfError = computeLInfError(nrs, o_fields, o_refFields);
   if (LInfError > tol) {
-    CiFailTest();
+    CiFailTest("planarAvg");
   }
 
   o_fields.free();
@@ -128,75 +128,65 @@ void testFusedPlanarAvg(nrs_t *nrs, std::string dir)
     CiFailTest();
   }
 
-  auto o_fields = platform->device.malloc<dfloat>(nrs->NVfields * nrs->fieldOffset);
-  auto o_refFields = platform->device.malloc<dfloat>(nrs->NVfields * nrs->fieldOffset);
-  for (int fld = 0; fld < nrs->NVfields; ++fld) {
+  auto mesh = nrs->meshV;
+  auto o_fields = platform->device.malloc<dfloat>(mesh->dim * mesh->fieldOffset);
+  auto o_refFields = platform->device.malloc<dfloat>(o_fields.size());
+  for (int fld = 0; fld < mesh->dim; ++fld) {
     setField(nrs, o_fields, fld);
   }
 
-  o_refFields.copyFrom(o_fields, nrs->NVfields * nrs->fieldOffset);
+  o_refFields.copyFrom(o_fields);
 
   const auto firstDir = dir.substr(0, 1);
   const auto secondDir = dir.substr(1);
 
-  auto *mesh = nrs->mesh;
-
   // (1) x, z == z, x, e.g.
-  planarAvg(mesh, firstDir, NELGX, NELGY, NELGZ, nrs->NVfields, nrs->fieldOffset, o_fields);
-  planarAvg(mesh, secondDir, NELGX, NELGY, NELGZ, nrs->NVfields, nrs->fieldOffset, o_fields);
+  planarAvg(mesh, firstDir, NELGX, NELGY, NELGZ, mesh->dim, mesh->fieldOffset, o_fields);
+  planarAvg(mesh, secondDir, NELGX, NELGY, NELGZ, mesh->dim, mesh->fieldOffset, o_fields);
 
-  planarAvg(mesh, secondDir, NELGX, NELGY, NELGZ, nrs->NVfields, nrs->fieldOffset, o_refFields);
-  planarAvg(mesh, firstDir, NELGX, NELGY, NELGZ, nrs->NVfields, nrs->fieldOffset, o_refFields);
+  planarAvg(mesh, secondDir, NELGX, NELGY, NELGZ, mesh->dim, mesh->fieldOffset, o_refFields);
+  planarAvg(mesh, firstDir, NELGX, NELGY, NELGZ, mesh->dim, mesh->fieldOffset, o_refFields);
 
   const auto tol = 50. * std::numeric_limits<dfloat>::epsilon();
 
-  auto LInfError = computeLInfError(nrs, o_fields, o_refFields);
-  if (LInfError > tol) {
-    CiFailTest();
-  }
+  auto LInfError = platform->linAlg->maxRelativeError(mesh->Nlocal, mesh->dim, mesh->fieldOffset, tol, o_fields, o_refFields, platform->comm.mpiComm());
+  CiEvalTest("planarAvg_ordering" + dir + " relLinf = " + to_string_f(LInfError), LInfError < tol);
 
   // (2) xz == x, z, e.g.
 
-  for (int fld = 0; fld < nrs->NVfields; ++fld) {
+  for (int fld = 0; fld < mesh->dim; ++fld) {
     setField(nrs, o_fields, fld);
   }
-  o_refFields.copyFrom(o_fields, nrs->NVfields * nrs->fieldOffset);
+  o_refFields.copyFrom(o_fields);
 
-  planarAvg(mesh, dir, NELGX, NELGY, NELGZ, nrs->NVfields, nrs->fieldOffset, o_fields);
+  planarAvg(mesh, dir, NELGX, NELGY, NELGZ, mesh->dim, mesh->fieldOffset, o_fields);
 
-  planarAvg(mesh, firstDir, NELGX, NELGY, NELGZ, nrs->NVfields, nrs->fieldOffset, o_refFields);
-  planarAvg(mesh, secondDir, NELGX, NELGY, NELGZ, nrs->NVfields, nrs->fieldOffset, o_refFields);
+  planarAvg(mesh, firstDir, NELGX, NELGY, NELGZ, mesh->dim, mesh->fieldOffset, o_refFields);
+  planarAvg(mesh, secondDir, NELGX, NELGY, NELGZ, mesh->dim, mesh->fieldOffset, o_refFields);
 
-  LInfError = computeLInfError(nrs, o_fields, o_refFields);
-  if (LInfError > tol) {
-    CiFailTest();
-  }
+  LInfError = platform->linAlg->maxRelativeError(mesh->Nlocal, mesh->dim, mesh->fieldOffset, tol, o_fields, o_refFields, platform->comm.mpiComm());
+  CiEvalTest("planarAvgFused2_" + dir + " relLinf = " + to_string_f(LInfError), LInfError < tol);
 
   // (3) xz, zx both work
 
-  for (int fld = 0; fld < nrs->NVfields; ++fld) {
+  for (int fld = 0; fld < mesh->dim; ++fld) {
     setField(nrs, o_fields, fld);
   }
-  o_refFields.copyFrom(o_fields, nrs->NVfields * nrs->fieldOffset);
+  o_refFields.copyFrom(o_fields);
 
-  planarAvg(mesh, secondDir + firstDir, NELGX, NELGY, NELGZ, nrs->NVfields, nrs->fieldOffset, o_fields);
+  planarAvg(mesh, secondDir + firstDir, NELGX, NELGY, NELGZ, mesh->dim, mesh->fieldOffset, o_fields);
 
-  planarAvg(mesh, firstDir, NELGX, NELGY, NELGZ, nrs->NVfields, nrs->fieldOffset, o_refFields);
-  planarAvg(mesh, secondDir, NELGX, NELGY, NELGZ, nrs->NVfields, nrs->fieldOffset, o_refFields);
+  planarAvg(mesh, firstDir, NELGX, NELGY, NELGZ, mesh->dim, mesh->fieldOffset, o_refFields);
+  planarAvg(mesh, secondDir, NELGX, NELGY, NELGZ, mesh->dim, mesh->fieldOffset, o_refFields);
 
-  LInfError = computeLInfError(nrs, o_fields, o_refFields);
-  if (LInfError > tol) {
-    CiFailTest();
-  }
-
-  o_fields.free();
-  o_refFields.free();
+  LInfError = platform->linAlg->maxRelativeError(mesh->Nlocal, mesh->dim, mesh->fieldOffset, tol, o_fields, o_refFields, platform->comm.mpiComm());
+  CiEvalTest("planarAvgFused3_" + dir + " relLinf = " + to_string_f(LInfError), LInfError < tol);
 }
 
 void ciTestPlanarAvg(nrs_t *nrs)
 {
-  const auto *mesh = nrs->mesh;
-  const int rank = platform->comm.mpiRank;
+  const auto mesh = nrs->meshV;
+  const int rank = platform->comm.mpiRank();
 
   platform->par->extract("casedata", "number_elements_x", NELGX);
   platform->par->extract("casedata", "number_elements_y", NELGY);
@@ -217,9 +207,9 @@ void ciTestErrors(nrs_t *nrs, double time, int tstep)
     ciTestPlanarAvg(nrs);
   }
 
-  if (nrs->cds->cvode) {
-    numCVODERHS += nrs->cds->cvode->numRHSEvals();
-    numCVODERHS += nrs->cds->cvode->numLinIters();
+  if (nrs->scalar->cvode) {
+    numCVODERHS += nrs->scalar->cvode->numRHSEvals();
+    numCVODERHS += nrs->scalar->cvode->numLinIters();
   }
 
   if (!nrs->lastStep) {
@@ -228,7 +218,7 @@ void ciTestErrors(nrs_t *nrs, double time, int tstep)
 
   numCVODERHS /= tstep;
 
-  const int rank = platform->comm.mpiRank;
+  const int rank = platform->comm.mpiRank();
 
   nrs->copyToNek(time, tstep);
   nek::userchk();
@@ -256,13 +246,12 @@ void ciTestErrors(nrs_t *nrs, double time, int tstep)
 
   const dfloat EPS = (ciMode == 3) ? 1e-1 : 1e-2;
 
-  if (rank == 0) {
-    printf("relative error to target: vx=%g pr=%g s=%g\n", vxErr, prErr, sErr);
-  }
+  CiEvalTest("solution Linf vx,pr,T = " 
+             + to_string_f(err[0]) + "  " + to_string_f(err[1]) + "  " + to_string_f(err[2]), 
+             vxErr < EPS && prErr < EPS && sErr < EPS);
 
-  (vxErr < EPS && prErr < EPS && sErr < EPS) ? (CiPassTest()) : (CiFailTest());
 
-  if (nrs->cds->cvode) {
+  if (nrs->scalar->cvode) {
     dfloat expectedCVODERHS = 3.6;
     if (rank == 0) {
       printf("CVODE RHS evaluations per timestep: expected = %g, actual = %g\n",

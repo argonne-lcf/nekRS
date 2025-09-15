@@ -12,12 +12,6 @@
 namespace avm
 {
 
-occa::kernel relativeMassAveragedModeKernel;
-
-occa::kernel computeMaxViscKernel;
-occa::kernel interpolateP1Kernel;
-occa::kernel modesKernel;
-
 occa::memory o_vertexIds;
 occa::memory o_r;
 occa::memory o_s;
@@ -100,10 +94,10 @@ occa::memory baseLineDecayKlockner(int _N)
 
 } // namespace
 
-void setup(mesh_t *mesh_, oogs_t *gsh_)
+void setup(mesh_t *mesh_)
 {
   mesh = mesh_;
-  gsh = gsh_;
+  gsh = mesh->oogs;
 
   o_vertexIds = platform->device.malloc<int>(mesh->Nverts, mesh->vertexNodes);
   o_r = platform->device.malloc<dfloat>(mesh->Np, mesh->r);
@@ -123,20 +117,6 @@ void setup(mesh_t *mesh_, oogs_t *gsh_)
     o_out.copyFrom(invVT.data());
     return o_out;
   }();
-
-  std::string kernelName;
-
-  kernelName = "relativeMassAveragedMode";
-  relativeMassAveragedModeKernel = platform->kernelRequests.load(kernelName);
-
-  kernelName = "computeMaxVisc";
-  computeMaxViscKernel = platform->kernelRequests.load(kernelName);
-
-  kernelName = "interpolateP1";
-  interpolateP1Kernel = platform->kernelRequests.load(kernelName);
-
-  kernelName = "core-tensorProduct1DHex3D";
-  modesKernel = platform->kernelRequests.load(kernelName);
 }
 
 occa::memory viscosity(dlong UFieldOffset,
@@ -166,8 +146,9 @@ void viscosity(dlong UFieldOffset,
   occa::memory o_logSk = platform->deviceMemoryPool.reserve<dfloat>(mesh->Nelements);
   occa::memory o_Shat = platform->deviceMemoryPool.reserve<dfloat>(mesh->Nlocal);
 
-  modesKernel(mesh->Nelements, o_invVT, o_S, o_Shat);
-  relativeMassAveragedModeKernel(mesh->Nelements,
+  launchKernel("core-tensorProduct1DHex3D", mesh->Nelements, o_invVT, o_S, o_Shat);
+  launchKernel("core-avm::relativeMassAveragedMode",
+                                 mesh->Nelements,
                                  absTol,
                                  o_modeMap,
                                  o_invVT,
@@ -178,7 +159,8 @@ void viscosity(dlong UFieldOffset,
                                  o_logSk);
 
   dfloat visMaxCoeff = 1.0;
-  computeMaxViscKernel(mesh->Nelements,
+  launchKernel("core-avm::computeAvmMaxVisc",
+                       mesh->Nelements,
                        UFieldOffset,
                        logS0,
                        kappa,
@@ -193,7 +175,7 @@ void viscosity(dlong UFieldOffset,
 
   if (C0) {
     oogs::startFinish(o_nu, 1, 0, ogsDfloat, ogsMax, gsh);
-    interpolateP1Kernel(mesh->Nelements, o_vertexIds, o_r, o_s, o_t, o_nu);
+    launchKernel("core-avm::interpolateP1", mesh->Nelements, o_vertexIds, o_r, o_s, o_t, o_nu);
   }
 }
 

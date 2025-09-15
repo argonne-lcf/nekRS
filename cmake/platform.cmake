@@ -1,0 +1,66 @@
+include(cmake/gslib.cmake)
+
+set(OGS_SOURCES
+        src/platform/ogs/ogsGather.cpp
+        src/platform/ogs/ogsGatherMany.cpp
+        src/platform/ogs/ogsGatherScatter.cpp
+        src/platform/ogs/ogsGatherScatterMany.cpp
+        src/platform/ogs/ogsGatherScatterVec.cpp
+        src/platform/ogs/ogsGatherVec.cpp
+        src/platform/ogs/ogsHostGather.cpp
+        src/platform/ogs/ogsHostGatherMany.cpp
+        src/platform/ogs/ogsHostGatherScatter.cpp
+        src/platform/ogs/ogsHostGatherScatterMany.cpp
+        src/platform/ogs/ogsHostGatherScatterVec.cpp
+        src/platform/ogs/ogsHostGatherVec.cpp
+        src/platform/ogs/ogsHostScatter.cpp
+        src/platform/ogs/ogsHostScatterMany.cpp
+        src/platform/ogs/ogsHostScatterVec.cpp
+        src/platform/ogs/ogsHostSetup.cpp
+        src/platform/ogs/ogsKernels.cpp
+        src/platform/ogs/ogsMappedAlloc.cpp
+        src/platform/ogs/ogsScatter.cpp
+        src/platform/ogs/ogsScatterMany.cpp
+        src/platform/ogs/ogsScatterVec.cpp
+        src/platform/ogs/ogsSetup.cpp
+        src/platform/ogs/oogs.cpp
+)
+
+set(PLATFORM_SOURCES
+    src/platform/platform.cpp
+    src/platform/threadPool.cpp
+    src/platform/setupAide.cpp
+    src/platform/printHeader.cpp
+    src/platform/timer.cpp
+    src/platform/comm.cpp
+    src/platform/flopCounter.cpp
+    src/platform/device.cpp
+    src/platform/fileUtils.cpp
+    src/platform/fileBcast.cpp
+    src/platform/par/par.cpp
+    src/platform/QQt.cpp
+    src/platform/configReader.cpp
+    src/platform/kernelManager.cpp
+    src/platform/utils/sha1.cpp
+    src/platform/utils/inipp.cpp
+    src/platform/utils/unifdef.c
+    src/platform/utils/mysort.cpp
+    src/platform/utils/parallelSort.cpp
+    src/platform/utils/tinyexpr.c
+    src/platform/linAlg/linAlg.cpp
+    src/platform/linAlg/registerLinAlgKernels.cpp
+    src/platform/linAlg/matrixConditionNumber.cpp
+    src/platform/linAlg/matrixInverse.cpp
+    src/platform/linAlg/matrixEig.cpp
+    src/platform/linAlg/matrixTranspose.cpp
+    src/platform/linAlg/matrixRightSolve.cpp
+    src/platform/kernelBenchmarker.cpp
+    ${OGS_SOURCES}
+)
+
+set(PLATFORM_INCLUDE
+    src/platform
+    src/platform/linAlg
+    src/platform/ogs
+    src/platform/utils
+)

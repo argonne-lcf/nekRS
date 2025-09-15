@@ -1,8 +1,11 @@
+userSections = CASEDATA
+
 [GENERAL]
+#verbose = true
 # polynomial order of session need not match that of another session
 polynomialOrder = 7
 #startFrom = "restart.fld"
-numSteps = 100
+numSteps = 1000 
 dt = 1e-04
 timeStepper = tombo2
 checkpointInterval = 80 
@@ -10,22 +13,24 @@ checkpointInterval = 80
 udf = "../eddy.udf"
 usr = "../inside/inside.usr"
 
+scalars = PS1
+
 [NEKNEK]
 boundaryEXTOrder = 1
 
-[PRESSURE]
+[FLUID PRESSURE]
 residualTol = 1e-08
 
-[VELOCITY]
+[FLUID VELOCITY]
 residualTol = 1e-12
 density = 1.0
 viscosity = 0.05
 boundaryTypeMap = int
 
-[SCALAR00]
+[SCALAR PS1]
 residualTol = 1e-12
-rho = 1.0
-diffusivity = 0.05
+transportCoeff = 1.0
+diffusionCoeff = 0.05
 boundaryTypeMap = int
 
 [CASEDATA]

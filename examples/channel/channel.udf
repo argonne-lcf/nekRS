@@ -6,20 +6,18 @@ static dfloat P_ROT;
 
 #ifdef __okl__
 
-#include "channel.oudf"
-
 #endif
 
 void userf(double time)
 {
-  nrs->o_NLT.copyFrom(o_nekFU, nrs->NVfields * nrs->fieldOffset);
+  nrs->fluid->o_explicitTerms().copyFrom(o_nekFU, nrs->fluid->fieldOffsetSum);
 }
 
 void uservp(double time)
 {
-  auto mesh = nrs->mesh;
-  platform->linAlg->fill(mesh->Nlocal, 1.0, nrs->o_rho);
-  nrs->o_mue.copyFrom(o_nekMue, mesh->Nlocal);
+  auto mesh = nrs->meshV;
+  platform->linAlg->fill(mesh->Nlocal, 1.0, nrs->fluid->o_rho);
+  nrs->fluid->o_mue.copyFrom(o_nekMue, mesh->Nlocal);
 }
 
 void UDF_Setup0(MPI_Comm comm, setupAide &options)
@@ -36,12 +34,12 @@ void UDF_Setup0(MPI_Comm comm, setupAide &options)
 
 void UDF_Setup()
 {
-  auto mesh = nrs->mesh;
+  auto mesh = nrs->meshV;
 
-  nrs->userVelocitySource = &userf;
+  nrs->userSource = &userf;
   nrs->userProperties = &uservp;
 
-  o_nekFU.resize(nrs->NVfields * nrs->fieldOffset);
+  o_nekFU.resize(nrs->fluid->fieldOffsetSum);
   o_nekMue.resize(mesh->Nlocal);
 
   nek::userchk();

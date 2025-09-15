@@ -1,0 +1,125 @@
+#define p_innerSize (p_Nq * p_Nq)
+
+#define reduce_h(face0, face1)                                                                               \
+  {                                                                                                          \
+    for (int s = p_blockSize / 2; s > 1; s >>= 1) {                                                          \
+      for (int t = 0; t < p_innerSize; ++t; @inner(0)) {                                                     \
+        if (t < s) {                                                                                         \
+          s_h[0][t] += s_h[0][t + s];                                                                        \
+          s_h[1][t] += s_h[1][t + s];                                                                        \
+        }                                                                                                    \
+      }                                                                                                      \
+      @barrier();                                                                                            \
+    }                                                                                                        \
+    for (int t = 0; t < p_innerSize; ++t; @inner(0)) {                                                       \
+      if (t < 1) {                                                                                           \
+        h[e * p_Nfaces + face0] = (s_h[0][0] + s_h[0][1]) * p_invNqNq;                                       \
+        h[e * p_Nfaces + face1] = (s_h[1][0] + s_h[1][1]) * p_invNqNq;                                       \
+      }                                                                                                      \
+    }                                                                                                        \
+    @barrier();                                                                                              \
+  }
+
+#define surfaceTerms(sk, face, m, i, j)                                                                      \
+  {                                                                                                          \
+    const dlong idM = vmapM[sk];                                                                             \
+    const dfloat nx = sgeo[sk * p_Nsgeo + p_NXID];                                                           \
+    const dfloat ny = sgeo[sk * p_Nsgeo + p_NYID];                                                           \
+    const dfloat nz = sgeo[sk * p_Nsgeo + p_NZID];                                                           \
+    const dfloat invJw = sgeo[sk * p_Nsgeo + p_IJWID];                                                       \
+    s_nx[m][j][i] = nx;                                                                                      \
+    s_ny[m][j][i] = ny;                                                                                      \
+    s_nz[m][j][i] = nz;                                                                                      \
+    s_x[m][j][i] = x[idM];                                                                                   \
+    s_y[m][j][i] = y[idM];                                                                                   \
+    s_z[m][j][i] = z[idM];                                                                                   \
+    out[sk] = invJw * (nx * G[idM + 0 * offset] + ny * G[idM + 1 * offset] + nz * G[idM + 2 * offset]);      \
+  }
+
+#define dist(i, j)                                                                                           \
+  {                                                                                                          \
+    const dfloat dx = s_x[1][j][i] - s_x[0][j][i];                                                           \
+    const dfloat dy = s_y[1][j][i] - s_y[0][j][i];                                                           \
+    const dfloat dz = s_z[1][j][i] - s_z[0][j][i];                                                           \
+    s_h[0][j * p_Nq + i] = fabs(s_nx[0][j][i] * dx + s_ny[0][j][i] * dy + s_nz[0][j][i] * dz);               \
+    s_h[1][j * p_Nq + i] = fabs(s_nx[1][j][i] * dx + s_ny[1][j][i] * dy + s_nz[1][j][i] * dz);               \
+  }
+
+@kernel void gjpHelperHex3D(const dlong Nelements,
+                            const dlong offset,
+                            @ restrict const dfloat *x,
+                            @ restrict const dfloat *y,
+                            @ restrict const dfloat *z,
+                            @ restrict const dlong *vmapM,
+                            @ restrict const dfloat *sgeo,
+                            @ restrict const dfloat *G,
+                            @ restrict dfloat *h,
+                            @ restrict dfloat *out)
+{
+  for (dlong e = 0; e < Nelements; e++; @outer(0)) {
+    @shared dfloat s_nx[2][p_Nq][p_Nq];
+    @shared dfloat s_ny[2][p_Nq][p_Nq];
+    @shared dfloat s_nz[2][p_Nq][p_Nq];
+
+    @shared dfloat s_x[2][p_Nq][p_Nq];
+    @shared dfloat s_y[2][p_Nq][p_Nq];
+    @shared dfloat s_z[2][p_Nq][p_Nq];
+
+    @shared dfloat s_h[2][p_blockSize];
+
+    for (int idx = 0; idx < p_innerSize; ++idx; @inner(0)) {
+      for (int k = idx; k < p_blockSize; k += p_innerSize) {
+        s_h[0][k] = 0;
+        s_h[1][k] = 0;
+      }
+    }
+
+    // face 0 & 5 (r-s plane)
+    for (int idx = 0; idx < p_innerSize; ++idx; @inner(0)) {
+      const int j = idx / p_Nq;
+      const int i = idx % p_Nq;
+
+      const dlong sk0 = e * p_Nfp * p_Nfaces + 0 * p_Nfp + i + j * p_Nq;
+      const dlong sk5 = e * p_Nfp * p_Nfaces + 5 * p_Nfp + i + j * p_Nq;
+
+      surfaceTerms(sk0, 0, 0, i, j);
+      surfaceTerms(sk5, 5, 1, i, j);
+
+      dist(i, j);
+    }
+    @barrier();
+    reduce_h(0, 5);
+
+    // face 1 & 3 (r-t plane)
+    for (int idx = 0; idx < p_innerSize; ++idx; @inner(0)) {
+      const int k = idx / p_Nq;
+      const int i = idx % p_Nq;
+
+      const dlong sk1 = e * p_Nfp * p_Nfaces + 1 * p_Nfp + i + k * p_Nq;
+      const dlong sk3 = e * p_Nfp * p_Nfaces + 3 * p_Nfp + i + k * p_Nq;
+
+      surfaceTerms(sk1, 1, 0, i, k);
+      surfaceTerms(sk3, 3, 1, i, k);
+
+      dist(i, k);
+    }
+    @barrier();
+    reduce_h(1, 3);
+  
+    // face 2 & 4 (s-t plane)
+    for (int idx = 0; idx < p_innerSize; ++idx; @inner(0)) {
+      const int k = idx / p_Nq;
+      const int j = idx % p_Nq;
+
+      const dlong sk2 = e * p_Nfp * p_Nfaces + 2 * p_Nfp + j + k * p_Nq;
+      const dlong sk4 = e * p_Nfp * p_Nfaces + 4 * p_Nfp + j + k * p_Nq;
+
+      surfaceTerms(sk2, 2, 0, j, k);
+      surfaceTerms(sk4, 4, 1, j, k);
+
+      dist(j, k);
+    }
+    @barrier();
+    reduce_h(2, 4);
+  }
+}

@@ -26,7 +26,7 @@ static dfloat A;
 
 deviceMemory<dfloat> implicitForcing(dfloat time)
 {
-  auto mesh = nrs->mesh;
+  auto mesh = nrs->meshV;
 
   poolDeviceMemory<dfloat> o_F(mesh->Nlocal);
   platform->linAlg->fill(o_F.size(), -A, o_F);
@@ -41,22 +41,22 @@ void linearForcing(dfloat time)
   const auto invTau0 = uPrime / l;
   const auto k0 = 1.5 * uPrime * uPrime;
 
-  auto mesh = nrs->mesh;
+  auto mesh = nrs->meshV;
 
   auto avg = [&](auto o_u)
   { 
-    return platform->linAlg->innerProd(mesh->Nlocal, mesh->o_Jw, o_u, platform->comm.mpiComm) / mesh->volume;
+    return platform->linAlg->innerProd(mesh->Nlocal, mesh->o_Jw, o_u, platform->comm.mpiComm()) / mesh->volume;
   };
 
   std::vector<dfloat> Uavg(mesh->dim);
-  Uavg[0] = avg(nrs->o_U.slice(0 * nrs->fieldOffset));
-  Uavg[1] = avg(nrs->o_U.slice(1 * nrs->fieldOffset));
-  Uavg[2] = avg(nrs->o_U.slice(2 * nrs->fieldOffset));
+  Uavg[0] = avg(nrs->fluid->o_U.slice(0 * nrs->fieldOffset));
+  Uavg[1] = avg(nrs->fluid->o_U.slice(1 * nrs->fieldOffset));
+  Uavg[2] = avg(nrs->fluid->o_U.slice(2 * nrs->fieldOffset));
 
   auto o_Uprime = [&]() 
   {
-    poolDeviceMemory<dfloat> o_Uprime(nrs->NVfields * nrs->fieldOffset);
-    o_Uprime.copyFrom(nrs->o_U, o_Uprime.size());
+    poolDeviceMemory<dfloat> o_Uprime(nrs->fluid->fieldOffsetSum);
+    o_Uprime.copyFrom(nrs->fluid->o_U, o_Uprime.size());
     for(int i = 0; i < mesh->dim; i++) {
       platform->linAlg->add(mesh->Nlocal, -Uavg[i], o_Uprime.slice(i * nrs->fieldOffset)); 
     }
@@ -66,11 +66,11 @@ void linearForcing(dfloat time)
   const auto epsVolAvg = [&]()
   {
     dfloat mue, rho;
-    platform->options.getArgs("VISCOSITY", mue);
-    platform->options.getArgs("DENSITY", rho);
+    platform->options.getArgs("FLUID VISCOSITY", mue);
+    platform->options.getArgs("FLUID DENSITY", rho);
     const auto nu = mue / rho;
 
-    auto o_gradU = opSEM::strongGradVec(mesh, nrs->fieldOffset, nrs->o_U);
+    auto o_gradU = opSEM::strongGradVec(mesh, nrs->fieldOffset, nrs->fluid->o_U);
 
     static poolDeviceMemory<dfloat> o_invAJwJw;
     if (!o_invAJwJw.isInitialized()) {
@@ -97,11 +97,11 @@ void linearForcing(dfloat time)
 
   // add explicit contribtion
   for(int i = 0; i < mesh->dim; i++) {
-    auto o_nlt = nrs->o_NLT.slice(i * nrs->fieldOffset, mesh->Nlocal);
-    platform->linAlg->fill(mesh->Nlocal, -A*Uavg[i], o_nlt); 
+    auto o_ext = nrs->fluid->o_EXT.slice(i * nrs->fieldOffset, mesh->Nlocal);
+    platform->linAlg->fill(mesh->Nlocal, -A*Uavg[i], o_ext); 
   }
 
-  if (platform->comm.mpiRank == 0) {
+  if (platform->comm.mpiRank() == 0) {
     const auto uRms = std::sqrt(2./3 * kVolAvg);
     std::cout << "A=" << A 
               << "  k=" << kVolAvg 
@@ -117,26 +117,26 @@ void UDF_Setup0(MPI_Comm comm, setupAide &options)
   platform->par->extract("casedata", "uprime", uPrime);
 
   dfloat mue;
-  platform->options.getArgs("VISCOSITY", mue);
+  platform->options.getArgs("FLUID VISCOSITY", mue);
   const auto Re_lambda = 1/mue;
 
   dfloat rho;
-  platform->options.getArgs("DENSITY", rho);
+  platform->options.getArgs("FLUID DENSITY", rho);
 
   const auto Re_l = std::pow(Re_lambda,2) / (rho * 15 * uPrime * l);
-  platform->options.setArgs("VISCOSITY", to_string_f(1 / Re_l));
+  platform->options.setArgs("FLUID VISCOSITY", to_string_f(1 / Re_l));
 }
 
 void UDF_Setup()
 {
-  auto mesh = nrs->mesh;
+  auto mesh = nrs->meshV;
 
-  nrs->userVelocitySource = &linearForcing;
-  nrs->userVelocityImplicitLinearTerm = &implicitForcing;
+  nrs->userSource = &linearForcing;
+  nrs->fluid->userImplicitLinearTerm = &implicitForcing;
 
-  platform->linAlg->rescale(-L/2, L/2, mesh->o_x, platform->comm.mpiComm);
-  platform->linAlg->rescale(-L/2, L/2, mesh->o_y, platform->comm.mpiComm);
-  platform->linAlg->rescale(-L/2, L/2, mesh->o_z, platform->comm.mpiComm);
+  platform->linAlg->rescale(-L/2, L/2, mesh->o_x, platform->comm.mpiComm());
+  platform->linAlg->rescale(-L/2, L/2, mesh->o_y, platform->comm.mpiComm());
+  platform->linAlg->rescale(-L/2, L/2, mesh->o_z, platform->comm.mpiComm());
 
   if (platform->options.getArgs("RESTART FILE NAME").empty()) {
     const auto eps = 0.1;
@@ -153,9 +153,10 @@ void UDF_Setup()
       U[n + 1 * nrs->fieldOffset] =  eps         * sin(alpha * x[n]) * sin(beta * z[n]);
       U[n + 2 * nrs->fieldOffset] = -eps * alpha * cos(alpha * x[n]) * sin(beta * z[n]);
     }
-    nrs->o_U.copyFrom(U.data(), U.size());
+    nrs->fluid->o_U.copyFrom(U.data(), U.size());
   }
   o_qcriterion.resize(mesh->Nlocal);
+  nrs->addUserCheckpointField("scalar00", std::vector<deviceMemory<dfloat>>{o_qcriterion});
 }
 
 void UDF_ExecuteStep(double time, int tstep)

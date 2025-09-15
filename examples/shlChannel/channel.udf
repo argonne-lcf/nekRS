@@ -7,20 +7,41 @@ static dfloat visc;
 
 #ifdef __okl__
 
-#include "channel.oudf"
+@kernel void cfill(const dlong N, const dlong offset, const dfloat angle, const dfloat dp, @ restrict dfloat *NU)
+{
+  for (dlong n = 0; n < N; ++n; @tile(p_blockSize, @outer, @inner)) {
+    if (n < N) {
+
+      const dfloat dpdx = dp * cos(angle);
+      const dfloat dpdy = dp * sin(angle);
+      const dfloat dpdz = 0.0;
+
+      NU[n + 0 * offset] = dpdx;
+      NU[n + 1 * offset] = dpdy;
+      NU[n + 2 * offset] = dpdz;
+    }
+  }
+}
+
+// Boundary conditions
+void udfNeumann(bcData *bc)
+{
+  bc->tr1 = -3.0 * p_visc;
+  bc->tr2 = 0.0;
+}
 
 #endif
 
 void userf(double time)
 {
-  auto mesh = nrs->mesh;
+  auto mesh = nrs->meshV;
   const dfloat DP = 3.0 * visc;
-  cfill(mesh->Nlocal, nrs->fieldOffset, P_ROT, DP, nrs->o_NLT);
+  cfill(mesh->Nlocal, nrs->fieldOffset, P_ROT, DP, nrs->fluid->o_EXT);
 }
 
 void UDF_LoadKernels(deviceKernelProperties &kernelInfo)
 {
-  platform->options.getArgs("VISCOSITY", visc);
+  platform->options.getArgs("FLUID VISCOSITY", visc);
   kernelInfo.define("p_visc") = visc;
 }
 
@@ -38,7 +59,7 @@ void UDF_Setup0(MPI_Comm comm, setupAide &options)
 
 void UDF_Setup()
 {
-  nrs->userVelocitySource = &userf;
+  nrs->userSource = &userf;
 }
 
 void UDF_ExecuteStep(double time, int tstep)

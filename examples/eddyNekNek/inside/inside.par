@@ -1,36 +1,41 @@
+userSections = CASEDATA
+
 [GENERAL]
+#verbose = true
 polynomialOrder = 7
 #startFrom = "restart.fld"
-numSteps = 100
+numSteps = 1000 
 dt = 1e-04
 timeStepper = tombo2
 checkpointInterval = 50
 
 udf = "../eddy.udf"
 
+scalars = PS1, PS2
+
 [NEKNEK]
 boundaryEXTOrder = 1
 
-[PRESSURE]
+[FLUID PRESSURE]
 residualTol = 1e-08
 
-[VELOCITY]
+[FLUID VELOCITY]
 residualTol = 1e-12
 density = 1.0
 viscosity = 0.05
 boundaryTypeMap = int
 
-[SCALAR00]
+[SCALAR PS1]
 residualTol = 1e-12
-rho = 1.0
-diffusivity = 0.05
+transportCoeff = 1.0
+diffusionCoeff = 0.05
 boundaryTypeMap = int
 
-[SCALAR01]
+[SCALAR PS2]
 residualTol = 1e-12
-rho = 1.0
-diffusivity = 0.05
-boundaryTypeMap = codedFixedValue 
+transportCoeff = 1.0
+diffusionCoeff = 0.05
+boundaryTypeMap = udfDirichlet 
 
 [CASEDATA]
 P_U0 = 5.0

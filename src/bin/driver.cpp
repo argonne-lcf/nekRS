@@ -1,5 +1,5 @@
 /*---------------------------------------------------------------------------*\
-   Copyright (c) 2019-2024, UCHICAGO ARGONNE, LLC.
+   Copyright (c) 2019-2025, UCHICAGO ARGONNE, LLC.
 
    The UChicago Argonne, LLC as Operator of Argonne National
    Laboratory holds copyright in the Software. The copyright holder
@@ -160,17 +160,25 @@ int main(int argc, char** argv)
     auto parKeyValuePairs = readPar(cmdOpt->setupFile, comm);
 
     {
-      auto it = parKeyValuePairs.find("general");
-      if (it != parKeyValuePairs.end()) {
-        auto jt = it->second.find("redirectoutputto"); 
-        if (jt != it->second.end()) {
-          auto outputFile = jt->second;
-          if (rank == 0) std::cout << "redirecting output to " << outputFile << " ...\n";
-          const int fd = open(outputFile.c_str(), O_WRONLY|O_CREAT|O_APPEND, S_IWUSR|S_IRUSR);
-          dup2(fd, fileno(stderr));
-          dup2(fd, fileno(stdout));
+      if (!cmdOpt->redirectOutput.empty()) {
+        auto outputFile = cmdOpt->redirectOutput;
+        if (rank == 0) std::cout << "redirecting output to " << outputFile << " ...\n";
+        const int fd = open(outputFile.c_str(), O_WRONLY|O_CREAT|O_APPEND, S_IWUSR|S_IRUSR);
+        dup2(fd, fileno(stderr));
+        dup2(fd, fileno(stdout));
+      } else {
+        auto it = parKeyValuePairs.find("general");
+        if (it != parKeyValuePairs.end()) {
+          auto jt = it->second.find("redirectoutputto");
+          if (jt != it->second.end()) {
+            auto outputFile = jt->second;
+            if (rank == 0) std::cout << "redirecting output to " << outputFile << " ...\n";
+            const int fd = open(outputFile.c_str(), O_WRONLY|O_CREAT|O_APPEND, S_IWUSR|S_IRUSR);
+            dup2(fd, fileno(stderr));
+            dup2(fd, fileno(stdout));
+          }
         }
-      } 
+      }
     }
 
     if (rank == 0) {
@@ -231,10 +239,6 @@ int main(int argc, char** argv)
     double tSolveStepMin = std::numeric_limits<double>::max();
     double tSolveStepMax = std::numeric_limits<double>::min();
 
-    if (cmdOpt->debug && std::fetestexcept(FE_INVALID)) {
-      throw std::runtime_error("floating-point exception occured!");
-    }
- 
     if (nekrs::endTime() > nekrs::startTime()) {
       if (rank == 0) std::cout << "\ntimestepping to time " << nekrs::endTime() << " ...\n";
     } else if (nekrs::numSteps() > tStep) {
@@ -296,7 +300,7 @@ int main(int argc, char** argv)
           nekrs::printStepInfo(timeNew, tStep, false, true);
       }
  
-      if (checkpointStep) nekrs::writeCheckpoint(timeNew, tStep);
+      if (checkpointStep) nekrs::writeCheckpoint(timeNew);
  
       MPI_Barrier(comm);
       const double elapsedStep = MPI_Wtime() - timeStartStep;
@@ -314,6 +318,7 @@ int main(int argc, char** argv)
       if (nekrs::printStepInfoFreq()) {
         if (tStep % nekrs::printStepInfoFreq() == 0) {
           nekrs::printStepInfo(timeNew, tStep, true, false);
+          if (rank == 0) std::cout << "::" << std::endl; 
         }
       }
  

@@ -89,13 +89,13 @@ void filterVandermonde1D(int N, int Np, double *r, double *V)
 occa::memory lowPassFilterSetup(mesh_t *mesh, const dlong filterNc)
 {
   nekrsCheck(filterNc < 1,
-             platform->comm.mpiComm,
+             platform->comm.mpiComm(),
              EXIT_FAILURE,
              "number of filter modes must be at least 1, but is set to %d\n",
              filterNc);
 
   nekrsCheck(filterNc >= mesh->N,
-             platform->comm.mpiComm,
+             platform->comm.mpiComm(),
              EXIT_FAILURE,
              "mumber of filter modes must be < %d\n",
              mesh->N);

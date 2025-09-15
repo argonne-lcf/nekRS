@@ -15,15 +15,15 @@ void ciSetup(MPI_Comm comm, setupAide &options)
   options.setArgs("END TIME", std::string("0.1"));
   options.setArgs("DT", std::string("1e-3"));
   options.setArgs("SUBCYCLING STEPS", std::string("0"));
-  options.setArgs("PRESSURE INITIAL GUESS", "PREVIOUS");
+  options.setArgs("FLUID PRESSURE INITIAL GUESS", "PREVIOUS");
 
   options.setArgs("BDF ORDER", "3");
   options.setArgs("ADVECTION TYPE", "CONVECTIVE+CUBATURE");
-  options.setArgs("VELOCITY SOLVER TOLERANCE", std::string("1e-09"));
-  options.setArgs("PRESSURE SOLVER TOLERANCE", std::string("1e-10"));
+  options.setArgs("FLUID VELOCITY SOLVER TOLERANCE", std::string("1e-09"));
+  options.setArgs("FLUID PRESSURE SOLVER TOLERANCE", std::string("1e-10"));
   options.setArgs("SCALAR00 SOLVER TOLERANCE", std::string("1e-12"));
 
-  options.setArgs("MESH SOLVER", "NONE");
+  options.setArgs("GEOM SOLVER", "NONE");
   options.setArgs("MOVING MESH", "TRUE");
 
   platform->par->set("casedata", "p_rot", 0.0);
@@ -33,11 +33,10 @@ void ciSetup(MPI_Comm comm, setupAide &options)
   }
   if (ciMode == 3) {
     options.setArgs("SUBCYCLING STEPS", std::string("1"));
-    options.setArgs("MESH INITIAL GUESS", "PROJECTION");
-    options.setArgs("MESH RESIDUAL PROJECTION VECTORS", std::string("1"));
-    options.setArgs("MESH SOLVER", "PCG");
-    options.setArgs("MESH BLOCK SOLVER", "TRUE");
-    options.setArgs("MESH SOLVER TOLERANCE", "1e-6");
+    options.setArgs("GEOM INITIAL GUESS", "PROJECTION");
+    options.setArgs("GEOM RESIDUAL PROJECTION VECTORS", std::string("1"));
+    options.setArgs("GEOM SOLVER", "PCG+BLOCK");
+    options.setArgs("GEOM SOLVER TOLERANCE", "1e-6");
   }
   if (ciMode == 4) {
     nekrsAbort(comm, EXIT_FAILURE, "%s\n", "ciMode=4 not defined");
@@ -46,11 +45,10 @@ void ciSetup(MPI_Comm comm, setupAide &options)
     platform->par->set("casedata", "p_rot", 0.5);
   }
   if (ciMode == 6 || ciMode == 8) {
-    options.setArgs("MESH SOLVER", "PCG");
-    options.setArgs("MESH BLOCK SOLVER", "TRUE");
-    options.setArgs("MESH SOLVER TOLERANCE", "1e-6");
-    options.setArgs("MESH INITIAL GUESS", "PROJECTION");
-    options.setArgs("MESH RESIDUAL PROJECTION VECTORS", std::string("1"));
+    options.setArgs("GEOM SOLVER", "PCG+BLOCK");
+    options.setArgs("GEOM SOLVER TOLERANCE", "1e-6");
+    options.setArgs("GEOM INITIAL GUESS", "PROJECTION");
+    options.setArgs("GEOM RESIDUAL PROJECTION VECTORS", std::string("1"));
     platform->par->set("casedata", "p_rot", 0.5);
   }
   if (ciMode == 7 || ciMode == 8) {
@@ -68,9 +66,9 @@ void ciSetup(MPI_Comm comm, setupAide &options)
 
 void ciTestErrors(nrs_t *nrs, double time, int tstep)
 {
-  if (nrs->cds->cvode) {
-    numCVODERHS += nrs->cds->cvode->numRHSEvals();
-    numCVODERHS += nrs->cds->cvode->numLinIters();
+  if (nrs->scalar->cvode) {
+    numCVODERHS += nrs->scalar->cvode->numRHSEvals();
+    numCVODERHS += nrs->scalar->cvode->numLinIters();
   }
 
   if (!nrs->lastStep) {
@@ -79,8 +77,8 @@ void ciTestErrors(nrs_t *nrs, double time, int tstep)
 
   numCVODERHS /= tstep;
 
-  const int rank = platform->comm.mpiRank;
-  mesh_t *mesh = nrs->mesh;
+  const int rank = platform->comm.mpiRank();
+  auto mesh = nrs->meshV;
 
   nrs->copyToNek(time, tstep);
   nek::userchk();
@@ -96,9 +94,9 @@ void ciTestErrors(nrs_t *nrs, double time, int tstep)
   expectedErr[4] = 0.2465620E-05;
   expectedErr[5] = 0.4929804E-06;
 
-  int expectedSIter = 9;
-  int expectedPIter = 9;
-  int expectedVIter = 8;
+  int expectedSIter = 4;
+  int expectedPIter = 5;
+  int expectedVIter = 2;
 
   if (ciMode == 1) {
   }
@@ -133,9 +131,9 @@ void ciTestErrors(nrs_t *nrs, double time, int tstep)
   errVal = abs(err[5] - expectedErr[5]) / expectedErr[5];
   CiEvalTest("T (LinfErr: " + to_string_f(errVal) + ")", errVal < EPS);
 
-  errVal = abs(expectedVIter - nrs->uvwSolver->Niter());
+  errVal = abs(expectedVIter - nrs->fluid->ellipticSolver[0]->Niter());
   CiEvalTest("velIter (LinfErr: " + to_string_f(errVal) + ")", errVal < 2);
 
-  errVal = abs(expectedPIter - nrs->pSolver->Niter());
+  errVal = abs(expectedPIter - nrs->fluid->ellipticSolverP->Niter());
   CiEvalTest("pIter (LinfErr: " + to_string_f(errVal) + ")", errVal < 2);
 }

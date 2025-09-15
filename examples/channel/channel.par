@@ -1,3 +1,5 @@
+userSections = CASEDATA
+
 [GENERAL] 
 polynomialOrder = 7
 #startFrom = "restart.fld"
@@ -9,14 +11,14 @@ checkpointInterval = 0
 [PROBLEMTYPE]
 equation = Stokes+variableViscosity
 
-[PRESSURE]
-residualTol = 1e-08
-
-[VELOCITY]
-boundaryTypeMap = zeroNValue/zeroGradient 
+[FLUID VELOCITY]
+boundaryTypeMap = zeroDirichletN/zeroNeumann 
 residualTol = 1e-12
 rho = 1.0
 viscosity = 0.1 
+
+[FLUID PRESSURE]
+residualTol = 1e-08
 
 [CASEDATA]
 p_rot = 0.7853981633974483 # \pi / 4

@@ -6,24 +6,26 @@ endTime = 100
 
 dt = targetCFL=4.0+max=0.05
 timeStepper = tombo2 
-subCyclingSteps = 2
+advectionSubCyclingSteps = 2
 
 checkpointControl = simulationTime 
 checkpointInterval = 5
 
 regularization = hpfrt + nModes = 1 + scalingCoeff = 15
 
-[PRESSURE]
+scalars = TEMPERATURE
+
+[FLUID PRESSURE]
 residualTol = 1e-04
 
-[VELOCITY]
-boundaryTypeMap = zeroValue, zeroValue 
+[FLUID VELOCITY]
+boundaryTypeMap = zeroDirichlet, zeroDirichlet 
 rho = 1.0
 viscosity = sqrt(7/1e8) # sqrt(PRA/RA) 
 residualTol = 1e-06
 
-[SCALAR00]
-boundaryTypeMap = codedFixedValue, zeroGradient 
-diffusivity = 1/sqrt(7*1e8) # 1/sqrt(RA*PRA)
-rho = 1.0
+[SCALAR TEMPERATURE]
+boundaryTypeMap = udfDirichlet, zeroNeumann 
+diffusionCoeff = 1/sqrt(7*1e8) # 1/sqrt(RA*PRA)
+transportCoeff = 1.0
 residualTol = 1e-06

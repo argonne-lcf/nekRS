@@ -1,0 +1,57 @@
+@kernel void viscousShearStress(const dlong Nelements,
+                                const dlong offset,
+                                const int nbID,
+                                @ restrict int *bID,
+                                @ restrict const dfloat *sgeo,
+                                @ restrict const dlong *vmapM,
+                                @ restrict const int *EToB,
+                                @ restrict const dfloat *mue,
+                                @ restrict const dfloat *SIJ,
+                                @ restrict dfloat *out)
+{
+  for (dlong e = 0; e < Nelements; e++; @outer(0)) {
+    for (int f = 0; f < p_Nfaces; f++) {
+      const dlong bcType = EToB[f + p_Nfaces * e];
+
+      for (int ibID = 0; ibID < nbID; ibID++) {
+        if(bcType == bID[ibID]) {
+          for (int m = 0; m < p_Nfp; ++m; @inner(0)) {
+            const int n = m + f * p_Nfp;
+            const int sk = e * p_Nfp * p_Nfaces + n;
+            const dlong idM = vmapM[sk];
+            const dlong sid = e * p_Nfaces * p_Nfp + n;
+
+            const dfloat n1 = sgeo[sid * p_Nsgeo + p_NXID];
+            const dfloat n2 = sgeo[sid * p_Nsgeo + p_NYID];
+            const dfloat n3 = sgeo[sid * p_Nsgeo + p_NZID];
+
+            const dfloat s11 = SIJ[idM + 0 * offset];
+            const dfloat s21 = SIJ[idM + 1 * offset];
+            const dfloat s31 = SIJ[idM + 2 * offset];
+
+            const dfloat s12 = s21;
+            const dfloat s22 = SIJ[idM + 3 * offset];
+            const dfloat s32 = SIJ[idM + 4 * offset];
+
+            const dfloat s13 = s31;
+            const dfloat s23 = s32;
+            const dfloat s33 = SIJ[idM + 5 * offset];
+
+            const dfloat scale = -2.0 * mue[idM];
+
+            const dfloat tauX = scale*(s11 * n1 + s12 * n2 + s13 * n3);
+            const dfloat tauY = scale*(s21 * n1 + s22 * n2 + s23 * n3);
+            const dfloat tauZ = scale*(s31 * n1 + s32 * n2 + s33 * n3);
+
+            const dfloat tauDotN = tauX * n1 + tauY * n2 + tauZ * n3;
+
+            out[idM + 0*offset] = tauX - tauDotN * n1; 
+            out[idM + 1*offset] = tauY - tauDotN * n2; 
+            out[idM + 2*offset] = tauZ - tauDotN * n3; 
+          }
+          @barrier();
+        }
+      }
+    }
+  }
+}

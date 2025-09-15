@@ -10,7 +10,54 @@ static deviceMemory<dfloat> o_kappa;
 
 #ifdef __okl__
 
-#include "lowMach.oudf"
+void udfDirichlet(bcData *bc)
+{
+  if (isField("fluid velocity")) {
+    bc->uxFluid = 0.5 * (3.0 + tanh(bc->x / p_DELTA));
+    bc->uyFluid = 0.0;
+    bc->uzFluid = 0.0;
+  } else if (isField("scalar temperature")) {
+    bc->sScalar = 0.5 * (3.0 + tanh(bc->x / p_DELTA));
+  }
+}
+
+@kernel void fillQ(const dlong Nelements, @ restrict const dfloat *X, @ restrict dfloat *QVOL)
+{
+  for (dlong e = 0; e < Nelements; ++e; @outer(0)) {
+    for (int n = 0; n < p_Np; ++n; @inner(0)) {
+      const int id = e * p_Np + n;
+      const dfloat xd = X[id] / p_DELTA;
+      const dfloat sech = 1 / cosh(xd);
+      QVOL[id] = sech * sech / p_DELTA * (0.5 + tanh(xd) / p_DELTA);
+    }
+  }
+}
+
+@kernel void fillProp(const dlong Nelements,
+                      const dlong uOffset,
+                      const dlong sOffset,
+                      const double p0th,
+                      @ restrict const dfloat *TEMP,
+                      @ restrict dfloat *UPROP,
+                      @ restrict dfloat *SPROP,
+                      @ restrict dfloat *BETA,
+                      @ restrict dfloat *KAPPA)
+{
+  for (dlong e = 0; e < Nelements; ++e; @outer(0)) {
+    for (int n = 0; n < p_Np; ++n; @inner(0)) {
+      const int id = e * p_Np + n;
+      const dfloat rcpTemp = 1 / TEMP[id];
+
+      UPROP[id + 0 * uOffset] = 1.0;
+      SPROP[id + 0 * sOffset] = 1.0;
+      UPROP[id + 1 * uOffset] = rcpTemp;
+      SPROP[id + 1 * sOffset] = rcpTemp;
+
+      BETA[id] = rcpTemp;
+      KAPPA[id] = 1 / p0th;
+    }
+  }
+}
 
 #endif
 
@@ -21,24 +68,21 @@ void qtl(double time)
 
 void userq(double time)
 {
-  auto cds = nrs->cds;
-  auto mesh = cds->mesh[0];
-
-  fillQ(mesh->Nelements, mesh->o_x, cds->o_NLT);
+  auto mesh = nrs->scalar->mesh(0);
+  fillQ(mesh->Nelements, mesh->o_x, nrs->scalar->o_EXT);
 }
 
 void uservp(double time)
 {
-  auto cds = nrs->cds;
-  auto mesh = nrs->mesh;
+  auto mesh = nrs->meshV;
 
   fillProp(mesh->Nelements,
            nrs->fieldOffset,
-           nrs->cds->fieldOffset[0],
+           nrs->scalar->fieldOffset(),
            nrs->p0th[0],
-           cds->o_S,
-           nrs->o_prop,
-           cds->o_prop,
+           nrs->scalar->o_S,
+           nrs->fluid->o_prop,
+           nrs->scalar->o_prop,
            o_beta,
            o_kappa);
 }
@@ -65,7 +109,7 @@ void UDF_Setup0(MPI_Comm comm, setupAide &options)
 
 void UDF_Setup()
 {
-  nrs->userScalarSource = &userq;
+  nrs->userSource = &userq;
   nrs->userProperties = &uservp;
 
   o_beta.resize(nrs->fieldOffset);

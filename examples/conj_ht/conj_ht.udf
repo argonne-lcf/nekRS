@@ -4,46 +4,83 @@ static int updateProperties = 1;
 
 #ifdef __okl__
 
-#include "conj_ht.oudf"
+void udfDirichlet(bcData *bc)
+{
+  if (isField("fluid velocity")) {
+    bc->uxFluid = 4.0 * bc->y * (1. - bc->y);
+    bc->uyFluid = 0.0;
+    bc->uzFluid = 0.0;
+  } else if (isField("scalar temperature")) {
+    bc->sScalar = 0.0;
+  }
+}
+
+@kernel void cFill(const dlong Nelements,
+                   const dfloat CONST1,
+                   const dfloat CONST2,
+                   @ restrict const dlong *eInfo,
+                   @ restrict dfloat *QVOL)
+{
+  for (dlong e = 0; e < Nelements; ++e; @outer(0)) {
+    const dlong solid = eInfo[e];
+    for (int n = 0; n < p_Np; ++n; @inner(0)) {
+      const int id = e * p_Np + n;
+      QVOL[id] = CONST1;
+      if (solid) {
+        QVOL[id] = CONST2;
+      }
+    }
+  }
+}
 
 #endif
 
-void userq(double time)
+void userSource(double time)
 {
-  auto cds = nrs->cds;
-  auto mesh = cds->mesh[0];
+  auto& scalar = nrs->scalar;
+  auto mesh = scalar->mesh("temperature");
+
   const dfloat qvolFluid = 0.0;
   const dfloat qvolSolid = 1.0;
-  cFill(mesh->Nelements, qvolFluid, qvolSolid, mesh->o_elementInfo, cds->o_NLT);
+  cFill(mesh->Nelements, qvolFluid, qvolSolid, mesh->o_elementInfo, scalar->o_explicitTerms("temperature"));
 }
 
 void uservp(double time)
 {
-  auto cds = nrs->cds;
-  auto mesh = nrs->mesh;
+  auto& fluid = nrs->fluid;
+  auto& scalar = nrs->scalar;
 
   if (updateProperties) {
-    if (platform->comm.mpiRank == 0) {
+    if (platform->comm.mpiRank() == 0) {
       std::cout << "updating properties"
                 << "\n";
     }
+
     const dfloat rho = 1.0;
     const dfloat mue = 1 / 1000.0;
-    const dfloat rhoCpFluid = rho * 1.0;
-    const dfloat conFluid = mue;
-    const dfloat rhoCpSolid = rhoCpFluid * 0.1;
-    const dfloat conSolid = 10 * conFluid;
 
     // velocity
-    const auto o_mue = nrs->o_prop.slice(0 * nrs->fieldOffset);
-    const auto o_rho = nrs->o_prop.slice(1 * nrs->fieldOffset);
-    cFill(mesh->Nelements, mue, 0, mesh->o_elementInfo, o_mue);
-    cFill(mesh->Nelements, rho, 0, mesh->o_elementInfo, o_rho);
+    {
+      const auto o_mue = fluid->o_prop.slice(0 * fluid->fieldOffset);
+      const auto o_rho = fluid->o_prop.slice(1 * fluid->fieldOffset);
+      cFill(fluid->mesh->Nelements, mue, 0, fluid->mesh->o_elementInfo, o_mue);
+      cFill(fluid->mesh->Nelements, rho, 0, fluid->mesh->o_elementInfo, o_rho);
+    }
     // temperature
-    const auto o_con = cds->o_prop.slice(0 * cds->fieldOffset[0]);
-    const auto o_rhoCp = cds->o_prop.slice(1 * cds->fieldOffset[0]);
-    cFill(cds->mesh[0]->Nelements, conFluid, conSolid, cds->mesh[0]->o_elementInfo, o_con);
-    cFill(cds->mesh[0]->Nelements, rhoCpFluid, rhoCpSolid, cds->mesh[0]->o_elementInfo, o_rhoCp);
+    {
+      const dfloat rhoCpFluid = rho * 1.0;
+      const dfloat conFluid = mue;
+      const dfloat rhoCpSolid = rhoCpFluid * 0.1;
+      const dfloat conSolid = 10 * conFluid;
+ 
+      auto mesh = scalar->mesh("temperature"); 
+
+      const auto o_con = scalar->o_diffusionCoeff("temperature");
+      const auto o_rhoCp = scalar->o_transportCoeff("temperature");
+ 
+      cFill(mesh->Nelements, conFluid, conSolid, mesh->o_elementInfo, o_con);
+      cFill(mesh->Nelements, rhoCpFluid, rhoCpSolid, mesh->o_elementInfo, o_rhoCp);
+    }
     updateProperties = 0;
   }
 }
@@ -58,28 +95,29 @@ void UDF_Setup0(MPI_Comm comm, setupAide &options)
 
 void UDF_Setup()
 {
-  nrs->userScalarSource = &userq;
   nrs->userProperties = &uservp;
-
+  nrs->userSource = &userSource;
 
   if (platform->options.getArgs("RESTART FILE NAME").empty()) {
     {
-      auto mesh = nrs->mesh;
+      auto& fluid = nrs->fluid;
+      auto mesh = fluid->mesh;
       auto [x, y, z] = mesh->xyzHost();
-      std::vector<dfloat> U(mesh->dim * nrs->fieldOffset, 0.0);
+      std::vector<dfloat> U(mesh->dim * fluid->fieldOffset, 0.0);
       for(int n = 0; n < mesh->Nlocal; n++) {
-        U[n + 0 * nrs->fieldOffset] = 4.0 * y[n] * (1.0 - y[n]);
+        U[n + 0 * fluid->fieldOffset] = 4.0 * y[n] * (1.0 - y[n]);
       }
-      nrs->o_U.copyFrom(U.data(), U.size());
+      fluid->o_U.copyFrom(U.data(), U.size());
     }
 
     {
-      auto mesh = nrs->cds->mesh[0];
+      auto& scalar = nrs->scalar;
+      auto mesh = scalar->mesh("temperature");
       std::vector<dfloat> T(mesh->Nlocal);
       for(int n = 0; n < mesh->Nlocal; n++) {
         T[n] = 0; 
       }
-      nrs->cds->o_S.copyFrom(T.data(), T.size());
+      scalar->o_solution("temperature").copyFrom(T.data(), T.size());
     }
   }
 }

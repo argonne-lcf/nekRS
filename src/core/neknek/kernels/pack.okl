@@ -1,0 +1,18 @@
+@kernel void pack(const dlong Nlocal,
+  const dlong offsetSum,
+  const dlong offset,
+  const int Nstates,
+  const int Nfields,
+  @restrict const dlong * idx,
+  @restrict dfloat * S,
+  @restrict dfloat * interpS)
+{
+  for(int n = 0; n < Nlocal; ++n; @tile(p_blockSize, @outer, @inner)){
+    for(int i = 0; i < Nfields; ++i){
+      const dlong fldComponent = idx[i];
+      for(int s = 0; s < Nstates; ++s){
+        interpS[n + i * offset + s * Nfields * offset] = S[n + fldComponent * offset + s * offsetSum];
+      }
+    }
+  }
+}

@@ -9,7 +9,7 @@ maskedFaceIds(mesh_t *mesh,
               dlong mNlocal,
               int nFields,
               dlong offset,
-              int *EToB,
+              const std::vector<int>& EToB,
               int dirichletBcTypeId)
 {
   dlong Nmasked;

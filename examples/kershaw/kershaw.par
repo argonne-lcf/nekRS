@@ -1,13 +1,15 @@
+userSections = CASEDATA
+
 [GENERAL] 
 verbose = false 
 polynomialOrder = 7
 timeStepper = tombo2
-subCyclingSteps = 1
+advectionSubCyclingSteps = 1
 stopAt = numSteps
 numSteps = 0
 
-[PRESSURE]
-#solver = pfgmres+nVector=15
+[FLUID PRESSURE]
+#solver = gmres+flexible+nVector=15
 maxIterations = 200
 residualTol = 1e-8+relative
 
@@ -24,15 +26,15 @@ smootherType = RAS+FourthOptChebyshev #+maxEigenvalueBoundFactor=1.1
 #smootherType = ASM
 
 # smoothed SEMFEM
-#preconditioner = semfem #non-smoothed
+#preconditioner = semfem #+non-smoothed
 #smootherType = JAC+FourthOptChebyshev #+maxEigenvalueBoundFactor=1.1
 #pMGSchedule = p=7+degree=2, p=7, p=7+degree=2
 
 
 initialGuess = previous
 
-[VELOCITY]
-boundaryTypeMap = zeroGradient #zeroValue 
+[FLUID VELOCITY]
+boundaryTypeMap = zeroNeumann #zeroDirichlet 
 rho = 1.0
 viscosity = 1.0
 

@@ -81,7 +81,7 @@
 
       for (int j = 0; j < p_Nq; ++j; @inner(1)) {
         for (int i = 0; i < p_Nq; ++i; @inner(0)) {
-          r_Un[k] = 0.f;
+          r_Un[k] = 0;
 #pragma unroll p_Nq
           for (int n = 0; n < p_Nq; n++) {
             const dfloat Ii = s_FT[n][i];
@@ -102,7 +102,7 @@
 
       for (int j = 0; j < p_Nq; ++j; @inner(1)) {
         for (int i = 0; i < p_Nq; ++i; @inner(0)) {
-          r_Un[k] = 0.f;
+          r_Un[k] = 0;
 
 #pragma unroll p_Nq
           for (int n = 0; n < p_Nq; n++) {

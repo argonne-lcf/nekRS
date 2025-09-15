@@ -257,7 +257,8 @@ if(ADIOS2_USE_Fortran STREQUAL AUTO)
   endif()
 elseif(ADIOS2_USE_Fortran)
   enable_language(Fortran)
-  if(CMAKE_Fortran_COMPILER_LOADED)
+endif()
+if(CMAKE_Fortran_COMPILER_LOADED)
   set(ADIOS2_HAVE_Fortran TRUE)
   list(APPEND mpi_find_components Fortran)
 
@@ -282,7 +283,6 @@ elseif(ADIOS2_USE_Fortran)
     ADIOS2_HAVE_FORTRAN_GNU_ARGS
     SRC_EXT F90
   )
- endif()
 endif()
 
 # MPI

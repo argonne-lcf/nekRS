@@ -2,16 +2,15 @@ deviceMemory<dfloat> o_qcriterion;
 
 #ifdef __okl__
 
-void codedFixedValueVelocity(bcData *bc)
+void udfDirichlet(bcData *bc)
 {
   // U = omega x r
-  bc->u = -bc->y;
-  bc->v = bc->x;
-  bc->w = 0.0;
+  bc->uxFluid = -bc->y;
+  bc->uyFluid = bc->x;
+  bc->uzFluid = 0.0;
 }
 
-@kernel void
-magSqr(const dlong Ntotal, const dlong offset, @ restrict const dfloat *U, @ restrict dfloat *uSqr)
+@kernel void magSqr(const dlong Ntotal, const dlong offset, @ restrict const dfloat *U, @ restrict dfloat *uSqr)
 {
   for (dlong n = 0; n < Ntotal; ++n; @tile(p_blockSize, @outer, @inner)) {
     if (n < Ntotal) {
@@ -27,7 +26,7 @@ void UDF_Setup0(MPI_Comm comm, setupAide &options) {}
 
 void UDF_Setup()
 {
-  auto mesh = nrs->mesh;
+  auto mesh = nrs->meshV;
 
   auto [x, y, z] = mesh->xyzHost();
 
@@ -40,13 +39,13 @@ void UDF_Setup()
       rMax = std::max(rMax, r);
     }
   }
-  MPI_Allreduce(MPI_IN_PLACE, &rMin, 1, MPI_DFLOAT, MPI_MIN, platform->comm.mpiComm);
-  MPI_Allreduce(MPI_IN_PLACE, &rMax, 1, MPI_DFLOAT, MPI_MAX, platform->comm.mpiComm);
+  MPI_Allreduce(MPI_IN_PLACE, &rMin, 1, MPI_DFLOAT, MPI_MIN, platform->comm.mpiComm());
+  MPI_Allreduce(MPI_IN_PLACE, &rMax, 1, MPI_DFLOAT, MPI_MAX, platform->comm.mpiComm());
 
   const auto eta = rMin / rMax;
   const auto Ri = eta / (1 - eta);
 
-  if (platform->comm.mpiRank == 0) {
+  if (platform->comm.mpiRank() == 0) {
     std::cout << "eta: " << std::setprecision(4) << eta << std::endl;
   }
 
@@ -70,7 +69,7 @@ void UDF_Setup()
       U[n + 1 * nrs->fieldOffset] = uR * sin(theta) + uTheta * cos(theta);
       U[n + 2 * nrs->fieldOffset] = 0.0;
     }
-    nrs->o_U.copyFrom(U.data(), U.size());
+    nrs->fluid->o_U.copyFrom(U.data(), U.size());
   }
 
   o_qcriterion.resize(mesh->Nlocal);

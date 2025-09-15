@@ -1,10 +1,19 @@
-void codedFixedValueVelocity(bcData *bc)
+
+#include <iostream>
+
+void udfDirichlet(bcData *bc)
 {
   const dfloat vPiston = p_AMP * sin(p_OMEGA * bc->time);
 
-  bc->u = -vPiston * bc->nx;
-  bc->v = -vPiston * bc->ny;
-  bc->w = -vPiston * bc->nz;
+  if (isField("fluid velocity")) {
+    bc->uxFluid = -vPiston * bc->nx;
+    bc->uyFluid = -vPiston * bc->ny;
+    bc->uzFluid = -vPiston * bc->nz;
+  } else if (isField("geom")) {
+    bc->uxGeom = -vPiston * bc->nx;
+    bc->uyGeom = -vPiston * bc->ny;
+    bc->uzGeom = -vPiston * bc->nz;
+  }
 }
 
 @kernel void fillProp(const dlong Nelements,

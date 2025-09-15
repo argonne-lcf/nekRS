@@ -11,6 +11,7 @@ static dfloat P_OMEGA;
 static dfloat P_SCALE;
 
 #ifdef __okl__
+
 void exact(dfloat *uu, dfloat *vv, dfloat *ww, dfloat xx, dfloat yy, dfloat zz, double time, dfloat visc)
 {
   const dfloat a[10] = {-.2, -.2, .25, 0.0, 0, 0, 0, 0, 0, 0};
@@ -80,21 +81,18 @@ void exact(dfloat *uu, dfloat *vv, dfloat *ww, dfloat xx, dfloat yy, dfloat zz, 
 }
 
 // Boundary conditions
-void codedFixedValueVelocity(bcData *bc)
+void udfDirichlet(bcData *bc)
 {
-  bc->u = bc->uinterp;
-  bc->v = bc->vinterp;
-  bc->w = bc->winterp;
-}
-
-void codedFixedValueScalar(bcData *bc)
-{
-  if(bc->scalarId == 0){
-    bc->s = bc->sinterp;
-  } else {
+  if (isField("fluid velocity")) {
+    bc->uxFluid = bc->uxFluidInt;
+    bc->uyFluid = bc->uyFluidInt;
+    bc->uzFluid = bc->uzFluidInt;
+  } else if (isField("scalar ps1")) { 
+    bc->sScalar = bc->sScalarInt;
+  } else if (isField("scalar ps2")) { 
     dfloat u, v, w;
     exact(&u, &v, &w, bc->x, bc->y, bc->z, bc->time, p_visc);
-    bc->s = u;
+    bc->sScalar = u;
   }
 }
 
@@ -176,8 +174,8 @@ void UDF_LoadKernels(deviceKernelProperties& kernelInfo)
   kernelInfo.define("p_U0") = P_U0;
   kernelInfo.define("p_V0") = P_V0;
 
-  dfloat viscosity = 1;
-  platform->options.getArgs("VISCOSITY", viscosity);
+  dfloat viscosity = NAN;
+  platform->options.getArgs("FLUID VISCOSITY", viscosity);
   kernelInfo.define("p_visc") = viscosity;
 }
 
@@ -187,8 +185,8 @@ void UDF_Setup0(MPI_Comm comm, setupAide &options)
   if (ciMode) {
     ciSetup(comm, options);
   }
-  dfloat viscosity = 1;
-  options.getArgs("VISCOSITY", viscosity);
+  dfloat viscosity = NAN;
+  options.getArgs("FLUID VISCOSITY", viscosity);
 
   platform->par->extract("casedata", "p_u0", P_U0);
   platform->par->extract("casedata", "p_v0", P_V0);
@@ -218,27 +216,27 @@ bool timeStepConverged(int stage)
 
 void userq(double time)
 {
-  auto mesh = nrs->mesh;
-  dpdx(mesh->Nlocal, time, mesh->o_x, mesh->o_y, mesh->o_z, nrs->cds->o_NLT);
+  auto mesh = nrs->meshV;
+  dpdx(mesh->Nlocal, time, mesh->o_x, mesh->o_y, mesh->o_z, nrs->scalar->o_EXT);
 }
 
 void UDF_Setup()
 {
   nrs->userConvergenceCheck = timeStepConverged;
-  nrs->userScalarSource = &userq;
+  nrs->userSource = &userq;
 }
 
 void UDF_ExecuteStep(double time, int tstep)
 {
-  auto mesh = nrs->mesh;
+  auto mesh = nrs->meshV;
   if (platform->options.compareArgs("MOVING MESH", "TRUE")) {
-    userMeshVelocity(mesh->Nlocal, nrs->fieldOffset, mesh->o_x, mesh->o_y, mesh->o_z, mesh->o_U);
+    userMeshVelocity(mesh->Nlocal, nrs->fieldOffset, mesh->o_x, mesh->o_y, mesh->o_z, nrs->geom->o_U);
   }
 
   constexpr int nStepAnalytical = 5;
   if (tstep <= nStepAnalytical) {
-    exactUVW(mesh->Nlocal, nrs->fieldOffset, time, mesh->o_x, mesh->o_y, mesh->o_z, nrs->o_U);
-    nrs->cds->o_S.copyFrom(nrs->o_U, nrs->fieldOffset);
+    exactUVW(mesh->Nlocal, nrs->fieldOffset, time, mesh->o_x, mesh->o_y, mesh->o_z, nrs->fluid->o_U);
+    nrs->scalar->o_S.copyFrom(nrs->fluid->o_U, nrs->fieldOffset);
   }
  
   if (ciMode) {

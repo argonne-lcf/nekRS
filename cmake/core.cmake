@@ -1,0 +1,57 @@
+include(cmake/mesh.cmake)
+include(cmake/elliptic.cmake)
+
+set(UDF_SOURCES
+    src/core/udf/udf.cpp
+    src/core/udf/compileUDFKernels.cpp
+)
+
+set(CORE_SOURCES
+    src/core/iofld/iofld.cpp
+    src/core/iofld/iofldFactory.cpp
+    src/core/iofld/iofldNek.cpp
+    src/core/iofld/iofldAdios.cpp
+    src/core/lowPassFilter.cpp
+    src/core/avm.cpp
+    src/core/bdry/bdryBase.cpp
+    src/core/bdry/alignment.cpp
+    src/core/neknek/registerNekNekKernels.cpp
+    src/core/LVector.cpp
+    src/core/registerCoreKernels.cpp
+    src/core/opSEM.cpp
+    src/core/advsub/advectionSubCycling.cpp
+    src/core/plugins/tavg.cpp
+    src/core/plugins/lpm.cpp
+    src/core/pointInterpolation/findpts/findpts.cpp
+    src/core/pointInterpolation/pointInterpolation.cpp
+    src/core/pointInterpolation/registerPointInterpolationKernels.cpp
+    src/core/linearSolver/registerLinearSolverKernels.cpp
+    src/core/linearSolver/linearSolverFactory.cpp
+    src/core/linearSolver/amgx/AMGX.cpp
+    src/core/neknek/neknek.cpp
+    src/core/neknek/fixCoupledSurfaceFlux.cpp
+    src/core/neknek/multirateNekNek.cpp
+    src/core/nekInterface/nekInterfaceAdapter.cpp
+    src/core/advsub/benchmark.cpp
+    ${MESH_SOURCES}
+    ${UDF_SOURCES}
+    ${ELLIPTIC_SOURCES}
+)
+
+set(CORE_INCLUDE
+    src/core
+    src/core/nekInterface
+    src/core/neknek
+    src/core/iofld
+    src/core/bdry
+    src/core/plugins
+    src/core/pointInterpolation/findpts
+    src/core/pointInterpolation
+    src/core/linearSolver
+    src/core/linearSolver/hypre
+    src/core/linearSolver/amgx
+    src/core/udf
+    src/core/advsub
+    ${MESH_SOURCE_DIR}
+    ${ELLIPTIC_INCLUDE}
+)

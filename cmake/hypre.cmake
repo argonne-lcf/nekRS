@@ -20,6 +20,7 @@ ExternalProject_Add(
    HYPRE_BUILD
    URL "${HYPRE_SOURCE_DIR}" 
    CONFIGURE_COMMAND cd ${HYPRE_BUILD_DIR}/src && ./configure
+     CC=${CMAKE_C_COMPILER} CXX=${CMAKE_CXX_COMPILER}
      --prefix=${HYPRE_INSTALL_DIR}
      --with-extra-CFLAGS=${HYPRE_FLAGS_EXTRA}
      --with-extra-CXXFLAGS=${HYPRE_FLAGS_EXTRA}
@@ -29,7 +30,7 @@ ExternalProject_Add(
    INSTALL_COMMAND cd ${HYPRE_BUILD_DIR}/src && $(MAKE) install
 )
 
-add_library(nekrs-hypre SHARED ${CMAKE_CURRENT_SOURCE_DIR}/src/elliptic/amgSolver/hypre/hypreWrapper.cpp)
+add_library(nekrs-hypre SHARED ${CMAKE_CURRENT_SOURCE_DIR}/src/core/linearSolver/hypre/hypreWrapper.cpp)
 add_dependencies(nekrs-hypre HYPRE_BUILD)
 target_include_directories(nekrs-hypre PRIVATE ${HYPRE_INSTALL_DIR}/include)
 target_link_libraries(nekrs-hypre PUBLIC MPI::MPI_C 
@@ -95,7 +96,7 @@ endif()
    HYPRE_BUILD_DEVICE
    URL "${HYPRE_SOURCE_DIR}" 
    CONFIGURE_COMMAND cd ${HYPRE_BUILD_DIR}/src && ./configure
-     CUCC=${HYPRE_DEVICE_COMPILER}
+     CUCC=${HYPRE_DEVICE_COMPILER} CC=${CMAKE_C_COMPILER} CXX=${CMAKE_CXX_COMPILER}
      --prefix=${HYPRE_INSTALL_DIR}
      --with-extra-CFLAGS=${HYPRE_COMPILER_C_FLAGS}
      --with-extra-CXXFLAGS=${HYPRE_COMPILER_CXX_FLAGS}
@@ -107,7 +108,7 @@ endif()
    INSTALL_COMMAND cd ${HYPRE_BUILD_DIR}/src && $(MAKE) install
   )
 
-  add_library(nekrs-hypre-device SHARED ${CMAKE_CURRENT_SOURCE_DIR}/src/elliptic/amgSolver/hypre/hypreWrapperDevice.cpp)
+  add_library(nekrs-hypre-device SHARED ${CMAKE_CURRENT_SOURCE_DIR}/src/core/linearSolver/hypre/hypreWrapperDevice.cpp)
   add_dependencies(nekrs-hypre-device HYPRE_BUILD_DEVICE)
   target_compile_definitions(nekrs-hypre-device PRIVATE -DENABLE_HYPRE_GPU)
   target_include_directories(nekrs-hypre-device PRIVATE ${HYPRE_INSTALL_DIR}/include)
@@ -120,7 +121,7 @@ endif()
 else()
   #dummy
   message(WARNING "No supported HYPRE backend found - disable device support!")
-  add_library(nekrs-hypre-device SHARED ${CMAKE_CURRENT_SOURCE_DIR}/src/elliptic/amgSolver/hypre/hypreWrapperDevice.cpp)
+  add_library(nekrs-hypre-device SHARED ${CMAKE_CURRENT_SOURCE_DIR}/src/core/linearSolver/hypre/hypreWrapperDevice.cpp)
   target_link_libraries(nekrs-hypre-device PUBLIC libocca MPI::MPI_C) 
 endif()
 

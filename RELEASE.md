@@ -1,85 +1,111 @@
-# Release v24.0
+# Release v25.0
 
 ## What is new? 
 
 * FP32 solver mode
 * DPCPP backend to support Intel GPUs
-* Interpolation based velocity recycling
+* Interpolation based recycling + support of arbitrary fields
 * [Ascent](https://ascent.readthedocs.io/en/latest/) in situ visualisation plugin
 * iofld class reading/writing field files including [ADIOS2](https://adios2.readthedocs.io/) support 
 * Addtional output options (element filter and interpolation on uniform grid / different polynomial-order)
 * Multi session nek-nek including multi-rate time stepping
-* Improved memory management
+* Typed device memory and pool allocation 
 * CHT nek-nek support
-* nek-nek support for nrsqsub scripts
+* nrsqsub nek-nek handling
 * Improved JIT compilation performance
 * HIP support for SEMFEM  
 * Aero forces
-* opSEM class
+* SEM ops
 * Mesh surface ops
+* Gradient jump penalty method and improved avm reguarlization
 * Linear implicit velocity source term
+* T-mesh support for all scalars
+* Robin boundary conditions
+* RANS ktau variants SST, DDES, IDDES
 * Various bug fixes
 
 ## Good to know
 
-* after fixing a bug in the linear solver residual norm, iteration counts have increased compared to previous versions
-* GPU aware MPI is disabled by default (`NEKRS_GPU_MPI=0`)
+* GPU aware MPI is disabled by default (to enable set env-var `NEKRS_GPU_MPI=1`) which may cause a performance regression
 * [reproducibility] variable time step controller restricts dt to 5 significant digits
-* nrsman <par, env>  can be used to display the par file or environment settings
-* HYPRE replaces AmgX
+* nrsman <par, env>  can be used to display man pages 
+* AmgX support was removed (replaced by HYPRE)
 * Field file extension starts with 0-index
+* nrsqsub scripts are moved to [HPCsupport](https://github.com/Nek5000/nekRS_HPCsupport/)
+* First time step may take longer due to initialization overhead
 
 ## Breaking Changes
 
-This list provides an overview of the most significant changes in this release, although it may not encompass all modifications. We acknowledge that this release introduces several breaking changes. These adjustments were essential to enhance the stability of the user interface in future iterations. We apologize for any inconvenience this may cause.
+This list provides an overview of the most significant changes in this release, although it may not encompass all modifications. We recognize that several of these updates directly affect the user experience. These adjustments were essential to enhance the stability of the user interface in future iterations. We apologize for any inconvenience this may cause.
 
 * run `build.sh` instead of `nrsconfig` to build the code
-* change par section `SCALAR00` to `TEMPERATURE` in case it represent indeed a physical temperature
-* `nek::userchk` is no longer called automatically during the setup phase 
-* host mirrored variables including `nrs->U, cds->S, mesh->x, nrs->usrwrk` have been removed 
+* host mirrored variables like `nrs->U, cds->S, mesh->x` have been removed 
 * send signal (defined in env-var `NEKRS_SIGNUM_UPD`) to process trigger file `nekrs.upd`
-* use `auto foo = platform->deviceMemoryPool.reserve<T>(nWords)` instead of pre-allocated dfloat slices like `platform->o_mempool.slice0`
+* use `auto foo = platform->deviceMemoryPool.reserve<T>(nWords)` instead of `platform->o_mempool.slice[0-15]`
 * change count argument of `occa::memory::slice, occa::memory::copyFrom, occa::memory::copyTo` to number of words instead of bytes 
 * use `nekrs_registerPtr` instead of common blocks NRSSCPTR / SCNRS in usr file and access them using `nek::ptr` in udf (see examples)
+* use par section [GEOM] for geometry solver instead of [MESH]
+* usr `scalars = FOO1, FOO2, ...` in `[GENERAL]` to define additional scalar transport equations
+* use `mesh = fluid+solid` for T-mesh (conjugate heat transfer) for a scalar e.g. temperature 
+* use `iofld` class () instead of `writeFld`
+* use `planarCopy` class instead of `velRecycling`
+* `::postProcessing` functions are now members of `nrs_t` (except planarAvg)
+* use boundary functions like `udfDirichlet` for all fields
+
+### Interface Changes 
+* define `time` as double (instead of defloat) in all UDF functions
+* `nrs_t` is no longer passed from UDF functions (nrs object is now globally accessible within udf if the Navier Stokes solver is enabled)
+* `nrs_t` is no longer passed from `<plugin>::setup`
+* `udf::properties = std::function<void(nrs_t *, dfloat, occa::memory, occa::memory, occa::memory, occa::memory)>` -> `nrs_t::userProperties = std::function<void(double)>`
+* `udf::uEqnSource = std::function<void(nrs_t *, dfloat, occa::memory, occa::memory)>` -> `nrs_t::userSource = std::function<void(double)>` (same hook for all fields)
+* `udf::udfconv = std::function<int(nrs_t *, int)>` -> `nrs_t::userConvergenceCheck = std::function<bool(int)>`
+* `udf::udfdif = std::function<void(nrs_t *, dfloat, occa::memory)>` -> `nrs_t::userDivergence = std::function<void(double)>`
+* `tavg::setup(nrs_t*)` -> `tavg::setup(dlong fieldOffset, const fields& fields)`
+* `postProcessing::planarAvg(nrs_t*, const std::string&, int, int, int, int, occa::memory)` -> `mesh_t::planarAvg(const std::string&, int, int, int, int, dlong, occa::memory o_avg)`
+* `pointInterpolation_t::setPoints(int, dfloat*, dfloat*, dfloat*)` -> `pointInterpolation_t::setPoints(const std::vector<dfloat>&, const std::vector<dfloat>&, const std::vector<dfloat>&)`
 
 ### Name Changes
-* `velocityDirichletConditions` -> `codedFixedValueVelocity` (same for scalars)
-* `velocityNeumannConditions` -> `codedFixedGradientVelocity` (same for scalars)
-* `nrs->_mesh` -> `cds->mesh[0]`
+* boundary type names: `codedFixed` -> `udf`, `value` -> `Dirichlet`, `Gradient` -> `Neumann` 
+* some member names of `bcData` changed (see include/app/nrs/bdry/bcData.h)
+* `velocityDirichletConditions` -> `udfDirichlet` (same for all fields)
+* `velocityNeumannConditions` -> `udfNeumann` (same for all fields)
+* `nrs->o_usrwrk`-> `platform->app->bc->o_usrwrk`
+* `nrs->_mesh` -> `nrs->meshT`
 * `nek::ocopyToNek` -> `nrs->copyToNek`
 * `nek::ocopyFromNek` -> `nrs->copyFromNek`
-* `nrs->o_FU` -> `nrs->o_NLT`
-* `cds->o_FS` -> `cds->o_NLT`
+* `nrs->o_FU` -> `nrs->fluid->o_explicitTerms()`
+* `cds` -> `scalar`
+* `cds->o_FS` -> `scalar->o_explicitTerms(std::string)`
+* `cds->o_rho` -> `scalar->o_transportCoeff(std::string)`
+* `cds->o_diff` -> `scalar->o_diffusionCoeff(std::string)`
+* `cds->o_diff` -> `scalar->o_diffusionCoeff(std::string)`
+* `cds->mesh[...]` -> `scalar->mesh(...)`
 * `occaKernel` -> `deviceKernel`
 * `occaProperties` > `deviceKernelProperties`
 * `occa::memory` -> `deviceMemory` 
 * `nrs->isOutputStep` -> `nrs->checkpointStep`
-
-### Interface Changes 
-* define `time` as double (instead of defloat) in all UDF functions
-* remove `nrs_t` argument from all UDF functions (nrs object is now globally accessible within udf if the Navier Stokes solver is enabled)
-* `nrs_t::userProperties = std::function<void(double)>` -> `udf::properties = std::function<void(nrs_t *, dfloat, occa::memory, occa::memory, occa::memory, occa::memory)>`
-* `nrs_t::userVelocitySource = std::function<void(double)>` -> `udf::uEqnSource = std::function<void(nrs_t *, dfloat, occa::memory, occa::memory)>`
-* `nrs_t::userScalarSource = std::function<void(double)>` -> `udf::sEqnSource = std::function<void(nrs_t *, dfloat, occa::memory, occa::memory)>`
-* `nrs_t::userConvergenceCheck = std::function<bool(int)>` -> `udf::udfconv = std::function<int(nrs_t *, int)>`
-* `nrs_t::userDivergence = std::function<void(double)>` -> `udf::udfdif = std::function<void(nrs_t *, dfloat, occa::memory)>`
-* `tavg::setup(dlong fieldOffset, const fields& fields)` -> `tavg::setup(nrs_t*)`
-* `planarAvg(mesh_t*, const std::string&, int, int, int, int, dlong, occa::memory o_avg)` -> `postProcessing::planarAvg(nrs_t*, const std::string&, int, int, int, int, occa::memory)`
-* `::postProcessing` functions are now members of `nrs_t` (except planarAvg)
-* remove `nrs_t` argument from `<plugin>::setup`
-* `pointInterpolation_t::setPoints(int, dfloat*, dfloat*, dfloat*)` -> `pointInterpolation_t::setPoints(const std::vector<dfloat>&, const std::vector<dfloat>&, const std::vector<dfloat>&)`
-* use `iofld` instead of `writeFld`
+* `subCyclingSteps` -> `advectionSubCyclingSteps` in par
+* par section `VELOCITY` -> `FLUID VELOCITY`
+* par section `PRESSURE` -> `FLUID PRESSURE`
+* par section `TEMPERATURE` -> `SCALAR TEMPERATURE`
+* par section `SCALAR01` -> `SCALAR FOO`
+* par `SCALAR` key `diffusivity` -> `diffusionCoeff`
+* par `SCALAR`key `density` -> `transportCoeff`
+* `comm.mpiRank` -> `comm.mpiRank()`
+* `comm.mpiComm` -> `comm.mpiComm()`
 
 ## Known Bugs / Restrictions
 
-* Code is not fully optimized on CPUs and Intel GPUs
+* Code is not fully optimized on CPUs and AMD MI300 GPUs
+* planar avg in 1D is limited to 256 gridpoints per direction locally (per MPI Rank) 
+* SEMFEM preconditioner not available when using DPCPP
 * [507](https://github.com/Nek5000/nekRS/issues/507)
 * [485](https://github.com/Nek5000/nekRS/issues/485)
 * [258](https://github.com/Nek5000/nekRS/issues/258)
 
 ## Thanks to our Contributors
 
-@kris-rowe, @tcew, @yslan, @MalachiTimothyPhillips, @thilinarmtb
+@yslan, @kris-rowe, @tcew, @MalachiTimothyPhillips, @thilinarmtb, @nandu90
 
 We are grateful to all who added new features, filed issues or helped resolve them, 
 asked and answered questions, and were part of inspiring discussions.
@@ -132,6 +158,7 @@ asked and answered questions, and were part of inspiring discussions.
 * [485](https://github.com/Nek5000/Nek5000/issues/485)
 * [729](https://github.com/Nek5000/Nek5000/issues/759)
 * [258](https://github.com/Nek5000/nekRS/issues/258)
+* planarAvg is limited by ogs::gatherNodesPerBloc
 
 ## Thanks to our Contributors
 

@@ -1,0 +1,53 @@
+// BF := -1/dt * v^* = sum{beta_j * nlt^n-j} + 1/dt * sum{alpha_j * v^n-j}
+@kernel void sumMakef(const dlong N,
+                      @ restrict const dfloat *massMatrix,
+                      const dfloat idt,
+                      @ restrict const dfloat *coeffEXT,
+                      @ restrict const dfloat *coeffBDF,
+                      const dlong fieldOffsetScan,
+                      const dlong fieldSumOffset,
+                      const dlong fieldOffsetJW,
+                      @ restrict const dfloat *RHO,
+                      @ restrict const dfloat *U,
+                      @ restrict const dfloat *ADV,
+                      @ restrict const dfloat *FU,
+                      @ restrict dfloat *BF)
+{
+    // BF := -rho/dt * v^* = sum{beta_j * nlt^n-j} + rho/dt * sum{alpha_j * v^n-j}
+    for (dlong id = 0; id < N; ++id; @tile(p_blockSize, @outer, @inner)) {
+      dfloat JW = massMatrix[id];
+
+      dfloat bdfx = 0;
+#if p_SUBCYCLING
+      bdfx += BF[id + fieldOffsetScan];
+#else
+
+#pragma unroll p_nBDF
+      for (int s = 0; s < p_nBDF; s++) {
+#if p_MovingMesh
+        JW = massMatrix[id + s * fieldOffsetJW];
+#endif
+        const dlong sOffset = s * fieldSumOffset;
+        bdfx += coeffBDF[s] * JW * U[id + fieldOffsetScan + sOffset];
+     }
+#endif
+
+      dfloat nltx = 0;
+#pragma unroll p_nEXT
+      for (int s = 0; s < p_nEXT; s++) {
+#if p_MovingMesh
+        JW = massMatrix[id + s * fieldOffsetJW];
+#endif
+        const dlong sOffset = s * fieldSumOffset;
+
+        // FU already multiplied by rho
+        nltx += JW * coeffEXT[s] * FU[id + fieldOffsetScan + sOffset];
+#if p_ADVECTION
+        nltx -= JW * coeffEXT[s] * ADV[id + fieldOffsetScan + sOffset];
+#endif
+      }
+
+      const dfloat rho = RHO[id + fieldOffsetScan];
+      BF[id + fieldOffsetScan] = nltx + rho * idt * bdfx;
+    }
+}

@@ -1,0 +1,35 @@
+#include <cstdio>
+
+@kernel void extrapolateBoundary(const dlong npt,
+  const dlong offset,
+  const int Nfields,
+  const int order,
+  const int predictor,
+  const dfloat tn,
+  @restrict const dfloat * time,
+  @restrict const dfloat * S,
+  @restrict dfloat * Se)
+{
+  for(int n = 0; n < npt; ++n; @tile(p_blockSize, @outer, @inner)){
+
+    dfloat prevTimes[4] = {time[n + 0 * offset], time[n + 1 * offset], time[n + 2 * offset], time[n + 3 * offset]};
+    dfloat coeff[4] = {0};
+
+    const dlong extOrder = predictor ? order - 1 : order;
+    timeInterpWeights(tn, prevTimes, extOrder, coeff);
+
+#if 0
+    printf("prevTime: %g %g %g %g coeff: %g %g %g %g\n", 
+           prevTimes[0], prevTimes[1], prevTimes[2], prevTimes[3], 
+           coeff[0], coeff[1], coeff[2], coeff[3]);
+#endif
+
+    for(int field = 0; field < Nfields; ++field){
+      dfloat se = 0.0;
+      for(int s = 0; s <= extOrder; ++s){
+        se += coeff[s] * S[n + field * offset + s * offset * Nfields];
+      }
+      Se[n + field * offset] = se;
+    }
+  }
+}

@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.21)
-project(NekRS LANGUAGES C CXX Fortran VERSION 24.0.4)
+project(NekRS LANGUAGES C CXX Fortran VERSION 25.0.1)
 
 set(CMAKE_POLICY_DEFAULT_CMP0077 NEW)
 
@@ -90,7 +90,7 @@ string(COMPARE EQUAL "${CMAKE_CXX_COMPILER_ID}" "AppleClang" USING_APPLE_LLVM)
 string(COMPARE EQUAL "${CMAKE_CXX_COMPILER_ID}" "NVHPC" USING_NVHPC)
 
 if(USING_GNU OR USING_LLVM OR USING_APPLE_LLVM)
-  set(NEKRS_COMPILER_DEFAULT_FLAGS "-O2 -g -march=native -mtune=native -ftree-vectorize")
+  set(NEKRS_COMPILER_DEFAULT_FLAGS "-O2 -g -march=native -ftree-vectorize")
   if (USING_GNU AND CMAKE_CXX_COMPILER_VERSION VERSION_LESS 9.1)
     message(FATAL_ERROR "GNU compiler version must be at least 9.1!")
   endif()
@@ -112,7 +112,7 @@ set(OCCA_CXX "${MPI_UNDERLYING_COMPILER}" CACHE STRING "C++ compiler for OCCA JI
 if(USING_INTEL_LLVM)
   set(OCCA_CXXFLAGS "-w -O3 -g" CACHE STRING "C++ flags for OCCA JIT compile")
 elseif(USING_GNU OR USING_LLVM OR USING_APPLE_LLVM)
-  set(OCCA_CXXFLAGS "-w -O3 -g -march=native -mtune=native -ffast-math" CACHE STRING "C++ flags for OCCA JIT compile")
+  set(OCCA_CXXFLAGS "-w -O3 -g -march=native -ffast-math" CACHE STRING "C++ flags for OCCA JIT compile")
 elseif(USING_NVHPC)
   set(OCCA_CXXFLAGS "-w -O3 -g -fast" CACHE STRING "C++ flags for OCCA JIT compile")
 else()
@@ -130,7 +130,7 @@ set(OCCA_OPENCL_COMPILER_FLAGS "-w -cl-std=CL2.0 -cl-unsafe-math-optimizations -
 set(OCCA_FOUND ON)
 
 if(USING_APPLE_LLVM AND CMAKE_SYSTEM_PROCESSOR MATCHES "arm64")
-#  message(FATAL_ERROR "Apple Clang compiler not supported on arm64!")
+  message(FATAL_ERROR "Apple Clang compiler currently not supported on arm64!")
 endif()
 
 if(CMAKE_SYSTEM_PROCESSOR MATCHES "^(powerpc|ppc)64le" OR CMAKE_SYSTEM_PROCESSOR MATCHES "arm64")
@@ -247,6 +247,8 @@ add_nek5000()
 
 include(cmake/nekrs.cmake)
 
+include(cmake/bench.cmake)
+
 ###### Link dependencies ######
 
 target_link_libraries(nekrs-lib PUBLIC libocca PRIVATE nekrs-hypre nekrs-hypre-device gs blas lapack std::filesystem ${CMAKE_DL_LIBS})
@@ -324,7 +326,7 @@ endif()
 
 find_package(Filesystem REQUIRED)
 configure_file(
-  ${CMAKE_CURRENT_LIST_DIR}/src/core/nekrsSys.hpp.in
+  ${CMAKE_CURRENT_LIST_DIR}/src/platform/nekrsSys.hpp.in
   ${CMAKE_BINARY_DIR}/nekrsSys.hpp
   @ONLY)
 
@@ -368,8 +370,8 @@ include(cmake/install_kernels.cmake)
 install(FILES LICENSE RELEASE.md README.md DESTINATION .)
 install(FILES ${CMAKE_BINARY_DIR}/nekrsSys.hpp DESTINATION include/core)
 install(DIRECTORY src/ DESTINATION include FILES_MATCHING REGEX "\.hpp$|\.h$|\.tpp$")
-install(FILES src/udf/CMakeLists.txt DESTINATION udf)
-install(DIRECTORY src/nekInterface/ DESTINATION nekInterface REGEX "\.hpp$|\.cpp$" EXCLUDE)
+install(FILES src/core/udf/CMakeLists.txt DESTINATION udf)
+install(DIRECTORY src/core/nekInterface/ DESTINATION nekInterface REGEX "\.hpp$|\.cpp$" EXCLUDE)
 install(DIRECTORY doc/ DESTINATION doc)
 
 install(DIRECTORY scripts/ DESTINATION bin

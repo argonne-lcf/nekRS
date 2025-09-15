@@ -1,0 +1,5 @@
+      common /nekmpi/ mid,mp,nekcomm,nekgroup,nekreal
+      integer         mid,mp,nekcomm,nekgroup,nekreal
+
+      common /CB_NRS_INT/ getxr, getur, getpr, gettr, gtpsr(ldimt-1)
+      integer             getxr, getur, getpr, gettr, gtpsr

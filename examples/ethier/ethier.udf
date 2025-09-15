@@ -26,7 +26,6 @@ deviceMemory<dfloat> o_x0, o_y0, o_z0;
                   @ restrict const dfloat *x,
                   @ restrict const dfloat *y,
                   @ restrict const dfloat *z,
-                  const dlong offset,
                   @ restrict dfloat *FS)
 {
   for (dlong n = 0; n < Ntotal; ++n; @tile(p_blockSize, @outer, @inner)) {
@@ -60,7 +59,7 @@ deviceMemory<dfloat> o_x0, o_y0, o_z0;
                     2.f * a * cxy * syz * ezx + 2.f * a * cyz * szx * exy - 2.f * a * sxy * syz * ezx -
                     2.f * d * sxy * szx * eyz));
 
-      FS[n + offset] = -dpdx;
+      FS[n] = -dpdx;
     }
   }
 }
@@ -171,27 +170,29 @@ void grad_u(dfloat *grad_u_x,
   }
 }
 
-void codedFixedValueVelocity(bcData *bc)
+void udfDirichlet(bcData *bc)
 {
-  dfloat u, v, w, p;
-  exact(&u, &v, &w, &p, bc->x, bc->y, bc->z, bc->time, p_nu);
-  bc->u = u;
-  bc->v = v;
-  bc->w = w;
+  if (isField("FLUID VELOCITY")) {
+    dfloat u, v, w, p;
+    exact(&u, &v, &w, &p, bc->x, bc->y, bc->z, bc->time, p_nu);
+    bc->uxFluid = u;
+    bc->uyFluid = v;
+    bc->uzFluid = w;
+  }
+  
+  if (isField("SCALAR VELX_DIR")) {
+    dfloat u, v, w, p;
+    exact(&u, &v, &w, &p, bc->x, bc->y, bc->z, bc->time, p_nu);
+    bc->sScalar = u;
+  }
+
 }
 
-void codedFixedValueScalar(bcData *bc)
-{
-  dfloat u, v, w, p;
-  exact(&u, &v, &w, &p, bc->x, bc->y, bc->z, bc->time, p_nu);
-  bc->s = u;
-}
-
-void codedFixedGradientScalar(bcData *bc)
+void udfNeumann(bcData *bc)
 {
   dfloat grad_u_x, grad_u_y, grad_u_z;
   grad_u(&grad_u_x, &grad_u_y, &grad_u_z, bc->x, bc->y, bc->z, bc->time, p_nu);
-  bc->flux = p_nu * (grad_u_x * bc->nx + grad_u_y * bc->ny + grad_u_z * bc->nz);
+  bc->fluxScalar = p_nu * (grad_u_x * bc->nx + grad_u_y * bc->ny + grad_u_z * bc->nz);
 }
 
 @kernel void userMeshVelocity(const dlong Ntotal,
@@ -257,24 +258,24 @@ void codedFixedGradientScalar(bcData *bc)
 
 void userq(double time)
 {
-  mesh_t *mesh = nrs->mesh;
-  cds_t *cds = nrs->cds;
-  const dlong Nlocal = nrs->mesh->Nelements * nrs->mesh->Np;
+  auto& mesh = nrs->meshV;
+  auto& scalar = nrs->scalar;
+  const dlong Nlocal = nrs->meshV->Nelements * nrs->meshV->Np;
 
-  dpdx(Nlocal, time, mesh->o_x, mesh->o_y, mesh->o_z, 0 * cds->fieldOffset[0], nrs->cds->o_NLT);
-  dpdx(Nlocal, time, mesh->o_x, mesh->o_y, mesh->o_z, 1 * cds->fieldOffset[0], nrs->cds->o_NLT);
+  dpdx(Nlocal, time, mesh->o_x, mesh->o_y, mesh->o_z, scalar->o_explicitTerms("VELX_DIR"));
+  dpdx(Nlocal, time, mesh->o_x, mesh->o_y, mesh->o_z, scalar->o_explicitTerms("VELX_NEU"));
 }
 
 void UDF_LoadKernels(deviceKernelProperties& kernelInfo)
 {
-  int maxRank = platform->comm.mpiRank;
-  MPI_Allreduce(MPI_IN_PLACE, &maxRank, 1, MPI_INT, MPI_MAX, platform->comm.mpiComm);
+  int maxRank = platform->comm.mpiRank();
+  MPI_Allreduce(MPI_IN_PLACE, &maxRank, 1, MPI_INT, MPI_MAX, platform->comm.mpiComm());
 
   setupAide &options = platform->options;
 
   dfloat mue, rho;
-  options.getArgs("VISCOSITY", mue);
-  options.getArgs("DENSITY", rho);
+  options.getArgs("FLUID VISCOSITY", mue);
+  options.getArgs("FLUID DENSITY", rho);
   kernelInfo.define("p_nu") = mue / rho;
   kernelInfo.define("p_U0") = P_U0;
   kernelInfo.define("p_V0") = P_V0;
@@ -313,7 +314,7 @@ void UDF_Setup0(MPI_Comm comm, setupAide &options)
   }
 }
 
-void particleRHS(nrs_t *nrs, lpm_t *lpm, double time, const deviceMemory<dfloat>& o_y, void *userdata, deviceMemory<dfloat>& o_ydot)
+void particleRHS(lpm_t *lpm, double time, const deviceMemory<dfloat>& o_y, void *userdata, deviceMemory<dfloat>& o_ydot)
 {
   auto offset = lpm->fieldOffset();
 
@@ -343,7 +344,7 @@ void UDF_Setup()
     const dfloat newton_tol = 5e-13;
     const dfloat bb_tol = 0.01;
 
-    particles = new lpm_t(bb_tol, newton_tol);
+    particles = new lpm_t(nrs->meshV, nrs->dt, bb_tol, newton_tol);
 
     particles->setSolver("AB");
 
@@ -353,10 +354,10 @@ void UDF_Setup()
     particles->setUserRHS(particleRHS);
 
     // register fluid velocity as an interpolated quantity
-    particles->registerInterpField("fluid_velocity", nrs->NVfields, nrs->o_U);
+    particles->addInterpField("fluid_velocity", nrs->fluid->mesh->dim, nrs->fluid->fieldOffset, nrs->fluid->o_solution());
 
     // register unique particle id as a field
-    particles->registerProp("gid", 1);
+    particles->addProp("gid", 1);
 
     // uniformly distribute particles in a cube [-Lx/2, Lx/2] x [-Ly/2, Ly/2] x [-Lz/2, Lz/2]
     // in a round-robin fashion
@@ -377,7 +378,7 @@ void UDF_Setup()
       for (auto &&y : yPoint) {
         for (auto &&z : zPoint) {
           // only add particles to rank 0
-          if (platform->comm.mpiRank == 0) {
+          if (platform->comm.mpiRank() == 0) {
             xp0.push_back(x);
             yp0.push_back(y);
             zp0.push_back(z);
@@ -409,12 +410,12 @@ void UDF_Setup()
     particles->setProp("gid", o_pid);
   }
 
-  mesh_t *mesh = nrs->mesh;
+  mesh_t *mesh = nrs->meshV;
 
-  nrs->userScalarSource = &userq;
+  nrs->userSource = &userq;
   nrs->userConvergenceCheck = &timeStepConverged;
 
-  if (platform->options.compareArgs("MOVING MESH", std::string("TRUE"))) {
+  if (platform->options.compareArgs("MOVING MESH", "TRUE")) {
     o_x0.resize(mesh->Nlocal);
     o_x0.copyFrom(mesh->o_x);
 
@@ -445,7 +446,7 @@ void overwriteParticleSolution(nrs_t *nrs, double time)
     zp0_g[i] = zpg0[gid];
   }
 
-  deviceMemory<dfloat> o_y0(nrs->mesh->dim * xp0_g.size());
+  deviceMemory<dfloat> o_y0(nrs->meshV->dim * xp0_g.size());
 
   if (particles->numParticles() > 0) {
     auto o_x0coord = o_y0.slice(0 * xp0_g.size());
@@ -475,19 +476,37 @@ void overwriteParticleSolution(nrs_t *nrs, double time)
 
 void UDF_ExecuteStep(double time, int tstep)
 {
-  mesh_t *mesh = nrs->mesh;
-  cds_t *cds = nrs->cds;
+  auto& mesh = nrs->meshV;
+  auto& scalar = nrs->scalar;
 
-  if (tstep <= 5) {
-    exactUVWP(mesh->Nlocal, time, mesh->o_x, mesh->o_y, mesh->o_z, nrs->fieldOffset, nrs->o_P, nrs->o_U);
+#if 0
+  exactUVWP(mesh->Nlocal, time, mesh->o_x, mesh->o_y, mesh->o_z, nrs->fieldOffset, nrs->fluid->o_P, nrs->fluid->o_solution());
+#endif
 
+#if 0
+  auto o_tmp = platform->deviceMemoryPool.reserve<dfloat>(nrs->fluid->o_P.size());
+  exactUVWP(mesh->Nlocal, time, mesh->o_x, mesh->o_y, mesh->o_z, nrs->fieldOffset, o_tmp, nrs->fluid->o_solution());
+#endif
+
+#if 0
+  auto o_tmp = platform->deviceMemoryPool.reserve<dfloat>(nrs->fluid->o_solution().size());
+  exactUVWP(mesh->Nlocal, time, mesh->o_x, mesh->o_y, mesh->o_z, nrs->fieldOffset, nrs->fluid->o_P, o_tmp);
+#endif
+
+#if 1
+  if (tstep <= 5 && nrs->fluid) {
+    exactUVWP(mesh->Nlocal, time, mesh->o_x, mesh->o_y, mesh->o_z, nrs->fieldOffset, nrs->fluid->o_P, nrs->fluid->o_solution());
+
+#if 1
     if (nrs->Nscalar > 0) {
-      cds->o_S.copyFrom(nrs->o_U, mesh->Nlocal, 0 * cds->fieldOffset[0]);
+      scalar->o_solution("VELX_DIR").copyFrom(nrs->fluid->o_U, mesh->Nlocal);
     }
     if (nrs->Nscalar > 1) {
-      cds->o_S.copyFrom(nrs->o_U, mesh->Nlocal, 1 * cds->fieldOffset[0]);
+      scalar->o_solution("VELX_NEU").copyFrom(nrs->fluid->o_solution("x"), mesh->Nlocal);
     }
+#endif
   }
+#endif
 
   if (ciMode == 23) {
     ciCheckpointing(nrs);
@@ -503,15 +522,15 @@ void UDF_ExecuteStep(double time, int tstep)
   }
 
   if (platform->options.compareArgs("MOVING MESH", std::string("TRUE"))) {
-    userMeshVelocity(mesh->Nlocal, nrs->fieldOffset, time, o_x0, o_y0, o_z0, mesh->o_U);
+    userMeshVelocity(mesh->Nlocal, nrs->fieldOffset, time, o_x0, o_y0, o_z0, nrs->geom->o_solution());
   }
 
-  if (nrs->checkpointStep) {
+  if (nrs->checkpointStep || true) {
     nrs->copyToNek(time, tstep);
     nek::userchk();
 
     if (ciMode == 1) {
-      particles->writeFld();
+      particles->writeToFile();
     }
   }
 

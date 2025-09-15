@@ -1,3 +1,5 @@
+userSections = CASEDATA
+
 [GENERAL]
 polynomialOrder = 7
 cubaturePolynomialOrder = 9 
@@ -18,17 +20,16 @@ checkpointInterval = 0
 
 regularization = hpfrt + nModes=1 + scalingCoeff=1
 
-[PRESSURE]
+[FLUID PRESSURE]
 residualTol = 1e-04
-
-#solver = pfgmres
+#solver = gmres+flexbile
 #smootherType = RAS+OptFourthChebyshev 
 #pMGSchedule = p=7+degree=2, p=3+degree=2, p=1, p=3+degree=2, p=7+degree=2
 
-solver = pfcg 
+solver = cg+flexible 
 smootherType = Jac+Cheby
 
-[VELOCITY]
+[FLUID VELOCITY]
 boundaryTypeMap = none
 rho = 1.0
 viscosity = 1/1600
@@ -45,7 +46,7 @@ W0 = 0
 #V0 = 2.0
 #W0 = 2.0
 
-[BOOMERAMG]
+[FLUID PRESSURE BOOMERAMG]
 #smootherType = 18
 iterations = 1
 chebyshevRelaxOrder = 1

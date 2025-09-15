@@ -1,0 +1,102 @@
+#define p_fieldBlockSize 3
+
+#define reduce()                                                                                             \
+  {                                                                                                          \
+    @barrier();                                                                                              \
+    for (int s = p_blockSize / 2; s > 1; s >>= 1) {                                                          \
+      for (int t = 0; t < p_blockSize; ++t; @inner(0)) {                                                     \
+        if (t < s) {                                                                                         \
+          for (int fld = 0; fld < p_fieldBlockSize; fld++) {                                                 \
+            s_sum[fld][t] += s_sum[fld][t + s];                                                              \
+          }                                                                                                  \
+        }                                                                                                    \
+      }                                                                                                      \
+      @barrier();                                                                                            \
+    }                                                                                                        \
+    for (int t = 0; t < p_blockSize; ++t; @inner(0)) {                                                       \
+      if (t < 1) {                                                                                           \
+        for (int fld = 0; fld < p_fieldBlockSize; fld++) {                                                   \
+          if (fldStart + fld < Nfields) {                                                                    \
+            out[e + (fldStart + fld) * Nelements] += s_sum[fld][0] + s_sum[fld][1];                          \
+          }                                                                                                  \
+        }                                                                                                    \
+      }                                                                                                      \
+    }                                                                                                        \
+    @barrier();                                                                                              \
+  }
+
+@kernel void surfaceAreaMultiplyIntegrateHex3D(const dlong Nelements,
+                                               const int Nfields,
+                                               const dlong fieldOffset,
+                                               const int nbID,
+                                               const int *bID,
+                                               @ restrict const dfloat *sgeo,
+                                               @ restrict const dlong *vmapM,
+                                               @ restrict const int *EToBM,
+                                               @ restrict const dfloat *U,
+                                               @ restrict dfloat *out)
+{
+  for (dlong e = 0; e < Nelements; e++; @outer(0)) {
+    for (int fldStart = 0; fldStart < Nfields; fldStart += p_fieldBlockSize) {
+      @shared dfloat s_sum[p_fieldBlockSize][p_blockSize + 1];
+
+      // reduce over all element faces
+      for (int t = 0; t < p_blockSize; ++t; @inner(0)) {
+        for (int fld = 0; fld < p_fieldBlockSize; fld++) {
+          s_sum[fld][t] = 0.0;
+        }
+        if (t < p_Nfp) {
+          for (int f = 0; f < p_Nfaces; f++) {
+            const dlong bIDM = EToBM[f + p_Nfaces * e];
+
+            if (bIDM > 0) {
+              for (int ibID = 0; ibID < nbID; ibID++) {
+                if (bIDM == bID[ibID]) {
+                  const int n = t + f * p_Nfp;
+                  const dlong sid = e * p_Nfaces * p_Nfp + n;
+
+                  const dlong idM = vmapM[sid];
+                  const dfloat sWJ = sgeo[sid * p_Nsgeo + p_WSJID];
+
+                  const dfloat nx = sgeo[sid * p_Nsgeo + p_NXID];
+                  const dfloat ny = sgeo[sid * p_Nsgeo + p_NYID];
+                  const dfloat nz = sgeo[sid * p_Nsgeo + p_NZID];
+
+#if p_mode == 0
+
+#pragma unroll p_fieldBlockSize
+                  for (int fld = 0; fld < p_fieldBlockSize; fld++) {
+                    if (fldStart + fld < Nfields) {
+                      s_sum[fld][t] += U[idM + (fldStart + fld) * fieldOffset] * sWJ;
+                    }
+                  }
+
+#else
+
+#if p_mode == 1
+                  if (fldStart < 1) {
+                    const dfloat _U = U[idM + 0 * fieldOffset] * nx + U[idM + 1 * fieldOffset] * ny +
+                                      U[idM + 2 * fieldOffset] * nz;
+                    s_sum[0][t] += _U * sWJ;
+                  }
+#else
+                  if (fldStart < 1) {
+                    s_sum[0][t] += U[idM] * sWJ * nx;
+                    s_sum[1][t] += U[idM] * sWJ * ny;
+                    s_sum[2][t] += U[idM] * sWJ * nz;
+                  }
+#endif
+
+#endif
+                }
+              }
+            }
+          }
+        }
+      }
+
+      reduce()
+
+    } // field block
+  }
+}

@@ -53,7 +53,7 @@ fi
 
 if [ $nsessions -gt 1 ]; then
   if [ $nodes -lt $nsessions ]; then
-    echo "ERROR: number of nodes is smaller than number of sessions!"
+    echo "ERROR: number of ranks in $case.sess is larger than job size"
     exit 1
   fi
 fi
@@ -144,15 +144,46 @@ fi
 
 }
 
+chk_case_re2() {
+  __case=$1
+
+  # search [MESH] file = foo.re2 in par
+  f=`awk '
+    /^\[MESH\]/     { in_mesh=1; next }
+    /^\[.*\]/       { in_mesh=0 }
+    in_mesh && /^[[:space:]]*file[[:space:]]*=/ && $0 !~ /^#/ {
+      # Remove comments after value
+      line = $0
+      sub(/#.*/, "", line)
+      # Extract filename (quoted or unquoted), return first match
+      if (match(line, /file[[:space:]]*=[[:space:]]*"([^"]+)"/, m)) {
+        print m[1]; exit
+      } else if (match(line, /file[[:space:]]*=[[:space:]]*([^[:space:]]+)/, m)) {
+        print m[1]; exit
+      }
+    }
+  ' $__case.par`
+
+  if [[ -z "$f" ]]; then # use default if not found
+    f=$__case.re2
+  fi
+  if [ ! -f $f ]; then
+    echo "Cannot find" $f
+    exit 1
+  fi
+}
+
 chk_case_files() {
   __case=$1
-  list=($__case.par $__case.udf $__case.re2)
+  list=($__case.par $__case.udf)
   for f in ${list[@]}; do
     if [ ! -f $f ]; then
       echo "Cannot find" $f
       exit 1
     fi
   done
+
+  chk_case_re2 $__case
 }
 
 chk_case() {

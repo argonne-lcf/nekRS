@@ -82,9 +82,9 @@
           const dfloat JW = vgeo[gid + p_JWID * p_Np];
 
           // compute 'r' and 's' derivatives of (q_m) at node n
-          dfloat dudr = 0.f, duds = 0.f, dudt = 0.f;
-          dfloat dvdr = 0.f, dvds = 0.f, dvdt = 0.f;
-          dfloat dwdr = 0.f, dwds = 0.f, dwdt = 0.f;
+          dfloat dudr = 0, duds = 0, dudt = 0;
+          dfloat dvdr = 0, dvds = 0, dvdt = 0;
+          dfloat dwdr = 0, dwds = 0, dwdt = 0;
 
 #pragma unroll p_Nq
           for (int n = 0; n < p_Nq; ++n) {

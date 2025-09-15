@@ -1,3 +1,5 @@
+userSections = CASEDATA
+
 [GENERAL]
 polynomialOrder = 7 
 cubaturePolynomialOrder = 9 
@@ -15,28 +17,30 @@ checkpointInterval = 500
 
 regularization = hpfrt + nModes=3 + scalingCoeff=10
 
+scalars = TEMPERATURE
+
 [PROBLEMTYPE]
 equation = navierStokes+variableViscosity
 
-[PRESSURE]
-solver = pfcg
+[FLUID PRESSURE]
+solver = cg+flexible 
 residualTol = 1e-04
 preconditioner = multigrid
 smootherType = JAC+Chebyshev
 
-[VELOCITY]
-boundaryTypeMap = codedFixedValue, zeroNValue/codedFixedGradient 
+[FLUID VELOCITY]
+boundaryTypeMap = udfDirichlet, zeroDirichletN/udfNeumann 
 residualTol = 1e-06
 rho = 1.0
 viscosity = 1/50e6
 
-[SCALAR00]
-boundaryTypeMap = codedFixedGradient, codedFixedGradient 
+[SCALAR TEMPERATURE]
+boundaryTypeMap = udfNeumann, udfNeumann 
 residualTol = 1e-06
-rho = 1.0
-diffusivity = 1/50e6
+rhoCp = 1.0
+conductivity = 1/50e6
 
-[BOOMERAMG]
+[FLUID PRESSURE BOOMERAMG]
 iterations = 1
 
 [CASEDATA]

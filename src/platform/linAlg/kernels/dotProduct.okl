@@ -1,0 +1,13 @@
+@kernel void dotProduct(const dlong N,
+                        const dlong fieldOffset,
+                        @ restrict const dfloat *v1,
+                        @ restrict const dfloat *v2,
+                        @ restrict dfloat *v3)
+{
+
+  for (dlong n = 0; n < N; ++n; @tile(p_blockSize, @outer, @inner)) {
+    v3[n + 0 * fieldOffset] = v1[n + 0 * fieldOffset] * v2[n + 0 * fieldOffset];
+    v3[n + 1 * fieldOffset] = v1[n + 1 * fieldOffset] * v2[n + 1 * fieldOffset];
+    v3[n + 2 * fieldOffset] = v1[n + 2 * fieldOffset] * v2[n + 2 * fieldOffset];
+  }
+}

@@ -1,0 +1,112 @@
+void crossProduct(const dfloat a0,
+                  const dfloat a1,
+                  const dfloat a2,
+                  const dfloat b0,
+                  const dfloat b1,
+                  const dfloat b2,
+                  dfloat *c0,
+                  dfloat *c1,
+                  dfloat *c2)
+{
+  (*c0) = a1 * b2 - a2 * b1;
+  (*c1) = a2 * b0 - a0 * b2;
+  (*c2) = a0 * b1 - a1 * b0;
+
+  const dfloat mag = sqrt((*c0) * (*c0) + (*c1) * (*c1) + (*c2) * (*c2));
+  const dfloat invMag = 1.0 / mag;
+  (*c0) *= invMag;
+  (*c1) *= invMag;
+  (*c2) *= invMag;
+}
+
+dfloat
+dot(const dfloat a0, const dfloat a1, const dfloat a2, const dfloat b0, const dfloat b1, const dfloat b2)
+{
+  return a0 * b0 + a1 * b1 + a2 * b2;
+}
+
+@kernel void setAvgNormal(const dlong Nelements,
+                          const dlong offset,
+                          @ restrict const dlong *vmapM,
+                          @ restrict const int *EToB,
+                          @ restrict const dfloat *normal,
+                          @ restrict dfloat *sgeo)
+{
+  for (dlong e = 0; e < Nelements; e++; @outer(0)) {
+
+    for (int f = 0; f < p_Nfaces; f++) {
+      for (int m = 0; m < p_Nfp; ++m; @inner(0)) {
+        const int n = m + f * p_Nfp;
+        const int sk = e * p_Nfp * p_Nfaces + n;
+        const dlong sid = e * p_Nfaces * p_Nfp + n;
+        const dlong idM = vmapM[sk];
+        const dlong bcType = EToB[f + p_Nfaces * e];
+
+        sgeo[sid * p_Nsgeo + p_NXAVGID] = sgeo[sid * p_Nsgeo + p_NXID];
+        sgeo[sid * p_Nsgeo + p_NYAVGID] = sgeo[sid * p_Nsgeo + p_NYID];
+        sgeo[sid * p_Nsgeo + p_NZAVGID] = sgeo[sid * p_Nsgeo + p_NZID];
+
+        if (bcType == p_ZERO_NORMAL) {
+
+          dfloat volNx = normal[idM + 0 * offset];
+          dfloat volNy = normal[idM + 1 * offset];
+          dfloat volNz = normal[idM + 2 * offset];
+          dfloat count = normal[idM + 3 * offset];
+
+          const dfloat invCount = 1.0 / count;
+          volNx *= invCount;
+          volNy *= invCount;
+          volNz *= invCount;
+
+          const dfloat volNMag = sqrt(volNx * volNx + volNy * volNy + volNz * volNz);
+          const dfloat invVolNMag = 1.0 / volNMag;
+          volNx *= invVolNMag;
+          volNy *= invVolNMag;
+          volNz *= invVolNMag;
+
+          const dfloat nx = volNx;
+          const dfloat ny = volNy;
+          const dfloat nz = volNz;
+
+          sgeo[sid * p_Nsgeo + p_NXAVGID] = nx;
+          sgeo[sid * p_Nsgeo + p_NYAVGID] = ny;
+          sgeo[sid * p_Nsgeo + p_NZAVGID] = nz;
+
+          const dfloat tol = 1e-4;
+          dfloat vt1x = 0, vt1y = 0, vt1z = 0;
+          dfloat vt2x = 0, vt2y = 0, vt2z = 0;
+          if (fabs(fabs(nz) - 1.0) < tol) {
+            vt1x = 1.0;
+            vt1y = 0.0;
+            vt1z = 0.0;
+          } else {
+            const dfloat mag = sqrt(nx * nx + ny * ny);
+            vt1x = -ny / mag;
+            vt1y = nx / mag;
+            vt1z = 0.0;
+          }
+
+          sgeo[sid * p_Nsgeo + p_T1XID] = vt1x;
+          sgeo[sid * p_Nsgeo + p_T1YID] = vt1y;
+          sgeo[sid * p_Nsgeo + p_T1ZID] = vt1z;
+
+          // vt2 = n \cross vt1
+          vt2x = ny * vt1z - nz * vt1y;
+          vt2y = nz * vt1x - nx * vt1z;
+          vt2z = nx * vt1y - ny * vt1x;
+
+          // normalize vt2
+          const dfloat invMag = 1.0 / sqrt(vt2x * vt2x + vt2y * vt2y + vt2z * vt2z);
+          vt2x *= invMag;
+          vt2y *= invMag;
+          vt2z *= invMag;
+
+          sgeo[sid * p_Nsgeo + p_T2XID] = vt2x;
+          sgeo[sid * p_Nsgeo + p_T2YID] = vt2y;
+          sgeo[sid * p_Nsgeo + p_T2ZID] = vt2z;
+        }
+      }
+      @barrier();
+    }
+  }
+}

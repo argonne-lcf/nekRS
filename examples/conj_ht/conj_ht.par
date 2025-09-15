@@ -6,13 +6,19 @@ dt = 2e-02
 timeStepper = tombo2
 checkpointInterval = 100
 
-[PRESSURE]
+scalars = foo, temperature
+
+[FLUID PRESSURE]
 residualTol = 1e-06
 
-[VELOCITY]
-boundaryTypeMap = codedFixedValue, zeroGradient, zeroValue 
+[FLUID VELOCITY]
+boundaryTypeMap = udfDirichlet, zeroNeumann, zeroDirichlet 
 residualTol = 1e-08
 
-[TEMPERATURE]
-boundaryTypeMap = codedFixedValue, zeroGradient, zeroGradient 
+[SCALAR FOO]
+solver = none
+
+[SCALAR TEMPERATURE]
+boundaryTypeMap = udfDirichlet, zeroNeumann, zeroNeumann 
 residualTol = 1e-08
+mesh = fluid + solid

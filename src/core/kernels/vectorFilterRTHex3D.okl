@@ -48,9 +48,9 @@
 
 #pragma unroll p_Nq
         for (int k = 0; k < p_Nq; ++k) {
-          r_Un[k] = 0.f;
-          r_Vn[k] = 0.f;
-          r_Wn[k] = 0.f;
+          r_Un[k] = 0;
+          r_Vn[k] = 0;
+          r_Wn[k] = 0;
         }
       }
     }
@@ -100,9 +100,9 @@
 
       for (int j = 0; j < p_Nq; ++j; @inner(1)) {
         for (int i = 0; i < p_Nq; ++i; @inner(0)) {
-          r_Un[k] = 0.f;
-          r_Vn[k] = 0.f;
-          r_Wn[k] = 0.f;
+          r_Un[k] = 0;
+          r_Vn[k] = 0;
+          r_Wn[k] = 0;
 #pragma unroll p_Nq
           for (int n = 0; n < p_Nq; n++) {
             const dfloat Ii = s_FT[n][i];
@@ -126,9 +126,9 @@
 
       for (int j = 0; j < p_Nq; ++j; @inner(1)) {
         for (int i = 0; i < p_Nq; ++i; @inner(0)) {
-          r_Un[k] = 0.f;
-          r_Vn[k] = 0.f;
-          r_Wn[k] = 0.f;
+          r_Un[k] = 0;
+          r_Vn[k] = 0;
+          r_Wn[k] = 0;
 
 #pragma unroll p_Nq
           for (int n = 0; n < p_Nq; n++) {
@@ -149,9 +149,9 @@
         for (int k = 0; k < p_Nq; ++k) {
           const dlong id = e * p_Np + k * p_Nq * p_Nq + j * p_Nq + i;
 
-          NU[id + 0 * offset] += filterS * (r_U[k] - r_Un[k]);
-          NU[id + 1 * offset] += filterS * (r_V[k] - r_Vn[k]);
-          NU[id + 2 * offset] += filterS * (r_W[k] - r_Wn[k]);
+          NU[id + 0 * offset] += -fabs(filterS) * (r_U[k] - r_Un[k]);
+          NU[id + 1 * offset] += -fabs(filterS) * (r_V[k] - r_Vn[k]);
+          NU[id + 2 * offset] += -fabs(filterS) * (r_W[k] - r_Wn[k]);
         }
       }
     }
