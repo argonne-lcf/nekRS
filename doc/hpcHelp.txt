@@ -2,7 +2,7 @@
 OLCF Frontier
 ------------------------------------------------------------------------------------------------------------------------------------
 
-(PrgEnv-amd) (last tested: Jun. 23, 2025)
+(PrgEnv-amd) (last tested: Nov. 18, 2025)
 
   module reset
   module load PrgEnv-amd
@@ -19,10 +19,10 @@ OLCF Frontier
   export NEKRS_HOME=<path-to-your-project>/.local/nekrs
   
   CC=cc CXX=CC FC=ftn ./build.sh \
-     -DCMAKE_INSTALL_PREFIX=$NEKRS_HOME
+     -DCMAKE_INSTALL_PREFIX=$NEKRS_HOME \
+     -DNEKRS_Fortran_FLAGS="-fuse-ld=bfd"
 
-
-(PrgEnv-gnu) (last tested: Jun. 23, 2025)
+(PrgEnv-gnu) (last tested: Nov. 18, 2025)
 
   module reset
   module load PrgEnv-gnu
@@ -62,18 +62,18 @@ ALCF Aurora
 ALCF Polaris
 ------------------------------------------------------------------------------------------------------------------------------------
 
-(PrgEnv-gnu) (last tested: Jun. 23, 2025)
+(PrgEnv-gnu) (last tested: Nov. 18, 2025)
 
   module use /soft/modulefiles
-  module use /opt/cray/pe/lmod/modulefiles/mix_compilers
   module load libfabric
   module load PrgEnv-gnu
-  module load nvhpc-mixed
+  module load cuda/12.6
+  module load cudatoolkit-standalone/12.6
+  module load gcc-native/13.2
   module load craype-x86-milan craype-accel-nvidia80
   module load spack-pe-base cmake
 
   module list
-
 
   # path to target installed location
   export NEKRS_HOME=<path-to-your-project>/.local/nekrs
