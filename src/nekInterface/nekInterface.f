@@ -808,22 +808,26 @@ c-----------------------------------------------------------------------
       return
       end
 c-----------------------------------------------------------------------
-      integer*8 function nekf_set_vert(nx, isTmsh)
+      integer*8 function nekf_set_vert(nx, nel, isRefine)
 
       include 'SIZE'
       include 'TOTAL'
       include 'NEKINTF'
 
-      integer npts, isTmsh
+      integer nx, nel, isRefine
 
+      common /ivrtx0/ vertex_orig ((2**ldim),lelt)
+      integer*8 vertex_orig
       common /ivrtx/ vertex ((2**ldim),lelt)
       integer*8 vertex
 
       integer*8 ngv
 
-      nel = nelt
-      if (isTmsh.eq.0) nel = nelv
-      call set_vert(glo_num,ngv,nx,nel,vertex,.false.)
+      if (isRefine.eq.0) then
+        call set_vert(glo_num,ngv,nx,nel,vertex,.false.)
+      else ! refined meshes use original vertex
+        call set_vert(glo_num,ngv,nx,nel,vertex_orig,.false.)
+      endif
 
       nekf_set_vert = ngv
 

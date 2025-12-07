@@ -7,6 +7,7 @@ c     Note that lelt and lelg need to be LARGE enough
       include 'TOTAL'
 
       parameter(lxyz=lx1*ly1*lz1)
+
       common /c_is1/ glo_num(lxyz*lelt)
       integer*8 glo_num
 
@@ -277,6 +278,9 @@ c                                   ncut = 4 --> 64x number of elements
      $             , pc(lx1*lx1,mxnew),pt(lx1*lx1,mxnew)
       real pc,pt
 
+      common /ivrtx0/ vertex_orig ((2**ldim),lelt)
+      integer*8 vertex_orig
+
       common /ivrtx/ vertex ((2**ldim),lelt)
       integer*8 vertex
       integer*8 ngv
@@ -287,6 +291,18 @@ c                                   ncut = 4 --> 64x number of elements
       integer isym2pre(8)   ! Symmetric-to-prenek vertex ordering
       save    isym2pre
       data    isym2pre / 1 , 2 , 4 , 3 , 5 , 6 , 8 , 7 /
+
+      integer icalld
+      save icalld
+      data icalld / 0 /
+
+      if (icalld.eq.0) then
+         do i = (2**ldim)*nelt
+            vertex_orig(i,1) = vertex(i)
+         enddo
+         if (nio.eq.0) write(6,12) nelt
+ 13         format('h-refine: backup vertex into vertex_orig',I12)
+      endif
 
       nblk = ncut**ldim
       nnew = nblk - 1
