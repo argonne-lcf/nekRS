@@ -1,3 +1,5 @@
+//.. NOTE: this modified version has been copied from:
+//..       https://github.com/yslan/nekrsExamples/blob/master/tavg/tavg.cpp
 #include "platform.hpp"
 #include "tavg.hpp"
 #include "nekInterfaceAdapter.hpp"
@@ -7,6 +9,7 @@
 namespace
 {
 dlong fieldOffset;
+int Nscalar; // avg all
 
 std::vector< std::vector<deviceMemory<dfloat>> > userFieldList;
 occa::memory o_AVG;
@@ -17,9 +20,11 @@ occa::kernel E3Kernel;
 occa::kernel E4Kernel;
 
 std::unique_ptr<iofld> fldWriter;
+std::unique_ptr<iofld> fldWriter_avg, fldWriter_rms, fldWriter_rm2;
 
 bool buildKernelCalled = false;
 bool setupCalled = false;
+bool avg_all = false; // nek5000's avg_all mode
 
 int counter = 0;
 
@@ -178,7 +183,46 @@ void tavg::setup(dlong _fieldOffset, const std::vector< std::vector<deviceMemory
   setupCalled = true;
 }
 
-void tavg::outfld(mesh_t *mesh)
+void tavg::setup(nrs_t *nrs) // avg_all
+{
+  avg_all = true;
+  Nscalar = nrs->Nscalar;
+
+  std::vector< std::vector<deviceMemory<dfloat>> > tavgFields;
+  deviceMemory<dfloat> o_u(nrs->o_U.slice(0 * nrs->fieldOffset , nrs->fieldOffset));
+  deviceMemory<dfloat> o_v(nrs->o_U.slice(1 * nrs->fieldOffset , nrs->fieldOffset));
+  deviceMemory<dfloat> o_w(nrs->o_U.slice(2 * nrs->fieldOffset , nrs->fieldOffset));
+  deviceMemory<dfloat> o_p(nrs->o_P.slice(0 * nrs->fieldOffset , nrs->fieldOffset));
+
+  // E[X]
+  tavgFields.push_back({o_u});
+  tavgFields.push_back({o_v});
+  tavgFields.push_back({o_w});
+  tavgFields.push_back({o_p});
+  for (int is=0; is<nrs->Nscalar; is++) {
+    deviceMemory<dfloat> o_s(nrs->cds->o_S.slice(nrs->cds->fieldOffsetScan[is], nrs->cds->fieldOffset[is]));
+    tavgFields.push_back({o_s});
+  }
+
+  // E[X^2]
+  tavgFields.push_back({o_u, o_u});
+  tavgFields.push_back({o_v, o_v});
+  tavgFields.push_back({o_w, o_w});
+  tavgFields.push_back({o_p, o_p});
+  for (int is=0; is<nrs->Nscalar; is++) {
+    deviceMemory<dfloat> o_s(nrs->cds->o_S.slice(nrs->cds->fieldOffsetScan[is], nrs->cds->fieldOffset[is]));
+    tavgFields.push_back({o_s, o_s});
+  }
+
+  // E[X,Y]
+  tavgFields.push_back({o_u, o_v});
+  tavgFields.push_back({o_v, o_w});
+  tavgFields.push_back({o_w, o_u});
+
+  tavg::setup(nrs->fieldOffset, tavgFields);
+}
+
+void tavg::outfld(mesh_t *mesh, bool FP64, bool reset_)
 {
   nekrsCheck(!setupCalled || !buildKernelCalled,
              MPI_COMM_SELF,
@@ -188,26 +232,84 @@ void tavg::outfld(mesh_t *mesh)
 
   if (userFieldList.size() == 0) return;
 
-  const bool outXYZ = mesh && outfldCounter == 0; 
+  const bool outXYZ = mesh && outfldCounter == 0;
 
-  fldWriter = iofldFactory::create();
+  if (avg_all) {
 
-  if (!fldWriter->isInitialized()) {
-    fldWriter->open(mesh, iofld::mode::write, "tavg");
+    auto iofldWrapper = [&](std::unique_ptr<iofld> &iofld, int &idx, std::string fileName, bool hasScalar)
+    {
+      if (!iofld) {
+        iofld = iofldFactory::create();
+        if (platform->comm.mpiRank == 0) {
+          printf("create a new iofldFactory... %s\n", fileName.c_str());
+        }
+      }
 
-    fldWriter->writeAttribute("precision", "64");
- 
-    fldWriter->addVariable("time", atime);
- 
-    for(int i = 0; i < userFieldList.size(); i++) {
-      fldWriter->addVariable("scalar" + scalarDigitStr(i), std::vector<occa::memory>{o_AVG.slice(i * fieldOffset, mesh->Nlocal)});
-    }  
+      if (!iofld->isInitialized()) {
+        iofld->open(mesh, iofld::mode::write, fileName);
+        iofld->writeAttribute("precision", (FP64) ? "64" : "32");
+
+        std::vector<occa::memory> o_V;
+        o_V.push_back(o_AVG.slice((idx+0)*fieldOffset, mesh->Nlocal));
+        o_V.push_back(o_AVG.slice((idx+1)*fieldOffset, mesh->Nlocal));
+        o_V.push_back(o_AVG.slice((idx+2)*fieldOffset, mesh->Nlocal));
+        iofld->addVariable("velocity", o_V);
+        idx += 3;
+      
+        if (hasScalar) {
+          auto o_p = std::vector<occa::memory>{o_AVG.slice((idx+0)*fieldOffset, mesh->Nlocal)};
+          iofld->addVariable("pressure", o_p);
+          idx += 1;
+      
+          for (int i = 0; i < Nscalar; i++) {
+            if (platform->options.compareArgs("SCALAR" + scalarDigitStr(i) + " CHECKPOINTING", "TRUE")) {
+              const auto temperatureExists = platform->options.compareArgs("SCALAR00 IS TEMPERATURE", "TRUE");
+              std::vector<occa::memory> o_Si = {o_AVG.slice((idx+i)*fieldOffset, mesh->Nlocal)};
+              if (i == 0 && temperatureExists) {
+                iofld->addVariable("temperature", o_Si);
+              } else {
+                const auto is = (temperatureExists) ? i - 1 : i;
+                iofld->addVariable("scalar" + scalarDigitStr(is), o_Si);
+              }
+            }
+          }
+          idx += Nscalar;
+        }
+      }
+
+      iofld->addVariable("time", atime);
+      iofld->writeAttribute("outputmesh", (outXYZ) ? "true" : "false");
+      iofld->process();
+    }; // iofldWrapper
+
+    int idx = 0;
+    iofldWrapper(fldWriter_avg, idx, "avg", true);
+    iofldWrapper(fldWriter_rms, idx, "rms", true);
+    iofldWrapper(fldWriter_rm2, idx, "rm2", false);
+
+  } else {
+  
+    fldWriter = iofldFactory::create();
+  
+    if (!fldWriter->isInitialized()) {
+      fldWriter->open(mesh, iofld::mode::write, "tavg");
+  
+      fldWriter->writeAttribute("precision", (FP64) ? "64" : "32");
+   
+      fldWriter->addVariable("time", atime);
+   
+      for(int i = 0; i < userFieldList.size(); i++) {
+        fldWriter->addVariable("scalar" + scalarDigitStr(i), std::vector<occa::memory>{o_AVG.slice(i * fieldOffset, mesh->Nlocal)});
+      }  
+    }
+  
+    fldWriter->writeAttribute("outputmesh", (outXYZ) ? "true" : "false");
+    fldWriter->process();
   }
 
-  fldWriter->writeAttribute("outputmesh", (outXYZ) ? "true" : "false");
-  fldWriter->process(); 
-
-  atime = 0; // reset
+  if (reset_) {
+    atime = 0; // reset
+  }
   outfldCounter++;
 }
 
