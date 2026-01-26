@@ -32,7 +32,7 @@ static void setup_inverse(T *A_inv, const struct csr *A) {
   }
 }
 
-#if defined(ENABLE_HIPBLAS)
+#if defined(ENABLE_BOX_HIPBLAS)
 #include <hip/hip_runtime.h>
 #include <hipblas/hipblas.h>
 
@@ -46,37 +46,36 @@ static void setup_inverse(T *A_inv, const struct csr *A) {
   }
 
 static hipblasHandle_t handle = NULL;
+void *h_r, *h_x;
+void *d_r, *d_x;
 
+template <typename T>
 void asm1_gpu_setup(struct csr *A, unsigned null_space, struct box *box) {
   assert(null_space == 0);
 
-  double *A_inv = 0;
-  float *A_inv_f32 = 0;
-  setup_inverse(&A_inv, &A_inf_f32, A);
+  const size_t size = A->nr * A->nr;
+  T *A_inv = tcalloc(T, size);
+  setup_inverse(A_inv, A);
 
-  check_hip_runtime(hipMalloc(&d_A_inv, A->nr * A->nr * sizeof(double)));
-  check_hip_runtime(hipMemcpy(d_A_inv, A_inv, A->nr * A->nr * sizeof(double),
+  check_hip_runtime(hipMemcpy(d_A_inv, A_inv, A->nr * A->nr * sizeof(T),
                               hipMemcpyHostToDevice));
+  free(A_inv);
 
-  check_hip_runtime(hipMalloc(&d_A_inv_f32, A->nr * A->nr * sizeof(float)));
-  check_hip_runtime(hipMemcpy(d_A_inv_f32, A_inv_f32,
-                              A->nr * A->nr * sizeof(float),
-                              hipMemcpyHostToDevice));
-  free(A_inv), free(A_inv_f32);
+  h_r = calloc(A->nr, sizeof(T));
+  h_x = calloc(A->nr, sizeof(T));
+  check_hip_runtime(hipMalloc(&d_r, A->nr * sizeof(T)));
+  check_hip_runtime(hipMalloc(&d_x, A->nr * sizeof(T)));
 
-  h_r = calloc(A->nr, sizeof(double));
-  h_x = calloc(A->nr, sizeof(double));
-  check_hip_runtime(hipMalloc(&d_r, A->nr * sizeof(double)));
-  check_hip_runtime(hipMalloc(&d_x, A->nr * sizeof(double)));
-
-  o_cx = platform->device.malloc(A->nr * sizeof(float));
   hipblasCreate(&handle);
 
+  dom = box->opts.dom;
+  nr = A->nr;
   initialized = 1;
 }
 
-void asm1_gpu_solve_float(float *x, struct box *box, const float *r) {
-  float *h_r_ = (float *)h_r;
+template <typename T>
+void box_hipblas(T *x, struct box *box, const T *r) {
+  T *h_r_ = (T *)h_r;
   for (uint i = 0; i < nr; i++)
     h_r_[i] = 0;
   for (uint i = 0; i < box->sn; i++) {
@@ -85,15 +84,16 @@ void asm1_gpu_solve_float(float *x, struct box *box, const float *r) {
   }
 
   check_hip_runtime(
-      hipMemcpy(d_r, h_r_, nr * sizeof(float), hipMemcpyHostToDevice));
+      hipMemcpy(d_r, h_r_, nr * sizeof(T), hipMemcpyHostToDevice));
 
+  // FIXME: hibblasSgemv, one_f32
   hipblasSgemv(handle, HIPBLAS_OP_T, nr, nr, &one_f32, d_A_inv_f32, nr,
-               (float *)d_r, 1, &zero_f32, (float *)d_x, 1);
+               (T *)d_r, 1, &zero_f32, (T *)d_x, 1);
 
   check_hip_runtime(
-      hipMemcpy(h_x, d_x, nr * sizeof(float), hipMemcpyDeviceToHost));
+      hipMemcpy(h_x, d_x, nr * sizeof(T), hipMemcpyDeviceToHost));
 
-  float *h_x_ = (float *)h_x;
+  T *h_x_ = (T *)h_x;
   for (uint i = 0; i < box->sn; i++) {
     if (box->u2c[i] >= 0)
       x[i] = h_x_[box->u2c[i]];
@@ -102,58 +102,22 @@ void asm1_gpu_solve_float(float *x, struct box *box, const float *r) {
   }
 }
 
-void asm1_gpu_solve_double(double *x, struct box *box, const double *r) {
-  double *h_r_ = (double *)h_r;
-  for (uint i = 0; i < nr; i++)
-    h_r_[i] = 0;
-  for (uint i = 0; i < box->sn; i++) {
-    if (box->u2c[i] >= 0)
-      h_r_[box->u2c[i]] += r[i];
-  }
+void asm1_gpu_solve(occa::memory &o_x, struct box *box, occa::memory &o_r) {
+  if (!initialized) MPI_Abort(MPI_COMM_WORLD, EXIT_FAILURE);
 
-  check_hip_runtime(
-      hipMemcpy(d_r, h_r_, nr * sizeof(double), hipMemcpyHostToDevice));
-
-  hipblasDgemv(handle, HIPBLAS_OP_T, nr, nr, &one, d_A_inv, nr, (double *)d_r,
-               1, &zero, (double *)d_x, 1);
-
-  check_hip_runtime(
-      hipMemcpy(h_x, d_x, nr * sizeof(double), hipMemcpyDeviceToHost));
-
-  double *h_x_ = (double *)h_x;
-  for (uint i = 0; i < box->sn; i++) {
-    if (box->u2c[i] >= 0)
-      x[i] = h_x_[box->u2c[i]];
-    else
-      x[i] = 0;
-  }
-}
-
-void asm1_gpu_solve(void *x, struct box *box, const void *r) {
-  if (!initialized) {
-    fprintf(stderr, "GPU BLAS not initialized.\n");
-    MPI_Abort(MPI_COMM_WORLD, EXIT_FAILURE);
-  }
-
-  if (box->dom == gs_float) {
-    asm1_gpu_solve_float((float *)x, box, (const float *)r);
-    return;
-  }
-
-  if (box->dom == gs_double) {
-    asm1_gpu_solve_double((double *)x, box, (const double *)r);
-    return;
+  if (box->opts.dom == gs_double) {
+    fprintf(stderr, "GPU double BLAS not supported.\n");
+    exit(EXIT_FAILURE);
+  } else {
+    box_hipblas<float>((float *)o_x.ptr(), nr, (float *)d_A_inv, (float *)o_r.ptr());
   }
 }
 
 void asm1_gpu_free(struct box *box) {
+  hipblasDestroy(handle);
   check_hip_runtime(hipFree(d_A_inv));
-  check_hip_runtime(hipFree(d_A_inv_f32));
   check_hip_runtime(hipFree(d_r));
   check_hip_runtime(hipFree(d_x));
-
-  hipblasDestroy(handle);
-
   free(h_r), h_r = NULL;
   free(h_x), h_x = NULL;
   nr = 0;
@@ -177,9 +141,9 @@ void asm1_gpu_setup(struct csr *A, unsigned null_space, struct box *box) {
   box_onemkl_device_copyto<T>(static_cast<T *>(d_A_inv), A_inv, size);
   free(A_inv);
 
-  initialized = 1;
   dom = box->opts.dom;
   nr = A->nr;
+  initialized = 1;
 }
 
 void asm1_gpu_solve(occa::memory &o_x, struct box *box, occa::memory &o_r) {
@@ -195,17 +159,15 @@ void asm1_gpu_free(struct box *box) {
   box_onemkl_free(static_cast<void *>(d_A_inv));
 }
 
-template void asm1_gpu_setup<float>(struct csr *A, unsigned null_space, struct box *box);
-template void asm1_gpu_setup<double>(struct csr *A, unsigned null_space, struct box *box);
-
 #else
 
+template <typename T>
 void asm1_gpu_setup(struct csr *A, unsigned null_space, struct box *box) {
   fprintf(stderr, "GPU BLAS not enabled.\n");
   exit(EXIT_FAILURE);
 }
 
-void asm1_gpu_solve(void *x, struct box *box, const void *r) {
+void asm1_gpu_solve(occa::memory &o_x, struct box *box, occa::memory &o_r) {
   fprintf(stderr, "GPU BLAS not enabled.\n");
   exit(EXIT_FAILURE);
 }
@@ -215,3 +177,6 @@ void asm1_gpu_free(struct box *box) {
   exit(EXIT_FAILURE);
 }
 #endif
+
+template void asm1_gpu_setup<float>(struct csr *A, unsigned null_space, struct box *box);
+template void asm1_gpu_setup<double>(struct csr *A, unsigned null_space, struct box *box);
