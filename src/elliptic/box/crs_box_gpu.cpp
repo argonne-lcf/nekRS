@@ -46,7 +46,6 @@ static void setup_inverse(T *A_inv, const struct csr *A) {
   }
 
 static hipblasHandle_t handle = NULL;
-void *h_r, *h_x;
 void *d_r, *d_x;
 
 template <typename T>
@@ -61,8 +60,6 @@ void asm1_gpu_setup(struct csr *A, unsigned null_space, struct box *box) {
                               hipMemcpyHostToDevice));
   free(A_inv);
 
-  h_r = calloc(A->nr, sizeof(T));
-  h_x = calloc(A->nr, sizeof(T));
   check_hip_runtime(hipMalloc(&d_r, A->nr * sizeof(T)));
   check_hip_runtime(hipMalloc(&d_x, A->nr * sizeof(T)));
 
@@ -75,42 +72,22 @@ void asm1_gpu_setup(struct csr *A, unsigned null_space, struct box *box) {
 
 template <typename T>
 void box_hipblas(T *x, struct box *box, const T *r) {
-  T *h_r_ = (T *)h_r;
-  for (uint i = 0; i < nr; i++)
-    h_r_[i] = 0;
-  for (uint i = 0; i < box->sn; i++) {
-    if (box->u2c[i] >= 0)
-      h_r_[box->u2c[i]] += r[i];
-  }
-
-  check_hip_runtime(
-      hipMemcpy(d_r, h_r_, nr * sizeof(T), hipMemcpyHostToDevice));
-
-  // FIXME: hibblasSgemv, one_f32
-  hipblasSgemv(handle, HIPBLAS_OP_T, nr, nr, &one_f32, d_A_inv_f32, nr,
-               (T *)d_r, 1, &zero_f32, (T *)d_x, 1);
-
-  check_hip_runtime(
-      hipMemcpy(h_x, d_x, nr * sizeof(T), hipMemcpyDeviceToHost));
-
-  T *h_x_ = (T *)h_x;
-  for (uint i = 0; i < box->sn; i++) {
-    if (box->u2c[i] >= 0)
-      x[i] = h_x_[box->u2c[i]];
-    else
-      x[i] = 0;
+  if (sizeof(T) == sizeof(float)) {
+    hipblasSgemv(handle, HIPBLAS_OP_T, nr, nr, &one_f32, (float *)d_A_inv, nr,
+        (float *)d_r, 1, &zero_f32, (float *)d_x, 1);
+  } else if (sizeof(T) == sizeof(double)) {
+    hipblasDgemv(handle, HIPBLAS_OP_T, nr, nr, &one, (double *)d_A_inv, nr,
+        (double *)d_r, 1, &zero, (double *)d_x, 1);
   }
 }
 
 void asm1_gpu_solve(occa::memory &o_x, struct box *box, occa::memory &o_r) {
   if (!initialized) MPI_Abort(MPI_COMM_WORLD, EXIT_FAILURE);
 
-  if (box->opts.dom == gs_double) {
-    fprintf(stderr, "GPU double BLAS not supported.\n");
-    exit(EXIT_FAILURE);
-  } else {
-    box_hipblas<float>((float *)o_x.ptr(), nr, (float *)d_A_inv, (float *)o_r.ptr());
-  }
+  if (box->opts.dom == gs_double)
+    box_hipblas<double>((double *)o_x.ptr(), box, (double *)o_r.ptr());
+  else
+    box_hipblas<float>((float *)o_x.ptr(), box, (float *)o_r.ptr());
 }
 
 void asm1_gpu_free(struct box *box) {
@@ -118,10 +95,7 @@ void asm1_gpu_free(struct box *box) {
   check_hip_runtime(hipFree(d_A_inv));
   check_hip_runtime(hipFree(d_r));
   check_hip_runtime(hipFree(d_x));
-  free(h_r), h_r = NULL;
-  free(h_x), h_x = NULL;
-  nr = 0;
-  initialized = 0;
+  nr = 0, initialized = 0;
 }
 
 #elif defined(ENABLE_BOX_ONEMKL)
