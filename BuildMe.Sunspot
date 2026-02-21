@@ -1,0 +1,35 @@
+#!/bin/bash
+set -e -a
+
+: ${ONEAPI_SDK:="oneapi/release/2025.3.1"}
+
+#... load the necessary modules here ...
+module reload
+module load ${ONEAPI_SDK}
+module load cmake
+module list
+#...
+
+#... set some environment variables
+export CC=mpicc
+export CXX=mpic++
+export FC=mpif77
+
+#.. ===
+path_to_code=`pwd`
+build_date=$(date '+%Y-%m-%d')
+which_build=RBK_built.on.${build_date}
+BUILD_DIR=${path_to_code}/${which_build}
+
+#.. NOTE: change the location of NEKRS_HOME to a directory that you have access to.
+#.. ^^^^
+export NEKRS_HOME=/lus/flare/projects/catalyst/world_shared/bramesh/codes/NekRS/argonne-cps/aurora/.local/nekrs
+export INSTALL_DIR=${NEKRS_HOME}
+
+#...
+cmake -S . -B ${BUILD_DIR} -DCMAKE_INSTALL_PREFIX=${INSTALL_DIR}  -Wfatal-errors && \
+cmake --build ${BUILD_DIR} --parallel 8 && \
+cmake --install ${BUILD_DIR}
+
+#...
+ln -fsn ${which_build} current
