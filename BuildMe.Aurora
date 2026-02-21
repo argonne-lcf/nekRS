@@ -18,12 +18,12 @@ export FC=mpif77
 #.. ===
 path_to_code=`pwd`
 build_date=$(date '+%Y-%m-%d')
-which_build=built.on.${build_date}
+which_build=RBK_built.on.${build_date}
 BUILD_DIR=${path_to_code}/${which_build}
 
 #.. NOTE: change the location of NEKRS_HOME to a directory that you have access to.
 #.. ^^^^
-export NEKRS_HOME=/lus/flare/projects/catalyst/world_shared/bramesh/codes/NekRS/argonne-cps/aurora/nekRS_alcf/.local/nekrs
+export NEKRS_HOME=/lus/flare/projects/catalyst/world_shared/bramesh/codes/NekRS/argonne-cps/aurora/.local/nekrs
 export INSTALL_DIR=${NEKRS_HOME}
 
 #...
