@@ -230,6 +230,9 @@ void tavg::outfld(mesh_t *mesh, bool FP64, bool reset_)
              "%s\n",
              "called prior to tavg::setup()!");
 
+  //.. instantiate the casename variable
+  const std::string casename = platform->options.getArgs("CASENAME");
+
   if (userFieldList.size() == 0) return;
 
   const bool outXYZ = mesh && outfldCounter == 0;
@@ -283,9 +286,10 @@ void tavg::outfld(mesh_t *mesh, bool FP64, bool reset_)
     }; // iofldWrapper
 
     int idx = 0;
-    iofldWrapper(fldWriter_avg, idx, "avg", true);
-    iofldWrapper(fldWriter_rms, idx, "rms", true);
-    iofldWrapper(fldWriter_rm2, idx, "rm2", false);
+    //.. add the casename to the name of the avg/rms/rm2 checkpoint files
+    iofldWrapper(fldWriter_avg, idx, "avg"+casename, true);
+    iofldWrapper(fldWriter_rms, idx, "rms"+casename, true);
+    iofldWrapper(fldWriter_rm2, idx, "rm2"+casename, false);
 
   } else {
   
