@@ -1,0 +1,38 @@
+#!/bin/bash
+set -e -a
+
+#... load the necessary modules here ...
+module restore
+module use /soft/modulefiles
+module swap PrgEnv-nvidia PrgEnv-gnu
+module load cudatoolkit-standalone/13.0.1
+module load cuda/12.9
+module load gcc-native/13.2
+module load craype-x86-milan craype-accel-nvidia80
+module load spack-pe-base cmake
+#...
+
+#... set some environment variables
+export CC=cc
+export CXX=CC
+export FC=ftn
+
+#.. ===
+path_to_code=`pwd`
+build_date=$(date '+%Y-%m-%d')
+which_build=RBK_built.on.${build_date}
+BUILD_DIR=${path_to_code}/${which_build}
+
+#.. NOTE: change the location of NEKRS_HOME to a directory that you have access to.
+#.. ^^^^
+export NEKRS_HOME=/lus/eagle/projects/catalyst/proj-shared/bramesh/Polaris/codes/NekRS/argonne-cps/branches/aurora/.local/nekrs
+#...
+export INSTALL_DIR=${NEKRS_HOME}
+
+#...
+cmake -S . -B ${BUILD_DIR} -DCMAKE_INSTALL_PREFIX=${INSTALL_DIR}  -Wfatal-errors && \
+cmake --build ${BUILD_DIR} --parallel 8 && \
+cmake --install ${BUILD_DIR}
+
+#...
+ln -fsn ${which_build} current
