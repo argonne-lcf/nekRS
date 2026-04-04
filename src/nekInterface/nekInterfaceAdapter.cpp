@@ -1167,7 +1167,6 @@ int setup(int numberActiveFields)
   nekData.box_iphi_e = ptr<int>("box_iphi_e");
   nekData.box_gcrs = ptr<long long>("box_gcrs");
   nekData.box_a = ptr<double>("box_a");
-  nekData.box_mask = ptr<double>("box_mask");
   nekData.box_phi_e = ptr<double>("box_phi_e");
 
   nekData.schwz_ne = ptr<int>("schwz_ne");

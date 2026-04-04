@@ -115,7 +115,6 @@ c-----------------------------------------------------------------------
       call nekrs_registerPtr('box_iphi_e', box_iphi_e(1))
       call nekrs_registerPtr('box_gcrs', box_gcrs(1))
       call nekrs_registerPtr('box_a', box_a(1))
-      call nekrs_registerPtr('box_mask', box_mask(1))
       call nekrs_registerPtr('box_phi_e', box_phi_e(1))
 
       call nekrs_registerPtr('schwz_ne', schwz_ne)
