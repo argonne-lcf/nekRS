@@ -40,7 +40,9 @@ static void setup_inverse(T *A_inv, const struct csr *A) {
   {                                                                            \
     hipError_t err = (call);                                                   \
     if (err != hipSuccess) {                                                   \
-      fprintf(stderr, "HIP runtime error: %s\n", hipGetErrorString(err));      \
+      fprintf(stderr, "HIP runtime error: %s in %s:%d\n",                      \
+          hipGetErrorString(err), __FILE__, __LINE__);                         \
+      fflush(stdout), fflush(stderr);                                          \
       MPI_Abort(MPI_COMM_WORLD, EXIT_FAILURE);                                 \
     }                                                                          \
   }
@@ -56,6 +58,7 @@ void asm1_gpu_setup(struct csr *A, unsigned null_space, struct box *box) {
   T *A_inv = tcalloc(T, size);
   setup_inverse(A_inv, A);
 
+  check_hip_runtime(hipMalloc(&d_A_inv, A->nr * A->nr * sizeof(T)));
   check_hip_runtime(hipMemcpy(d_A_inv, A_inv, A->nr * A->nr * sizeof(T),
                               hipMemcpyHostToDevice));
   free(A_inv);
@@ -123,10 +126,13 @@ void asm1_gpu_setup(struct csr *A, unsigned null_space, struct box *box) {
 void asm1_gpu_solve(occa::memory &o_x, struct box *box, occa::memory &o_r) {
   if (!initialized) MPI_Abort(MPI_COMM_WORLD, EXIT_FAILURE);
 
-  if (box->opts.dom == gs_double)
-    box_onemkl_device_gemv<double>((double *)o_x.ptr(), nr, (double *)d_A_inv, (double *)o_r.ptr());
-  else
-    box_onemkl_device_gemv<float>((float *)o_x.ptr(), nr, (float *)d_A_inv, (float *)o_r.ptr());
+  if (box->opts.dom == gs_double) {
+    box_onemkl_device_gemv<double>((double *)o_x.ptr(), nr, (double *)d_A_inv,
+        (double *)o_r.ptr());
+  } else {
+    box_onemkl_device_gemv<float>((float *)o_x.ptr(), nr, (float *)d_A_inv,
+        (float *)o_r.ptr());
+  }
 }
 
 void asm1_gpu_free(struct box *box) {
@@ -152,5 +158,7 @@ void asm1_gpu_free(struct box *box) {
 }
 #endif
 
-template void asm1_gpu_setup<float>(struct csr *A, unsigned null_space, struct box *box);
-template void asm1_gpu_setup<double>(struct csr *A, unsigned null_space, struct box *box);
+template void asm1_gpu_setup<float>(struct csr *A, unsigned null_space,
+    struct box *box);
+template void asm1_gpu_setup<double>(struct csr *A, unsigned null_space,
+    struct box *box);

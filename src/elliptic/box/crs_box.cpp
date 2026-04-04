@@ -153,7 +153,8 @@ static void asm2_setup(struct box *box) {
   for (uint i = 0; i < n; i++)
     gcrs_ul[i] = gcrs[i];
 
-  box->asm2 = (void *)crs_xxt_setup(n, gcrs_ul, nnz, ia, ja, va, box->opts.dom, null_space, &(box->global));
+  box->asm2 = (void *)crs_xxt_setup(n, gcrs_ul, nnz, ia, ja, va, box->opts.dom,
+      null_space, &(box->global));
 
   free(ia), free(ja), free(gcrs_ul);
 }
@@ -310,8 +311,9 @@ static void gpu_setup(struct box *box) {
   free(inv_mul);
 }
 
-struct box *crs_box_setup(uint n, const ulong *id, uint nnz, const uint *Ai, const uint *Aj,
-                          const double *A, const jl_opts *opts, const struct comm *comm) {
+struct box *crs_box_setup(uint n, const ulong *id, uint nnz, const uint *Ai,
+                          const uint *Aj, const double *A, const jl_opts *opts,
+                          const struct comm *comm) {
   struct box *box = tcalloc(struct box, 1);
   box->un = n;
   box->ncr = nnz / n;
@@ -427,7 +429,8 @@ void crs_box_solve(occa::memory &o_x, struct box *box, occa::memory &o_rhs) {
   timer_tic(c);
   if (box->opts.mult) {
     unsigned num_crs_dofs_1d = get_num_crs_dofs_1d();
-    platform->boxMultRHSKernel(box->un / num_crs_dofs_1d, num_crs_dofs_1d, o_A, o_sx, o_srhs);
+    platform->boxMultRHSKernel(box->un / num_crs_dofs_1d, num_crs_dofs_1d,
+        o_A, o_sx, o_srhs);
   }
   timer_toc(MULT_RHS_UPDATE);
 
@@ -440,7 +443,8 @@ void crs_box_solve(occa::memory &o_x, struct box *box, occa::memory &o_rhs) {
   timer_toc(ZERO);
 
   timer_tic(c);
-  platform->boxMapVtxToBoxKernel(nekData.nelv, o_iphi_e, get_num_crs_dofs_1d(), o_phi_e, o_uc, o_ub);
+  platform->boxMapVtxToBoxKernel(nekData.nelv, o_iphi_e, get_num_crs_dofs_1d(),
+      o_phi_e, o_uc, o_ub);
   timer_toc(MAP_VTX_TO_BOX);
 
   timer_tic(c);
@@ -456,7 +460,8 @@ void crs_box_solve(occa::memory &o_x, struct box *box, occa::memory &o_rhs) {
   timer_toc(COPY_SOLUTION);
 
   timer_tic(c);
-  platform->boxMapBoxToVtxKernel(nekData.nelv, o_iphi_e, get_num_crs_dofs_1d(), o_phi_e, o_ub, o_uc);
+  platform->boxMapBoxToVtxKernel(nekData.nelv, o_iphi_e, get_num_crs_dofs_1d(),
+      o_phi_e, o_ub, o_uc);
   timer_toc(MAP_BOX_TO_VTX);
 
   platform->boxUpdateSolutionKernel(box->un, o_uc, o_sx);

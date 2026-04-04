@@ -257,12 +257,16 @@ void ellipticMultiGridSetup(elliptic_t *elliptic_)
         if (xxt)
           opts.algo = XXT;
 
-        opts.dom = gs_double;
         const char *tmp = getenv("NEKRS_CRS_DOM");
-        if (tmp && strncmp(tmp, "gs_float", 32) == 0)
+        if (!tmp) {
+          fprintf(stderr, "Required variable NEKRS_CRS_DOM is not set!\n");
+          fflush(stderr);
+          MPI_Abort(platform->comm.mpiComm, 911);
+        } else if (strncmp(tmp, "gs_float", 32) == 0) {
           opts.dom = gs_float;
-        if (tmp && strncmp(tmp, "gs_double", 32) == 0)
+        } if (strncmp(tmp, "gs_double", 32) == 0) {
           opts.dom = gs_double;
+        }
 
         opts.asm1 = BOX_CHOLMOD;
         tmp = getenv("NEKRS_CRS_ASM1");

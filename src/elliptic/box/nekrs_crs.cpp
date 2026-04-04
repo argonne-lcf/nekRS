@@ -176,9 +176,8 @@ void allocate_work_arrays(struct crs *crs) {
 
 void jl_setup(uint n, const ulong *id, uint nnz, const uint *Ai, const uint *Aj,
               const double *A, const jl_opts *opts, MPI_Comm comm) {
-  if (crs != NULL) {
-    if (crs->c.id == 0)
-      fprintf(stderr, "%s: coarse solver is already initialized.\n", __func__);
+  if (crs != NULL && crs->c.id == 0) {
+    fprintf(stderr, "%s: coarse solver is already initialized.\n", __func__);
     fflush(stderr);
     return;
   }
@@ -189,11 +188,12 @@ void jl_setup(uint n, const ulong *id, uint nnz, const uint *Ai, const uint *Aj,
   crs->type = opts->algo;
   allocate_work_arrays(crs);
 
-  comm_init(&(crs->c), comm);
   struct comm *c = &(crs->c);
+  comm_init(c, comm);
   switch (crs->type) {
   case XXT:
-    crs->solver = (void *)crs_xxt_setup(n, id, nnz, Ai, Aj, A, opts->dom, opts->null_space, c);
+    crs->solver = (void *)crs_xxt_setup(n, id, nnz, Ai, Aj, A, opts->dom,
+        opts->null_space, c);
     break;
   case BOX:
     crs->solver = (void *)crs_box_setup(n, id, nnz, Ai, Aj, A, opts, c);

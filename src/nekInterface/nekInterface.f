@@ -1447,7 +1447,7 @@ C----------------------------------------------------------------------
      $  ifdbg)
 
       schwz_ncr=nxc*nxc*nxc
-      call nrs_set_global_crs(box_n,box_gcrs,box_nnz,box_a,box_mask,
+      call nrs_set_global_crs(box_n,box_gcrs,box_nnz,box_a,
      $  box_null_space)
 
       return

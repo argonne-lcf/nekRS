@@ -1,5 +1,5 @@
-#if !defined(CRS_BOX_GPU_ONEMKL)
-#define CRS_BOX_GPU_ONEMKL
+#if !defined(CRS_BOX_ONEMKL)
+#define CRS_BOX_ONEMKL
 
 void box_onemkl_setup(int device_id);
 
@@ -17,4 +17,4 @@ void box_onemkl_device_gemv(T *y, size_t n, const T * A, const T *x);
 
 void box_onemkl_free(void *ptr);
 
-#endif // CRS_BOX_GPU_ONEMKL
+#endif // CRS_BOX_ONEMKL
