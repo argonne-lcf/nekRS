@@ -13,7 +13,7 @@ typedef enum {
 typedef enum {
   BOX_XXT = 0,
   BOX_CHOLMOD,
-  BOX_GPU
+  BOX_GEMV
 } box_algo_t;
 
 typedef struct {

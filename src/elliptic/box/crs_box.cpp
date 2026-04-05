@@ -227,7 +227,7 @@ static void asm1_setup(struct box *box) {
   case BOX_CHOLMOD:
     asm1_cholmod_setup(A, null_space, box);
     break;
-  case BOX_GPU:
+  case BOX_GEMV:
     asm1_gpu_setup<T>(A, null_space, box);
     break;
   }
@@ -369,7 +369,12 @@ void crs_box_solve(occa::memory &o_x, struct box *box, occa::memory &o_rhs) {
   const gs_dom dom = box->opts.dom;
   const box_algo_t asm1 = box->opts.asm1;
 
-  if (asm1 != BOX_GPU) MPI_Abort(c->c, EXIT_FAILURE);
+  if (asm1 != BOX_GEMV) {
+    if (c->id == 0)
+      fprintf(stderr, "ASM1 solver must be BOX_GEMV!\n");
+    fflush(stderr);
+    MPI_Abort(c->c, EXIT_FAILURE);
+  }
 
   timer_tic(c);
   if (dom == gs_double) platform->boxCopyFloatToDoubleKernel(box->un, o_rhs, o_srhs);
@@ -498,7 +503,7 @@ void crs_box_free(struct box *box) {
   case BOX_CHOLMOD:
     asm1_cholmod_free(box);
     break;
-  case BOX_GPU:
+  case BOX_GEMV:
     asm1_gpu_free(box);
     break;
   default:

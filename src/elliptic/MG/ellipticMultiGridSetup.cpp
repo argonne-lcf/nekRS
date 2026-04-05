@@ -274,8 +274,8 @@ void ellipticMultiGridSetup(elliptic_t *elliptic_)
           opts.asm1 = BOX_XXT;
         if (tmp && strncmp(tmp, "cholmod", 32) == 0)
           opts.asm1 = BOX_CHOLMOD;
-        if (tmp && strncmp(tmp, "gpu", 32) == 0)
-          opts.asm1 = BOX_GPU;
+        if (tmp && strncmp(tmp, "gemv", 32) == 0)
+          opts.asm1 = BOX_GEMV;
 
         opts.mult = 1;
         tmp = getenv("NEKRS_CRS_MULT");
@@ -294,9 +294,10 @@ void ellipticMultiGridSetup(elliptic_t *elliptic_)
 
         if (platform->comm.mpiRank == 0) {
           printf("NEKRS_CRS_MULT  = %d\n", opts.mult);
-          printf("NEKRS_CRS_DOM   = %d (gs_double = %d, gs_float = %d)\n", opts.dom, gs_double, gs_float);
-          printf("NEKRS_CRS_ASM1  = %d (BOX_XXT = %d, BOX_CHOLMOD = %d, BOX_GPU = %d)\n", opts.asm1,
-            BOX_XXT, BOX_CHOLMOD, BOX_GPU);
+          printf("NEKRS_CRS_DOM   = %d (gs_double = %d, gs_float = %d)\n",
+              opts.dom, gs_double, gs_float);
+          printf("NEKRS_CRS_ASM1  = %d (BOX_XXT = %d, BOX_CHOLMOD = %d, "
+              "BOX_GEMV = %d)\n", opts.asm1, BOX_XXT, BOX_CHOLMOD, BOX_GEMV);
           printf("NEKRS_CRS_TIMER = %d\n", timer);
           printf("NEKRS_CRS_AGGRESSIVE = %d\n", opts.aggressive);
         }
