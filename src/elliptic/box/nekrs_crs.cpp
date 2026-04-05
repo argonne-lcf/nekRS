@@ -226,7 +226,7 @@ void jl_timer_init() {
   }
 
 void jl_solve2(occa::memory &o_x, occa::memory &o_rhs) {
-  crs_box_solve(o_x, (struct box *)crs->solver, o_rhs);
+  crs_box_solve2(o_x, (struct box *)crs->solver, o_rhs);
 }
 
 #undef DOMAIN_SWITCH
