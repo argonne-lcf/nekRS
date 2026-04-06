@@ -23,7 +23,9 @@ struct box;
 struct box *crs_box_setup(uint n, const ulong *id, uint nnz, const uint *Ai,
                           const uint *Aj, const double *A, const jl_opts *opts,
                           const struct comm *comm);
+/* ASM1 + ASM2 */
 void crs_box_solve(occa::memory &o_x, struct box *data, occa::memory &o_rhs);
+/* Only the ASM1 */
 void crs_box_solve2(occa::memory &o_x, struct box *data, occa::memory &o_rhs);
 void crs_box_free(struct box *data);
 
