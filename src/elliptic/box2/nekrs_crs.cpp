@@ -1,14 +1,8 @@
 #include "crs_box.hpp"
 
-static int check_alloc_(void *ptr, const char *file, unsigned line) {
-  if (ptr == NULL) {
-    printf("check_alloc failure: %s:%d\n", file, line);
-    return 1;
-  }
-  return 0;
-}
-#define check_alloc(ptr) check_alloc_(ptr, __FILE__, __LINE__)
-
+//////////////////////////////////////////////////////////////////////////////////////
+// Helper functions                                                                 //
+//////////////////////////////////////////////////////////////////////////////////////
 static int gen_crs_basis(dfloat *b, int j_, dfloat *z, int Nq, int Np) {
   dfloat *zr = (dfloat *)calloc(Nq, sizeof(dfloat));
   dfloat *zs = (dfloat *)calloc(Nq, sizeof(dfloat));
@@ -55,12 +49,10 @@ static int get_local_crs_galerkin(double *a, int nc, mesh_t *mf,
   size_t size = nelt * Np;
 
   dfloat *b = tcalloc(dfloat, nc * Np);
-  check_alloc(b);
   for (int j = 0; j < nc; j++)
     gen_crs_basis(b, j, mf->gllz, mf->Nq, mf->Np);
 
   dfloat *u = tcalloc(dfloat, size), *w = tcalloc(dfloat, size);
-  check_alloc(u), check_alloc(w);
 
   occa::memory o_u = platform->device.malloc<dfloat>(size, u);
   occa::memory o_w = platform->device.malloc<dfloat>(size, w);
@@ -104,9 +96,6 @@ static void set_mat_ij(uint *ia, uint *ja, int nc, int nelt) {
   }
 }
 
-/*
- * nekRS interface to coarse solvers
- */
 void jl_setup_aux(uint *ntot_, ulong **gids_, uint *nnz_, uint **ia_,
                   uint **ja_, double **a_, elliptic_t *elliptic,
                   elliptic_t *ellipticf) {
@@ -114,11 +103,8 @@ void jl_setup_aux(uint *ntot_, ulong **gids_, uint *nnz_, uint **ia_,
   assert(mesh->Nelements == meshf->Nelements);
   uint nelt = meshf->Nelements, nc = mesh->Np;
 
-  // Set global ids: copy and apply the mask
   uint ntot = *ntot_ = nelt * nc;
   ulong *gids = *gids_ = tcalloc(ulong, ntot);
-  check_alloc(gids);
-
   for (int j = 0; j < nelt * nc; j++)
     gids[j] = mesh->globalIds[j];
 
@@ -133,28 +119,26 @@ void jl_setup_aux(uint *ntot_, ulong **gids_, uint *nnz_, uint **ia_,
   // Set coarse matrix
   uint nnz = *nnz_ = nc * nc * nelt;
   double *a = *a_ = tcalloc(double, nnz);
-  check_alloc(a);
-
   get_local_crs_galerkin(a, nc, meshf, ellipticf);
 
   uint *ia = *ia_ = tcalloc(uint, nnz), *ja = *ja_ = tcalloc(uint, nnz);
-  check_alloc(ia), check_alloc(ja);
   set_mat_ij(ia, ja, nc, nelt);
 }
-#undef check_alloc
 
+//////////////////////////////////////////////////////////////////////////////////////
+// nekRS interface to coarse solvers                                                //
+//////////////////////////////////////////////////////////////////////////////////////
 struct crs {
-  uint un, type;
+  uint un, algo;
   struct comm c;
   gs_dom dom;
-  float *wrk;
   void *x, *rhs;
   void *solver;
 };
 
 static struct crs *crs = NULL;
 
-void allocate_work_arrays(struct crs *crs) {
+static void allocate_work_arrays(struct crs *crs) {
   size_t usize;
   switch (crs->dom) {
   case gs_double:
@@ -171,46 +155,37 @@ void allocate_work_arrays(struct crs *crs) {
 
   crs->x = calloc(usize, crs->un);
   crs->rhs = calloc(usize, crs->un);
-  crs->wrk = tcalloc(float, crs->un);
 }
 
 void jl_setup(uint n, const ulong *id, uint nnz, const uint *Ai, const uint *Aj,
               const double *A, const jl_opts *opts, MPI_Comm comm) {
-  if (crs != NULL && crs->c.id == 0) {
-    fprintf(stderr, "%s: coarse solver is already initialized.\n", __func__);
+  if (opts->dom != gs_float) {
+    fprintf(stderr, "%s: Only gs_dom = gs_float is allowed!\n", __func__);
     fflush(stderr);
-    return;
+    MPI_Abort(comm, EXIT_FAILURE);
   }
 
   crs = tcalloc(struct crs, 1);
   crs->un = n;
   crs->dom = opts->dom;
-  crs->type = opts->algo;
+  crs->algo = opts->algo;
+
+  struct comm *c = &crs->c;
+  comm_init(c, comm);
+
   allocate_work_arrays(crs);
 
-  struct comm *c = &(crs->c);
-  comm_init(c, comm);
-  switch (crs->type) {
+  switch (crs->algo) {
   case XXT:
     crs->solver = (void *)crs_xxt_setup(n, id, nnz, Ai, Aj, A, opts->dom,
         opts->null_space, c);
     break;
   case BOX:
-    crs->solver = (void *)crs_box_setup(n, id, nnz, Ai, Aj, A, opts, c);
+    crs->solver = (void *)crs_box_setup2(n, id, nnz, Ai, Aj, A, opts, c);
     break;
   default:
     break;
   }
-
-  if (crs->c.id == 0) {
-    printf("%s: n = %u, nnz = %u, null = %u, dom = %s\n", __func__, crs->un, nnz,
-        opts->null_space, (crs->dom == gs_double) ? "double" : "float");
-    fflush(stdout);
-  }
-}
-
-void jl_timer_init() {
-  timer_init();
 }
 
 #define DOMAIN_SWITCH(dom, macro)                                              \
@@ -225,37 +200,42 @@ void jl_timer_init() {
     }                                                                          \
   }
 
-void jl_solve3(occa::memory &o_x, occa::memory &o_rhs) {
+static void _crs_xxt_solve(occa::memory &o_x, occa::memory &o_rhs) {
   o_rhs.copyTo(crs->rhs, crs->un);
-  crs_xxt_solve(crs->x, crs->solver, crs->rhs);
-  o_sx.copyFrom(crs->x, crs->un);
+  crs_xxt_solve(crs->x, (struct xxt *)crs->solver, crs->rhs);
+  o_x.copyFrom(crs->x, crs->un);
 }
 
 void jl_solve2(occa::memory &o_x, occa::memory &o_rhs) {
-  jl_solve3(o_x, o_rhs);
+  switch (crs->algo) {
+  case XXT:
+    _crs_xxt_solve(o_x, o_rhs);
+    break;
+  case BOX:
+    crs_box_solve2(o_x, (struct box *)crs->solver, o_rhs);
+    break;
+  default:
+    break;
+  }
 }
-
-#undef DOMAIN_SWITCH
 
 void jl_free() {
   if (crs == NULL) return;
 
-  switch (crs->type) {
+  switch (crs->algo) {
   case XXT:
     crs_xxt_free((struct xxt *)crs->solver);
     break;
   case BOX:
-    crs_box_free((struct box *)crs->solver);
+    crs_box_free2((struct box *)crs->solver);
     break;
   default:
     break;
   }
 
   comm_free(&(crs->c));
-  free(crs->x), free(crs->rhs), free(crs->wrk), free(crs);
-  crs = NULL;
+  free(crs->x), free(crs->rhs);
+  free(crs), crs = NULL;
 }
 
-void jl_timer_print(MPI_Comm comm) {
-  timer_print(comm);
-}
+#undef DOMAIN_SWITCH

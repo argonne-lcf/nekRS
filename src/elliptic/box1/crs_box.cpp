@@ -493,26 +493,6 @@ void crs_box_solve(occa::memory &o_x, struct box *box, occa::memory &o_rhs) {
   timer_toc(COPY_D2D);
 }
 
-void crs_box_solve2(occa::memory &o_x, struct box *box, occa::memory &o_rhs) {
-  struct comm *c = &(box->global);
-  buffer *bfr = &(box->bfr);
-  const gs_dom dom = box->opts.dom;
-  const box_algo_t asm1 = box->opts.asm1;
-
-  if (asm1 != BOX_XXT) {
-    if (c->id == 0)
-      fprintf(stderr, "ASM1 solver must be BOX_XXT!\n");
-    fflush(stderr);
-    MPI_Abort(c->c, EXIT_FAILURE);
-  }
-
-  o_rhs.copyTo(box->srhs, box->un);
-  gs(box->srhs, dom, gs_add, 0, box->gsh, bfr);
-  crs_xxt_solve(box->sx, (struct xxt *)box->asm1, box->srhs);
-  gs(box->sx, dom, gs_add, 0, box->gsh, bfr);
-  o_sx.copyFrom(box->sx, box->un);
-}
-
 void crs_box_free(struct box *box) {
   if (!box) return;
 

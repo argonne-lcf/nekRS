@@ -32,13 +32,9 @@ set(ELLIPTIC_SOURCES
         ${ELLIPTIC_SOURCE_DIR}/MG/level.cpp
         ${ELLIPTIC_SOURCE_DIR}/MG/MGSolver.cpp
         ${ELLIPTIC_SOURCE_DIR}/ellipticZeroMean.cpp
-        ${ELLIPTIC_SOURCE_DIR}/box/crs_xxt.cpp
-        ${ELLIPTIC_SOURCE_DIR}/box/crs_box.cpp
-        ${ELLIPTIC_SOURCE_DIR}/box/crs_box_csr.cpp
-        ${ELLIPTIC_SOURCE_DIR}/box/crs_box_cholmod.cpp
-        ${ELLIPTIC_SOURCE_DIR}/box/crs_box_gpu.cpp
-        ${ELLIPTIC_SOURCE_DIR}/box/crs_box_timer.cpp
-        ${ELLIPTIC_SOURCE_DIR}/box/nekrs_crs.cpp)
+        ${ELLIPTIC_SOURCE_DIR}/box2/crs_xxt.cpp
+        ${ELLIPTIC_SOURCE_DIR}/box2/crs_box.cpp
+        ${ELLIPTIC_SOURCE_DIR}/box2/nekrs_crs.cpp)
 
 if (ENABLE_BOX_ONEMKL)
   add_library(crs_box_onemkl SHARED "${ELLIPTIC_SOURCE_DIR}/box/crs_box_gpu_onemkl.cpp")

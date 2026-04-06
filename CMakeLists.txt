@@ -152,12 +152,12 @@ set(NEKRS_GPU_MPI OFF CACHE BOOL "Enable GPU aware MPI")
 set(ENABLE_CVODE OFF CACHE BOOL "Enable CVODE support")
 set(ENABLE_ADIOS OFF CACHE BOOL "Enable ADIOS support")
 set(ADIOS2_INSTALL_DIR "" CACHE STRING "ADIOS install directory")
-set(ENABLE_BOX_HIPBLAS ON CACHE BOOL "Enable HIPBLAS support")
-set(ENABLE_BOX_CHOLMOD ON CACHE BOOL "Enable CHOLMOD support")
-set(ENABLE_BOX_ONEMKL OFF CACHE BOOL "Enable OneMKL support")
 set(NEKRS_BUILD_FLOAT ON CACHE BOOL "Build dfloat = float version")
-
 set(ENABLE_CPPTRACE OFF CACHE BOOL "Enable cpptrace for stack tracing")
+
+set(ENABLE_BOX_HIPBLAS OFF CACHE BOOL "Enable HIPBLAS support")
+set(ENABLE_BOX_CHOLMOD OFF CACHE BOOL "Enable CHOLMOD support")
+set(ENABLE_BOX_ONEMKL OFF CACHE BOOL "Enable OneMKL support")
 
 ###############################################################################
 # Set compiler flags                                                          #
@@ -302,6 +302,14 @@ if (ENABLE_ADIOS)
   endif()
 endif()
 
+target_link_libraries(nekrs-bin PRIVATE nekrs-lib)
+if (NEKRS_BUILD_FLOAT)
+  target_link_libraries(nekrs-bin-fp32 PRIVATE nekrs-lib-fp32)
+endif()
+
+###############################################################################
+# Box solver
+###############################################################################
 if (ENABLE_BOX_CHOLMOD)
   add_dependencies(nekrs-lib ss_cholmod)
   target_link_libraries(nekrs-lib PRIVATE ${SUITESPARSE_LIBS})
@@ -330,11 +338,6 @@ if (ENABLE_BOX_HIPBLAS)
     target_link_libraries(nekrs-lib-fp32 PRIVATE roc::hipblas)
     target_compile_definitions(nekrs-lib-fp32 PUBLIC -DENABLE_BOX_HIPBLAS)
   endif()
-endif()
-
-target_link_libraries(nekrs-bin PRIVATE nekrs-lib)
-if (NEKRS_BUILD_FLOAT)
-  target_link_libraries(nekrs-bin-fp32 PRIVATE nekrs-lib-fp32)
 endif()
 
 ###############################################################################

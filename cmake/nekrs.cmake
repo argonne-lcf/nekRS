@@ -151,7 +151,7 @@ set(NRS_INCLUDE
     ${ELLIPTIC_SOURCE_DIR}/amgSolver/hypre
     ${ELLIPTIC_SOURCE_DIR}/amgSolver/amgx
     ${ELLIPTIC_SOURCE_DIR}/MG
-    ${ELLIPTIC_SOURCE_DIR}/box
+    ${ELLIPTIC_SOURCE_DIR}/box2
 )
 
 add_library(nekrs-lib SHARED ${NRS_SRC})
@@ -194,6 +194,28 @@ set_target_properties(nekrs-bin PROPERTIES LINKER_LANGUAGE CXX OUTPUT_NAME nekrs
 if (NEKRS_BUILD_FLOAT)
   target_include_directories(nekrs-bin-fp32 PRIVATE src/lib src/utils)
   set_target_properties(nekrs-bin-fp32 PROPERTIES LINKER_LANGUAGE CXX OUTPUT_NAME nekrs-fp32)
+endif()
+
+include(FetchContent)
+
+FetchContent_Declare(
+  gs
+  GIT_REPOSITORY https://github.com/thilinarmtb/gslib.git
+  GIT_TAG master
+  FIND_PACKAGE_ARGS NAMES gs
+)
+FetchContent_MakeAvailable(gs)
+
+FetchContent_Declare(
+  parRSB
+  GIT_REPOSITORY https://github.com/thilinarmtb/parRSB.git
+  GIT_TAG master
+)
+FetchContent_MakeAvailable(parRSB)
+
+target_link_libraries(nekrs-lib PRIVATE parRSB::parRSB)
+if (NEKRS_BUILD_FLOAT)
+  target_link_libraries(nekrs-lib-fp32 PRIVATE parRSB::parRSB)
 endif()
 
 if (ENABLE_BOX_ONEMKL)

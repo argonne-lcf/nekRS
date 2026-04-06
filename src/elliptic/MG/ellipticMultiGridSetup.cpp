@@ -252,57 +252,8 @@ void ellipticMultiGridSetup(elliptic_t *elliptic_)
 
         jl_opts opts;
         opts.null_space = elliptic->nullspace;
-
-        opts.algo =  BOX;
-        if (xxt)
-          opts.algo = XXT;
-
-        const char *tmp = getenv("NEKRS_CRS_DOM");
-        if (!tmp) {
-          fprintf(stderr, "Required variable NEKRS_CRS_DOM is not set!\n");
-          fflush(stderr);
-          MPI_Abort(platform->comm.mpiComm, 911);
-        } else if (strncmp(tmp, "gs_float", 32) == 0) {
-          opts.dom = gs_float;
-        } if (strncmp(tmp, "gs_double", 32) == 0) {
-          opts.dom = gs_double;
-        }
-
-        opts.asm1 = BOX_CHOLMOD;
-        tmp = getenv("NEKRS_CRS_ASM1");
-        if (tmp && strncmp(tmp, "xxt", 32) == 0)
-          opts.asm1 = BOX_XXT;
-        if (tmp && strncmp(tmp, "cholmod", 32) == 0)
-          opts.asm1 = BOX_CHOLMOD;
-        if (tmp && strncmp(tmp, "gemv", 32) == 0)
-          opts.asm1 = BOX_GEMV;
-
-        opts.mult = 1;
-        tmp = getenv("NEKRS_CRS_MULT");
-        if (tmp)
-          opts.mult = atoi(tmp);
-
-        opts.aggressive = 0;
-        tmp = getenv("NEKRS_CRS_AGGRESSIVE");
-        if (tmp)
-          opts.aggressive = atoi(tmp);
-
-        int timer = 1;
-        tmp = getenv("NEKRS_CRS_TIMER");
-        if (tmp)
-          timer = atoi(tmp);
-
-        if (platform->comm.mpiRank == 0) {
-          printf("NEKRS_CRS_MULT  = %d\n", opts.mult);
-          printf("NEKRS_CRS_DOM   = %d (gs_double = %d, gs_float = %d)\n",
-              opts.dom, gs_double, gs_float);
-          printf("NEKRS_CRS_ASM1  = %d (BOX_XXT = %d, BOX_CHOLMOD = %d, "
-              "BOX_GEMV = %d)\n", opts.asm1, BOX_XXT, BOX_CHOLMOD, BOX_GEMV);
-          printf("NEKRS_CRS_TIMER = %d\n", timer);
-          printf("NEKRS_CRS_AGGRESSIVE = %d\n", opts.aggressive);
-        }
-        fflush(stdout);
-
+        opts.dom = gs_float;
+        opts.nw = 1;
         jl_setup(num_total, gids, nnz, ia, ja, a, &opts, platform->comm.mpiComm);
         if (timer)
           jl_timer_init();

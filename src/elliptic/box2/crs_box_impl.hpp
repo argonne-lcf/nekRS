@@ -2,8 +2,6 @@
 #define _CRS_BOX_IMPL_HPP_
 
 #include "crs_box.hpp"
-#include "crs_box_csr.hpp"
-#include "crs_box_timer.hpp"
 
 #define BOX_DOMAIN_SWITCH(dom, macro)                                          \
   {                                                                            \
@@ -21,7 +19,7 @@ struct box {
   jl_opts opts;
   /* User size, compressed size, Schwarz size and 1D dofs */
   uint un, cn, sn, ncr;
-  /* Schwarz work arrays */
+  /* Schwarz/XXT work arrays on CPU */
   void *sx, *srhs;
   /* Pointer to the asm1 solver */
   void *asm1;
