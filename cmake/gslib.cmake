@@ -25,11 +25,11 @@ ExternalProject_Add(
 )
 
 # Target for libraries
-add_library(gs STATIC IMPORTED)
-add_dependencies(gs gs_build)
-set_target_properties(gs PROPERTIES IMPORTED_LOCATION ${GS_SOURCE_DIR}/build/lib/libgs.a)
+add_library(nrs_gs STATIC IMPORTED)
+add_dependencies(nrs_gs gs_build)
+set_target_properties(nrs_gs PROPERTIES IMPORTED_LOCATION ${GS_SOURCE_DIR}/build/lib/libgs.a)
 file(MAKE_DIRECTORY ${GS_SOURCE_DIR}/build/include)
-target_include_directories(gs INTERFACE ${GS_SOURCE_DIR}/build/include)
+target_include_directories(nrs_gs INTERFACE ${GS_SOURCE_DIR}/build/include)
 
 set(file_pattern "\.cu$|\.hip$|\.okl$|\.c$|\.hpp$|\.tpp$|\.h$$")
 

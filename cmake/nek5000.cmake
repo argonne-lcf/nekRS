@@ -74,17 +74,11 @@ FetchContent_Declare(
   GIT_TAG reorder_dofs_v2
   SOURCE_DIR ${PARRSB_DIR}
 )
-FetchContent_GetProperties(parrsb_content)
-if (NOT parrsb_content_POPULATED)
-  # Moves `install` script so it doesn't get clobbered when 
-  # populating content.  
-  #file(RENAME ${PARRSB_DIR}/install temp_parrsb_install)
-  FetchContent_MakeAvailable(parrsb_content)
-  #file(RENAME temp_parrsb_install ${PARRSB_DIR}/install)
-endif()
+FetchContent_MakeAvailable(parrsb_content)
 
-set(PARRSB_INCLUDE_DIR ${PARRSB_DIR}/../include)
+set(PARRSB_INCLUDE_DIR ${PARRSB_DIR}/../include PARENT_SCOPE)
 set(PARRSB_LIB_DIR ${PARRSB_DIR}/../lib)
+set(PARRSB_LIB_DIR ${PARRSB_DIR}/../lib PARENT_SCOPE)
 
 # ---------------------------------------------------------
 # Build Nek5000 dependencies
@@ -185,9 +179,9 @@ set_target_properties(blasLapack PROPERTIES IMPORTED_LOCATION ${BLASLAPACK_DIR}/
 add_dependencies(blasLapack nek5000_deps)
 
 if (${USE_PARRSB})
-  add_library(parRSB STATIC IMPORTED)
-  set_target_properties(parRSB PROPERTIES IMPORTED_LOCATION ${PARRSB_DIR}/lib/libparRSB.a)
-  add_dependencies(parRSB nek5000_deps)
+  add_library(nrs_parRSB STATIC IMPORTED)
+  set_target_properties(nrs_parRSB PROPERTIES IMPORTED_LOCATION ${PARRSB_DIR}/lib/libparRSB.a)
+  add_dependencies(nrs_parRSB nek5000_deps)
 endif()
 
 # ---------------------------------------------------------

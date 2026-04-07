@@ -170,18 +170,9 @@ void registerCoreKernels()
     fileName = oklpath + "/core/" + kernelName + extension;
     platform->kernelRequests.add(section + kernelName, fileName, prop);
 
+    // Options for Box solver.
     prop["defines/p_NC"] = 8;
-
-    const char *dom = getenv("NEKRS_CRS_DOM");
-    if (!dom) {
-      fprintf(stderr, "Required variable NEKRS_CRS_DOM is not set!\n");
-      fflush(stderr);
-      MPI_Abort(platform->comm.mpiComm, 911);
-    } else if (strncmp(dom, "gs_double", 32) == 0) {
-      prop["defines/scalar"] = "double";
-    } else if (dom && strncmp(dom, "gs_float", 32) == 0) {
-      prop["defines/scalar"] = "float";
-    }
+    prop["defines/scalar"] = "float";
 
     fileName = oklpath + "/core/boxMapVtxToBox" + extension;
     platform->kernelRequests.add(section + "boxMapVtxToBox", fileName, prop);

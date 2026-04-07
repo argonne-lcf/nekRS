@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 3.21)
+cmake_minimum_required(VERSION 3.24)
 project(NekRS LANGUAGES C CXX Fortran VERSION 24.0.4)
 
 set(CMAKE_POLICY_DEFAULT_CMP0077 NEW)
@@ -256,10 +256,10 @@ include(cmake/nekrs.cmake)
 
 ###### Link dependencies ######
 
-target_link_libraries(nekrs-lib PUBLIC libocca PRIVATE nekrs-hypre nekrs-hypre-device gs blas lapack std::filesystem ${CMAKE_DL_LIBS})
+target_link_libraries(nekrs-lib PUBLIC libocca PRIVATE nekrs-hypre nekrs-hypre-device nrs_gs blas lapack std::filesystem ${CMAKE_DL_LIBS})
 target_include_directories(nekrs-lib PRIVATE ${CMAKE_BINARY_DIR})
 if (NEKRS_BUILD_FLOAT)
-  target_link_libraries(nekrs-lib-fp32 PUBLIC libocca PRIVATE nekrs-hypre nekrs-hypre-device gs blas lapack std::filesystem ${CMAKE_DL_LIBS})
+  target_link_libraries(nekrs-lib-fp32 PUBLIC libocca PRIVATE nekrs-hypre nekrs-hypre-device nrs_gs blas lapack std::filesystem ${CMAKE_DL_LIBS})
   target_include_directories(nekrs-lib-fp32 PRIVATE ${CMAKE_BINARY_DIR})
 endif()
 

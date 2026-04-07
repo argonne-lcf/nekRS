@@ -152,6 +152,7 @@ set(NRS_INCLUDE
     ${ELLIPTIC_SOURCE_DIR}/amgSolver/amgx
     ${ELLIPTIC_SOURCE_DIR}/MG
     ${ELLIPTIC_SOURCE_DIR}/box2
+    ${PARRSB_INCLUDE_DIR}
 )
 
 add_library(nekrs-lib SHARED ${NRS_SRC})
@@ -202,7 +203,6 @@ FetchContent_Declare(
   gs
   GIT_REPOSITORY https://github.com/thilinarmtb/gslib.git
   GIT_TAG master
-  FIND_PACKAGE_ARGS NAMES gs
 )
 FetchContent_MakeAvailable(gs)
 
