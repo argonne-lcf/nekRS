@@ -1,0 +1,38 @@
+#!/bin/bash
+set -e -a
+
+#... load the necessary modules here ...
+module reset
+module load PrgEnv-amd
+module load craype-accel-amd-gfx90a
+module load cray-mpich
+module load rocm
+module load cmake
+module unload cray-libsci darshan-runtime
+
+module list
+#...
+
+#... set some environment variables
+export CC=cc
+export CXX=CC
+export FC=ftn
+
+#.. ===
+path_to_code=`pwd`
+build_date=$(date '+%Y-%m-%d')
+which_build=RBK_built.on.${build_date}
+BUILD_DIR=${path_to_code}/${which_build}
+
+#.. NOTE: change the location of NEKRS_HOME to a directory that you have access to.
+#.. ^^^^
+export NEKRS_HOME=/lustre/orion/proj-shared/cfd129/bramesh/RECHERCHE/codes/NekRS/argonne-cps/branches/aurora/.local/nekrs
+export INSTALL_DIR=${NEKRS_HOME}
+
+#...
+cmake -S . -B ${BUILD_DIR} -DCMAKE_INSTALL_PREFIX=${INSTALL_DIR} -DNEKRS_Fortran_FLAGS="-fuse-ld=bfd" -Wfatal-errors && \
+cmake --build ${BUILD_DIR} --parallel 8 && \
+cmake --install ${BUILD_DIR}
+
+#...
+ln -fsn ${which_build} current
