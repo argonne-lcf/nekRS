@@ -1,7 +1,7 @@
 #!/bin/bash
 set -e -a
 
-: ${ONEAPI_SDK:="oneapi/release/2025.2.0"}
+: ${ONEAPI_SDK:="oneapi/release/2025.3.1"}
 
 #... load the necessary modules here ...
 module reload
@@ -23,7 +23,7 @@ BUILD_DIR=${path_to_code}/${which_build}
 
 #.. NOTE: change the location of NEKRS_HOME to a directory that you have access to.
 #.. ^^^^
-export NEKRS_HOME=/lus/flare/projects/catalyst/world_shared/bramesh/codes/NekRS/argonne-cps/aurora/.local/nekrs
+export NEKRS_HOME=/lus/flare/projects/catalyst/proj_shared/bramesh/RECHERCHE/codes/nekRS/argonne-cps/branches/aurora/.local/nekrs
 export INSTALL_DIR=${NEKRS_HOME}
 
 #...
