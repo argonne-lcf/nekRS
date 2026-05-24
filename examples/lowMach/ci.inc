@@ -18,7 +18,7 @@ void ciSetup(MPI_Comm comm, setupAide &options)
     options.setArgs("SUBCYCLING STEPS", std::string("1"));
   }
   options.setArgs("BDF ORDER", "2");
-  options.setArgs("ADVECTION TYPE", "CONVECTIVE+CUBATURE");
+  options.setArgs("ADVECTION TYPE", "CONVECTIVE+OVERINTEGRATION");
   options.setArgs("FLUID VELOCITY SOLVER TOLERANCE", std::string("1e-12"));
   options.setArgs("FLUID PRESSURE SOLVER TOLERANCE", std::string("1e-08"));
   options.setArgs("SCALAR00 SOLVER TOLERANCE", std::string("1e-12"));

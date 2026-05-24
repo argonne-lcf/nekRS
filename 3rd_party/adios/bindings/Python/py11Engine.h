@@ -12,6 +12,8 @@
 #define ADIOS2_BINDINGS_PYTHON_ENGINE_H_
 
 #include <pybind11/numpy.h>
+#include <pybind11/pytypes.h>
+#include <pybind11/stl.h>
 
 #include <string>
 
@@ -45,6 +47,8 @@ public:
 
     explicit operator bool() const noexcept;
 
+    pybind11::bytes GetMetadata();
+
     StepStatus BeginStep(const StepMode mode, const float timeoutSeconds = -1.f);
     StepStatus BeginStep();
 
@@ -53,6 +57,8 @@ public:
              const Mode launch = Mode::Deferred);
     void Put(Variable variable, const std::vector<double> &doubles,
              const Mode launch = Mode::Deferred);
+    // function for cupy, numpy and Tensor pointers
+    void Put(Variable variable, std::uintptr_t array, const Mode launch);
     void Put(Variable variable, const std::vector<std::complex<double>> &complexes,
              const Mode launch = Mode::Deferred);
     void Put(Variable variable, const std::string &string);
@@ -60,6 +66,8 @@ public:
     void PerformDataWrite();
 
     void Get(Variable variable, pybind11::array &array, const Mode launch = Mode::Deferred);
+    // function for cupy, numpy and Tensor pointers
+    void Get(Variable variable, std::uintptr_t array, const Mode launch);
     std::string Get(Variable variable, const Mode launch = Mode::Deferred);
 
     void PerformGets();

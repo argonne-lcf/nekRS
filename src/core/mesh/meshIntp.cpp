@@ -64,7 +64,8 @@ void mesh_t::interpolate(const occa::memory& o_z, mesh_t *mesh, occa::memory& o_
     static std::array<occa::memory, mesh_t::maxNqIntp> o_Jgll;
     if (!o_Jgll[mesh->N].isInitialized()) {
       std::vector<dfloat> M(mesh->Nq);
-      for(int i = 0; i < M.size(); i++) M[i] = mesh->r[i];
+      const auto Msize = M.size();
+      for(int i = 0; i < Msize; i++) M[i] = mesh->r[i];
       o_Jgll[mesh->N] = intpMatrix(M);
     }
 

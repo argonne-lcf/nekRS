@@ -420,8 +420,9 @@ template <typename FPType> std::string LVector_t<FPType>::FPTypeString()
   }
 }
 
-// instantiate dfloat, pfloat versions of LVector_t
 template class LVector_t<dfloat>;
-#ifndef NEKRS_USE_DFLOAT_FLOAT
-template class LVector_t<pfloat>;
+#ifdef NEKRS_USE_DFLOAT_FLOAT
+template class LVector_t<double>;
+#else
+template class LVector_t<float>;
 #endif

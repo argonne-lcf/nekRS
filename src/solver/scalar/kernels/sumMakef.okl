@@ -18,8 +18,8 @@
       dfloat JW = massMatrix[id];
 
       dfloat bdfx = 0;
-#if p_SUBCYCLING
-      bdfx += BF[id + fieldOffsetScan];
+#if p_ADVECTION == 1 && p_SUBCYCLING == 1
+      bdfx += ADV[id + fieldOffsetScan];
 #else
 
 #pragma unroll p_nBDF
@@ -42,7 +42,7 @@
 
         // FU already multiplied by rho
         nltx += JW * coeffEXT[s] * FU[id + fieldOffsetScan + sOffset];
-#if p_ADVECTION
+#if p_ADVECTION == 1 && p_SUBCYCLING == 0
         nltx -= JW * coeffEXT[s] * ADV[id + fieldOffsetScan + sOffset];
 #endif
       }

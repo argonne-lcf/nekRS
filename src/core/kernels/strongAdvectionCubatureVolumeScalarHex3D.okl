@@ -270,7 +270,11 @@
               for (int c = 0; c < p_Nq; ++c) {
                 const dlong id = e * p_Np + c * p_Nq * p_Nq + b * p_Nq + a;
                 dfloat rhoM = (sharedRho) ? r_rho[c] : RHO[id + fieldOffsetScan[field]];
+#if p_add
+                NS[id + fieldOffsetScan[field]] -= rhoM * r_scale[c] * s_tmp[c][b][a];
+#else
                 NS[id + fieldOffsetScan[field]] = rhoM * r_scale[c] * s_tmp[c][b][a];
+#endif
               }
             }
           }

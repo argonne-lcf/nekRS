@@ -3,8 +3,11 @@
  * Programmer(s): Cody J. Balos @ LLNL
  * -----------------------------------------------------------------
  * SUNDIALS Copyright Start
- * Copyright (c) 2002-2022, Lawrence Livermore National Security
+ * Copyright (c) 2025-2026, Lawrence Livermore National Security,
+ * University of Maryland Baltimore County, and the SUNDIALS contributors.
+ * Copyright (c) 2013-2025, Lawrence Livermore National Security
  * and Southern Methodist University.
+ * Copyright (c) 2002-2013, Lawrence Livermore National Security.
  * All rights reserved.
  *
  * See the top-level LICENSE and NOTICE files for details.
@@ -22,37 +25,41 @@
 
 #include <cstdio>
 #include <stdexcept>
-
 #include <sundials/sundials_types.h>
 
-namespace sundials
-{
-namespace cuda
-{
+namespace sundials {
+namespace cuda {
 
-constexpr const sunindextype WARP_SIZE = 32;
+constexpr const sunindextype WARP_SIZE      = 32;
 constexpr const sunindextype MAX_BLOCK_SIZE = 1024;
-constexpr const sunindextype MAX_WARPS = MAX_BLOCK_SIZE / WARP_SIZE;
+constexpr const sunindextype MAX_WARPS      = MAX_BLOCK_SIZE / WARP_SIZE;
 
 class ExecPolicy
 {
 public:
-  ExecPolicy(cudaStream_t stream = 0) : stream_(stream) { }
+  ExecPolicy(cudaStream_t stream = 0) : stream_(stream) {}
+
   virtual size_t gridSize(size_t numWorkUnits = 0, size_t blockDim = 0) const = 0;
   virtual size_t blockSize(size_t numWorkUnits = 0, size_t gridDim = 0) const = 0;
+
   virtual const cudaStream_t* stream() const { return (&stream_); }
+
   virtual ExecPolicy* clone() const = 0;
-  ExecPolicy* clone_new_stream(cudaStream_t stream) const {
+
+  ExecPolicy* clone_new_stream(cudaStream_t stream) const
+  {
     ExecPolicy* ex = clone();
-    ex->stream_ = stream;
+    ex->stream_    = stream;
     return ex;
   }
+
   virtual bool atomic() const { return false; }
+
   virtual ~ExecPolicy() {}
+
 protected:
   cudaStream_t stream_;
 };
-
 
 /*
  * A kernel execution policy that maps each thread to a work unit.
@@ -101,7 +108,8 @@ private:
 class GridStrideExecPolicy : public ExecPolicy
 {
 public:
-  GridStrideExecPolicy(const size_t blockDim, const size_t gridDim, cudaStream_t stream = 0)
+  GridStrideExecPolicy(const size_t blockDim, const size_t gridDim,
+                       cudaStream_t stream = 0)
     : blockDim_(blockDim), gridDim_(gridDim), ExecPolicy(stream)
   {}
 
@@ -130,7 +138,7 @@ private:
 };
 
 /*
- * A kernel execution policy for performing a reduction across indvidual thread
+ * A kernel execution policy for performing a reduction across individual thread
  * blocks. The number of threads per block (blockSize) can be set to any valid
  * multiple of the CUDA warp size. The number of blocks (gridSize) can be set to
  * any value greater or equal to 0. If it is set to 0, then the grid size will
@@ -141,12 +149,14 @@ private:
 class BlockReduceAtomicExecPolicy : public ExecPolicy
 {
 public:
-  BlockReduceAtomicExecPolicy(const size_t blockDim, const size_t gridDim = 0, cudaStream_t stream = 0)
+  BlockReduceAtomicExecPolicy(const size_t blockDim, const size_t gridDim = 0,
+                              cudaStream_t stream = 0)
     : blockDim_(blockDim), gridDim_(gridDim), ExecPolicy(stream)
   {
     if (blockDim < 1 || blockDim % WARP_SIZE)
     {
-      throw std::invalid_argument("the block size must be a multiple of the CUDA warp size");
+      throw std::invalid_argument(
+        "the block size must be a multiple of the CUDA warp size");
     }
   }
 
@@ -183,12 +193,14 @@ private:
 class BlockReduceExecPolicy : public ExecPolicy
 {
 public:
-  BlockReduceExecPolicy(const size_t blockDim, const size_t gridDim = 0, cudaStream_t stream = 0)
+  BlockReduceExecPolicy(const size_t blockDim, const size_t gridDim = 0,
+                        cudaStream_t stream = 0)
     : blockDim_(blockDim), gridDim_(gridDim), ExecPolicy(stream)
   {
     if (blockDim < 1 || blockDim % WARP_SIZE)
     {
-      throw std::invalid_argument("the block size must be a multiple of the CUDA warp size");
+      throw std::invalid_argument(
+        "the block size must be a multiple of the CUDA warp size");
     }
   }
 

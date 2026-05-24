@@ -8,7 +8,6 @@ if(CMAKE_CXX_COMPILER_ID MATCHES
   set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -w")
 endif()
 
-
 function(message_start_thirdparty)
   get_filename_component(tp_base "${CMAKE_CURRENT_LIST_DIR}" NAME_WE)
   message("")
@@ -70,13 +69,17 @@ adios2_add_thirdparty_target(pugixml pugixml)
 add_subdirectory(nlohmann_json)
 adios2_add_thirdparty_target(nlohmann_json nlohmann_json_wrapper)
 
+set(yaml_cpp_target "yaml-cpp")
 if(ADIOS2_USE_EXTERNAL_YAMLCPP)
   find_package(yaml-cpp 0.7.0 REQUIRED)
+  if (yaml-cpp_VERSION VERSION_GREATER_EQUAL 0.8)
+    set(yaml_cpp_target "yaml-cpp::yaml-cpp")
+  endif()
 else()
   add_subdirectory(yaml-cpp)
 endif()
 
-adios2_add_thirdparty_target(yaml-cpp yaml-cpp)
+adios2_add_thirdparty_target(yaml-cpp ${yaml_cpp_target})
 
 # YAML-cpp does not add the incdir/libdir to its target rather it exposes it
 # through the cmake variables YAML_CPP_INCLUDE_DIR and YAML_CPP_LIBRARY_DIR
@@ -98,19 +101,19 @@ cmake_dependent_option(ADIOS2_USE_EXTERNAL_EVPATH
 )
 cmake_dependent_option(ADIOS2_USE_EXTERNAL_ATL
   "Use an externally supplied ATL library" OFF
-  "NOT ADIOS2_USE_EXTERNAL_EVPATH" OFF
+  "NOT ADIOS2_USE_EXTERNAL_EVPATH" ON
 )
 cmake_dependent_option(ADIOS2_USE_EXTERNAL_FFS
   "Use an externally supplied FFS library" OFF
-  "NOT ADIOS2_USE_EXTERNAL_EVPATH" OFF
+  "NOT ADIOS2_USE_EXTERNAL_EVPATH" ON
 )
 cmake_dependent_option(ADIOS2_USE_EXTERNAL_DILL
   "Use an externally supplied DILL library" OFF
-  "NOT ADIOS2_USE_EXTERNAL_FFS" OFF
+  "NOT ADIOS2_USE_EXTERNAL_FFS" ON
 )
 cmake_dependent_option(ADIOS2_USE_EXTERNAL_ENET
   "Use an externally supplied ENET library" OFF
-  "NOT ADIOS2_USE_EXTERNAL_EVPATH" OFF
+  "NOT ADIOS2_USE_EXTERNAL_EVPATH" ON
 )
 
 if(NOT ADIOS2_USE_EXTERNAL_FFS)
@@ -122,11 +125,12 @@ if(NOT ADIOS2_USE_EXTERNAL_FFS)
   if(NOT ADIOS2_USE_EXTERNAL_DILL)
     add_subdirectory(dill)
   endif()
-  find_package(dill REQUIRED)
+  find_package(dill QUIET)
 
   add_subdirectory(ffs)
 endif()
 find_package(ffs REQUIRED)
+adios2_add_thirdparty_target(atl atl::atl)
 adios2_add_thirdparty_target(ffs ffs::ffs)
 
 if(NOT ADIOS2_USE_EXTERNAL_EVPATH)

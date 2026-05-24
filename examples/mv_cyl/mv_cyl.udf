@@ -38,7 +38,7 @@ void uservp(double time)
   fillProp(mesh->Nelements,
            nrs->fluid->fieldOffset,
            nrs->scalar->fieldOffset(),
-           nrs->p0th[0],
+           nrs->scalar->p0th[0],
            nrs->scalar->o_S,
            nrs->fluid->o_prop,
            nrs->scalar->o_prop,
@@ -107,7 +107,7 @@ void UDF_ExecuteStep(double time, int tstep)
 {
   auto mesh = nrs->meshV;
 
-  *nek::ptr<double>("dp0thdt") = nrs->dp0thdt; // required for CI testing, not copied by default
+  *nek::ptr<double>("dp0thdt") = nrs->scalar->dp0thdt; // required for CI testing, not copied by default
 
   if (platform->options.compareArgs("GEOM SOLVER", "NONE")) {
 

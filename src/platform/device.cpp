@@ -409,23 +409,29 @@ void device_t::printMemoryUsage(MPI_Comm comm) const
   const auto maxMemSizes = [&]() {
     std::vector<uint64_t> work;
     work.push_back(platform->device.occaDevice().maxMemoryAllocated());
+    work.push_back(platform->device.occaDevice().memoryAllocated());
     work.push_back(platform->deviceMemoryPool.size());
     work.push_back(platform->memoryPool.size());
 
     MPI_Allreduce(MPI_IN_PLACE, work.data(), work.size(), MPI_UINT64_T, MPI_MAX, comm);
-    return std::make_tuple(work[0], work[1], work[2]);
+    return std::make_tuple(work[0], work[1], work[2], work[3]);
   }();
 
   int rank;
   MPI_Comm_rank(comm, &rank);
 
   if (rank == 0) {
-    int width = 12;
-    std::cout << "occa max memory usage: " << std::setw(width) << std::right << std::get<0>(maxMemSizes)
+    const auto width = 12;
+    std::cout << "occa memory statistics" << std::endl;
+
+    std::cout << "peak memory usage:     " << std::setw(width) << std::right << std::get<0>(maxMemSizes)
               << " bytes" << std::endl;
-    std::cout << "  deviceMemoryPool:    " << std::setw(width) << std::right << std::get<1>(maxMemSizes)
+
+    std::cout << "current memory usage: " << std::setw(width) << std::right << std::get<1>(maxMemSizes)
               << " bytes" << std::endl;
-    std::cout << "  mempool:             " << std::setw(width) << std::right << std::get<2>(maxMemSizes)
+    std::cout << "  deviceMemoryPool:   " << std::setw(width) << std::right << std::get<2>(maxMemSizes)
+              << " bytes" << std::endl;
+    std::cout << "  mempool:            " << std::setw(width) << std::right << std::get<3>(maxMemSizes)
               << " bytes" << std::endl
               << std::flush;
   }

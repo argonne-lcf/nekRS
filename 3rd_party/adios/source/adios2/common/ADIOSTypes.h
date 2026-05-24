@@ -21,6 +21,7 @@
 #include <complex>
 #include <limits>
 #include <map>
+#include <memory>
 #include <string>
 #include <type_traits>
 #include <utility> //std::pair
@@ -32,15 +33,13 @@
 namespace adios2
 {
 
-#ifdef ADIOS2_HAVE_DERIVED_VARIABLE
 /** Type of derived variables */
 enum class DerivedVarType
 {
-    MetadataOnly,     ///< Store only the metadata (default)
+    StatsOnly,        ///< Store only the metadata (default)
     ExpressionString, ///< Store only the expression string
     StoreData         ///< Store data and metadata
 };
-#endif
 
 /** Memory space for the user provided buffers */
 enum class MemorySpace
@@ -186,10 +185,10 @@ using cfloat = std::complex<float>;
 using cdouble = std::complex<double>;
 
 // Limit, using uint64_t to make it portable
-constexpr uint64_t MaxU64 = std::numeric_limits<uint64_t>::max();
-constexpr size_t MaxSizeT = std::numeric_limits<size_t>::max();
-constexpr size_t DefaultSizeT = std::numeric_limits<size_t>::max();
-constexpr size_t EngineCurrentStep = std::numeric_limits<size_t>::max();
+constexpr uint64_t MaxU64 = (std::numeric_limits<uint64_t>::max)();
+constexpr size_t MaxSizeT = (std::numeric_limits<size_t>::max)();
+constexpr size_t DefaultSizeT = (std::numeric_limits<size_t>::max)();
+constexpr size_t EngineCurrentStep = (std::numeric_limits<size_t>::max)();
 
 union PrimitiveStdtypeUnion
 {
@@ -217,8 +216,8 @@ struct MinBlockInfo
 {
     int WriterID = 0;
     size_t BlockID = 0;
-    size_t *Start;
-    size_t *Count;
+    const size_t *Start;
+    const size_t *Count;
     MinMaxStruct MinMax;
     void *BufferP = NULL;
 };
@@ -343,6 +342,9 @@ bool TypeHasMinMax(DataType adiosvartype);
  */
 
 std::string ToString(ShapeID value);
+#ifdef ADIOS2_HAVE_DERIVED_VARIABLE
+std::string ToString(DerivedVarType value);
+#endif
 std::string ToString(IOMode value);
 std::string ToString(Mode value);
 std::string ToString(ReadMultiplexPattern value);
@@ -357,7 +359,36 @@ std::string ToString(const Dims &dims);
 std::string ToString(const Box<Dims> &box);
 std::string ToString(const MemorySpace value);
 
-/** UserOptions holds all user options from ~/.config/adios2/adios2.yaml */
+// Derived exception class for specific errors
+class PluginLoadFailure : public std::runtime_error
+{
+public:
+    PluginLoadFailure(const std::string &msg, const std::string &Library, const std::string &Name)
+    : runtime_error(msg), m_PluginLibrary(Library), m_PluginName(Name)
+    {
+    }
+
+    std::string m_PluginLibrary;
+    std::string m_PluginName;
+
+private:
+};
+
+class MissingOperatorFailure : public std::invalid_argument
+{
+public:
+    MissingOperatorFailure(const std::string &msg, const std::string &Operator)
+    : invalid_argument(msg), m_Operator(Operator)
+    {
+    }
+
+    std::string m_Operator;
+
+private:
+};
+
+/** UserOptions holds all user options from ~/.config/adios2/adios2.yaml and
+ * ~/.config/hpc-campaign/config.yaml*/
 struct UserOptions
 {
     struct General
@@ -384,6 +415,48 @@ struct UserOptions
     SST sst;
 };
 
+/** Host access protocols */
+enum class HostAccessProtocol
+{
+    Invalid,
+    SSH,
+    XRootD,
+    S3
+};
+
+/** Host authentication protocols */
+enum class HostAuthProtocol
+{
+    Invalid,
+    Password,
+    X509
+};
+
+struct HostConfig
+{
+    std::string name; // Connection Option name
+    HostAccessProtocol protocol = HostAccessProtocol::Invalid;
+
+    /* ssh and xrootd parameters */
+    uint16_t port = 0;
+    uint16_t localPort = 0;
+    std::string hostname = "";
+    std::string username = "";
+    std::string remoteServerPath = "";
+    HostAuthProtocol authentication = HostAuthProtocol::Invalid;
+
+    /* s3 parameters */
+    std::string endpoint = "";
+    std::string awsProfile = "default"; // profile name in ~/.aws/credentials
+    bool isAWS_EC2 = false;
+    bool recheckMetadata = true;
+
+    int verbose = 0;
+};
+
+/** HostOptions holds all user options from ~/.config/hpc-campaign/hosts.yaml */
+using HostOptions = std::map<std::string, std::vector<HostConfig>>;
+
 /**
  * os << [adios2_type] enables output of adios2 enums/classes directly
  * to output streams (e.g. std::cout), if ToString() can handle [adios2_type].
@@ -393,6 +466,18 @@ std::ostream &operator<<(std::ostream &os, const T &value);
 
 namespace ops
 {
+
+// BWC PARAMETERS
+#ifdef ADIOS2_HAVE_BIGWHOOP
+constexpr char LossyBWC[] = "bigwhoop";
+namespace bigwhoop
+{
+namespace key
+{
+constexpr char rate[] = "rate";
+}
+}
+#endif
 
 // SZ PARAMETERS
 #ifdef ADIOS2_HAVE_SZ

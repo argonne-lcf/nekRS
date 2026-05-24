@@ -14,6 +14,10 @@
 #include "adios2/operator/plugin/PluginOperator.h"
 #include <numeric>
 
+#ifdef ADIOS2_HAVE_BIGWHOOP
+#include "adios2/operator/compress/CompressBigWhoop.h"
+#endif
+
 #ifdef ADIOS2_HAVE_BLOSC2
 #include "adios2/operator/compress/CompressBlosc.h"
 #endif
@@ -28,6 +32,7 @@
 
 #ifdef ADIOS2_HAVE_MGARD
 #include "adios2/operator/compress/CompressMGARD.h"
+#include "adios2/operator/compress/CompressMGARDComplex.h"
 #include "adios2/operator/compress/CompressMGARDPlus.h"
 #endif
 
@@ -60,6 +65,8 @@ std::string OperatorTypeToString(const Operator::OperatorType type)
 {
     switch (type)
     {
+    case Operator::COMPRESS_BIGWHOOP:
+        return "bigwhoop";
     case Operator::COMPRESS_BLOSC:
         return "blosc";
     case Operator::COMPRESS_BZIP2:
@@ -78,6 +85,8 @@ std::string OperatorTypeToString(const Operator::OperatorType type)
         return "sz";
     case Operator::COMPRESS_ZFP:
         return "zfp";
+    case Operator::COMPRESS_MGARDCOMPLEX:
+        return "mgard_complex";
     case Operator::REFACTOR_MDR:
         return "mdr";
     case Operator::PLUGIN_INTERFACE:
@@ -93,7 +102,13 @@ std::shared_ptr<Operator> MakeOperator(const std::string &type, const Params &pa
 
     const std::string typeLowerCase = helper::LowerCase(type);
 
-    if (typeLowerCase == "blosc")
+    if (typeLowerCase == "bigwhoop")
+    {
+#ifdef ADIOS2_HAVE_BIGWHOOP
+        ret = std::make_shared<compress::CompressBigWhoop>(parameters);
+#endif
+    }
+    else if (typeLowerCase == "blosc")
     {
 #ifdef ADIOS2_HAVE_BLOSC2
         ret = std::make_shared<compress::CompressBlosc>(parameters);
@@ -121,6 +136,12 @@ std::shared_ptr<Operator> MakeOperator(const std::string &type, const Params &pa
     {
 #ifdef ADIOS2_HAVE_MGARD
         ret = std::make_shared<compress::CompressMGARDPlus>(parameters);
+#endif
+    }
+    else if (typeLowerCase == "mgard_complex")
+    {
+#ifdef ADIOS2_HAVE_MGARD
+        ret = std::make_shared<compress::CompressMGARDComplex>(parameters);
 #endif
     }
     else if (typeLowerCase == "png")
@@ -170,24 +191,35 @@ std::shared_ptr<Operator> MakeOperator(const std::string &type, const Params &pa
 
     if (ret == nullptr)
     {
-        helper::Throw<std::invalid_argument>("Operator", "OperatorFactory", "MakeOperator",
-                                             "ADIOS2 didn't compile with " + typeLowerCase +
-                                                 " library, operator not added");
+        auto m = MakeMessage("Operator", "OperatorFactory", "MakeOperator",
+                             "ADIOS2 didn't compile with " + typeLowerCase +
+                                 " library, operator not added",
+                             -1, helper::LogMode::EXCEPTION);
+        throw MissingOperatorFailure(m, typeLowerCase);
     }
 
     return ret;
 }
 
 size_t Decompress(const char *bufferIn, const size_t sizeIn, char *dataOut, MemorySpace memSpace,
-                  std::shared_ptr<Operator> op)
+                  std::shared_ptr<Operator> op, Engine *engine, VariableBase *var)
 {
     Operator::OperatorType compressorType;
     std::memcpy(&compressorType, bufferIn, 1);
     if (op == nullptr || op->m_TypeEnum != compressorType)
     {
-        op = MakeOperator(OperatorTypeToString(compressorType), {});
+        std::string opTypeString = OperatorTypeToString(compressorType);
+        op = MakeOperator(opTypeString, {});
     }
+
+    if (engine && var)
+    {
+        Params operatorParams = CreateOperatorParams(engine, var);
+        op->AddExtraParameters(operatorParams);
+    }
+
     size_t sizeOut = op->InverseOperate(bufferIn, sizeIn, dataOut);
+
     if (sizeOut == 0) // the inverse operator was not applied
     {
         size_t headerSize = op->GetHeaderSize();
@@ -196,6 +228,12 @@ size_t Decompress(const char *bufferIn, const size_t sizeIn, char *dataOut, Memo
                                      /*endianReverse*/ false, memSpace);
     }
     return sizeOut;
+}
+
+Params CreateOperatorParams(const Engine *engine, const VariableBase *variable)
+{
+    Params p = {{"EngineName", engine->m_Name}, {"VariableName", variable->m_Name}};
+    return p;
 }
 
 } // end namespace core

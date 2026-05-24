@@ -37,8 +37,9 @@ typename Variable<T>::Span &Engine::Put(Variable<T> &variable, const bool initia
             "variables using Span");
     }
 
+    size_t CurWriterBlockCount = PutCount(variable);
     auto itSpan = variable.m_BlocksSpan.emplace(
-        variable.m_BlocksInfo.size(), typename Variable<T>::Span(*this, variable.TotalSize()));
+        CurWriterBlockCount, typename Variable<T>::Span(*this, variable.TotalSize()));
     DoPut(variable, itSpan.first->second, initialize, value);
     return itSpan.first->second;
 }
@@ -111,9 +112,14 @@ void Engine::Get(const std::string &variableName, T *data, const Mode launch)
 }
 
 template <class T>
-void Engine::Get(Variable<T> &variable, T &datum, const Mode /*launch*/)
+void Engine::Get(Variable<T> &variable, T &datum, const Mode launch)
 {
-    Get(variable, &datum, Mode::Sync);
+    if ((variable.m_ShapeID != ShapeID::GlobalValue) && (variable.m_ShapeID != ShapeID::LocalValue))
+    {
+        helper::Throw<std::invalid_argument>("Core", "Engine", "Get",
+                                             "Single-valued Get() used on array variable.");
+    }
+    Get(variable, &datum, launch);
 }
 
 template <class T>

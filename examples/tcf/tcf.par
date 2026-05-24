@@ -1,6 +1,6 @@
 [GENERAL]
 polynomialOrder = 7
-cubaturePolynomialOrder = 9
+overintegrationPolynomialOrder = 9
 
 #startFrom = "r.fld+time=0"
 stopAt = endTime

@@ -14,7 +14,8 @@
 #include "adios2/core/Engine.h"
 #include "adios2/engine/bp5/BP5Engine.h"
 #include "adios2/helper/adiosComm.h"
-#include "adios2/helper/adiosMemory.h" // PaddingToAlignOffset
+#include "adios2/helper/adiosMemory.h"      // PaddingToAlignOffset
+#include "adios2/helper/adiosPartitioner.h" // RankPartition
 #include "adios2/toolkit/aggregator/mpi/MPIChain.h"
 #include "adios2/toolkit/aggregator/mpi/MPIShmChain.h"
 #include "adios2/toolkit/burstbuffer/FileDrainerSingleThread.h"
@@ -55,11 +56,31 @@ public:
     size_t DebugGetDataBufferSize() const final;
 
 private:
+    struct AggTransportData
+    {
+        AggTransportData(core::IO &IO, helper::Comm &comm) : m_FileDataManager(IO, comm) {}
+
+        /** Manage BP data files Transports from IO AddTransport */
+        transportman::TransportMan m_FileDataManager;
+
+        /**
+         * Name of subfiles to directly write to (for all transports)
+         * This is either original target or burst buffer if used
+         */
+        std::vector<std::string> m_SubStreamNames;
+
+        /* Name of subfiles on target if burst buffer is used (for all transports)
+         */
+        std::vector<std::string> m_DrainSubStreamNames;
+    };
+
+    std::string GetCacheKey(aggregator::MPIAggregator *aggregator);
+    std::map<std::string, AggTransportData> m_AggregatorSpecifics;
+    helper::RankPartition GetPartitionInfo(const uint64_t rankDataSize, const int subStreams,
+                                           helper::Comm const &parentComm);
+
     /** Single object controlling BP buffering */
     format::BP5Serializer m_BP5Serializer;
-
-    /** Manage BP data files Transports from IO AddTransport */
-    transportman::TransportMan m_FileDataManager;
 
     /** Manages the optional collective metadata files */
     transportman::TransportMan m_FileMetadataManager;
@@ -85,12 +106,9 @@ private:
      * m_Name is a constant of Engine and is the user provided target path
      */
     std::string m_BBName;
-    /* Name of subfiles to directly write to (for all transports)
-     * This is either original target or burst buffer if used */
-    std::vector<std::string> m_SubStreamNames;
-    /* Name of subfiles on target if burst buffer is used (for all transports)
-     */
-    std::vector<std::string> m_DrainSubStreamNames;
+
+    std::vector<std::string> m_TransportNames;
+
     std::vector<std::string> m_MetadataFileNames;
     std::vector<std::string> m_DrainMetadataFileNames;
     std::vector<std::string> m_MetaMetadataFileNames;
@@ -103,8 +121,10 @@ private:
     /** Parses parameters from IO SetParameters */
     void InitParameters() final;
     /** Set up the aggregator */
-    void InitAggregator();
-    /** Complete opening/createing metadata and data files */
+    void InitAggregator(const uint64_t DataSize = 1);
+    /** Create and open metadata files */
+    void InitMetadataTransports();
+    /** Complete opening/createing data files */
     void InitTransports() final;
     /** Allocates memory and starts a PG group */
     void InitBPBuffer();
@@ -126,8 +146,8 @@ private:
 
 #define declare_type(T)                                                                            \
     void DoPut(Variable<T> &variable, typename Variable<T>::Span &span, const bool initialize,     \
-               const T &value) final;
-
+               const T &value) final;                                                              \
+    size_t PutCount(Variable<T> &variable);
     ADIOS2_FOREACH_PRIMITIVE_STDTYPE_1ARG(declare_type)
 #undef declare_type
 
@@ -170,6 +190,13 @@ private:
 
     uint64_t WriteMetadata(const std::vector<core::iovec> &MetaDataBlocks,
                            const std::vector<core::iovec> &AttributeBlocks);
+    uint64_t WriteMetadata(const std::vector<char> &ContigMetaData,
+                           const std::vector<size_t> &SizeVector,
+                           const std::vector<core::iovec> &AttributeBlocks);
+
+    void SelectiveAggregationMetadata(format::BP5Serializer::TimestepInfo TSInfo);
+    void TwoLevelAggregationMetadata(format::BP5Serializer::TimestepInfo TSInfo);
+    void SimpleAggregationMetadata(format::BP5Serializer::TimestepInfo TSInfo);
 
     /** Write Data to disk, in an aggregator chain */
     void WriteData(format::BufferV *Data);
@@ -198,11 +225,17 @@ private:
     aggregator::MPIAggregator *m_Aggregator; // points to one of these below
     aggregator::MPIShmChain m_AggregatorTwoLevelShm;
     aggregator::MPIChain m_AggregatorEveroneWrites;
+    aggregator::MPIChain m_AggregatorDataSizeBased;
     bool m_IAmDraining = false;
     bool m_IAmWritingData = false;
     helper::Comm *DataWritingComm; // processes that write the same data file
     // aggregators only (valid if m_Aggregator->m_Comm.Rank() == 0)
     helper::Comm m_CommAggregators;
+
+    /* two-level metadata aggregation */
+    aggregator::MPIChain m_AggregatorMetadata; // first level
+    helper::Comm m_CommMetadataAggregators;    // second level
+
     adios2::profiling::JSONProfiler m_Profiler;
 
 protected:
@@ -232,6 +265,23 @@ private:
      *  to the index file
      */
     std::vector<uint64_t> m_WriterDataPos;
+
+    /**
+     * For keeping track of data pos in each substream/file when doing
+     * data-size based aggregation
+     */
+    std::vector<uint64_t> m_SubstreamDataPos;
+
+    /**
+     * To avoid reading from the above vector unless we have explicitly
+     * initialized it
+     */
+    bool m_DataPosShared;
+
+    /**
+     * To avoid the possibility of ranks changing subfiles during a single step
+     */
+    bool m_AggregatorInitializedThisStep;
 
     bool m_MarshalAttributesNecessary = true;
 

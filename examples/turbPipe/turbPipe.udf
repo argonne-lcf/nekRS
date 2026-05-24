@@ -16,7 +16,7 @@ std::unique_ptr<iofld> io;
 //#define USE_TAVG_LEGACY
 
 #ifdef USE_TAVG_LEGACY 
-std::unique_ptr<nrs_t::tavgLegacy_t> avg;
+std::unique_ptr<nrs_t::tavg> avg;
 #else
 std::unique_ptr<tavg> avg;
 #endif
@@ -211,7 +211,7 @@ void UDF_Setup()
 
   {
 #ifdef USE_TAVG_LEGACY
-    avg = std::make_unique<nrs_t::tavgLegacy_t>();
+    avg = std::make_unique<nrs_t::tavg>();
 #else
     std::vector< tavg::field > tavgFields;
 

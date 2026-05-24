@@ -98,7 +98,7 @@ elliptic_t *ellipticBuildMultigridLevel(elliptic_t *fineElliptic, int Nc, int Nf
     for (int i = 0; i < elliptic->mesh->Nlocal; i++) {
       tmp[i] = (pfloat)elliptic->ogs->invDegree[i];
     }
-    elliptic->o_invDegree = platform->device.malloc<pfloat>(elliptic->mesh->Nlocal);
+    elliptic->o_invDegree = platform->deviceMemoryPool.reserve<pfloat>(elliptic->mesh->Nlocal);
     elliptic->o_invDegree.copyFrom(tmp.data());
   }
 
@@ -125,28 +125,27 @@ elliptic_t *ellipticBuildMultigridLevel(elliptic_t *fineElliptic, int Nc, int Nf
     precon->prolongateKernel = platform->kernelRequests.load(kernelName);
   }
 
-  elliptic->o_lambda0 = platform->device.malloc<pfloat>(mesh->Nlocal);
+  elliptic->o_lambda0 = platform->deviceMemoryPool.reserve<pfloat>(mesh->Nlocal);
   if (fineElliptic->poisson) {
     elliptic->o_lambda1 = nullptr;
   } else {
-    elliptic->o_lambda1 = platform->device.malloc<pfloat>(mesh->Nlocal);
+    elliptic->o_lambda1 = platform->deviceMemoryPool.reserve<pfloat>(mesh->Nlocal);
   }
 
   const int Nfq = Nf + 1;
   const int Ncq = Nc + 1;
-  auto fToCInterp = (dfloat *)calloc(Nfq * Ncq, sizeof(dfloat));
-  InterpolationMatrix1D(Nf, Nfq, fineElliptic->mesh->r, Ncq, mesh->r, fToCInterp);
+  std::vector<dfloat> fToCInterp(Nfq * Ncq);
+  InterpolationMatrix1D(Nf, Nfq, fineElliptic->mesh->r, Ncq, mesh->r, fToCInterp.data());
 
-  occa::memory o_interp = platform->device.malloc<dfloat>(Nfq * Ncq, fToCInterp);
-  elliptic->o_interp = platform->device.malloc<pfloat>(Nfq * Ncq);
+  auto o_interp = platform->deviceMemoryPool.reserve<dfloat>(fToCInterp.size());
+  o_interp.copyFrom(fToCInterp.data());
+  elliptic->o_interp = platform->deviceMemoryPool.reserve<pfloat>(Nfq * Ncq);
   platform->copyDfloatToPfloatKernel(Nfq * Ncq, o_interp, elliptic->o_interp);
 
   precon->coarsenKernel(mesh->Nelements, elliptic->o_interp, fineElliptic->o_lambda0, elliptic->o_lambda0);
   if (!fineElliptic->poisson) {
     precon->coarsenKernel(mesh->Nelements, elliptic->o_interp, fineElliptic->o_lambda1, elliptic->o_lambda1);
   }
-
-  free(fToCInterp);
 
   MPI_Barrier(platform->comm.mpiComm());
   if (platform->comm.mpiRank() == 0) {

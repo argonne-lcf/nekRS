@@ -12,13 +12,19 @@ void finalize();
 constexpr int NPARAM = 12;
 
 #ifndef HYPRE_HEADER
+
 // has to match HYPRE config
 typedef int HYPRE_Int;
 typedef long long int HYPRE_BigInt;
-typedef float HYPRE_Real;
 typedef void HYPRE_IJMatrix;
 typedef void HYPRE_IJVector;
 typedef void HYPRE_Solver;
+#ifdef NEKRS_HYPRE_USE_FLOAT
+typedef float Real;
+#else
+typedef double Real;
+#endif
+
 #endif
 
 class boomerAMG_t {

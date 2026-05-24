@@ -24,9 +24,17 @@ namespace core
 Engine::Engine(const std::string engineType, IO &io, const std::string &name, const Mode openMode,
                helper::Comm comm)
 : m_EngineType(engineType), m_IO(io), m_Name(name), m_OpenMode(openMode), m_Comm(std::move(comm)),
-  m_UserOptions(io.m_ADIOS.GetUserOptions())
+  m_UserOptions(io.m_ADIOS.GetUserOptions()), m_HostOptions(io.m_ADIOS.GetHostOptions())
 {
     m_FailVerbose = (m_Comm.Rank() == 0);
+}
+
+Engine::Engine(const std::string engineType, IO &io, const std::string &name, const Mode openMode,
+               helper::Comm comm, const char *md, const size_t mdsize)
+: m_EngineType(engineType), m_IO(io), m_Name(name), m_OpenMode(openMode), m_Comm(std::move(comm)),
+  m_UserOptions(io.m_ADIOS.GetUserOptions()), m_HostOptions(io.m_ADIOS.GetHostOptions())
+{
+    ThrowUp("Engine with metadata in memory");
 }
 
 Engine::~Engine()
@@ -42,6 +50,13 @@ Engine::operator bool() const noexcept { return !m_IsClosed; }
 IO &Engine::GetIO() noexcept { return m_IO; }
 
 Mode Engine::OpenMode() const noexcept { return m_OpenMode; }
+
+void Engine::GetMetadata(char **md, size_t *size)
+{
+    ThrowUp("GetMetadata");
+    *md = nullptr;
+    *size = 0;
+}
 
 StepStatus Engine::BeginStep()
 {
@@ -181,7 +196,8 @@ ADIOS2_FOREACH_PRIMITIVE_STDTYPE_1ARG(declare_type)
 
 #define declare_type(T)                                                                            \
     void Engine::DoPutSync(Variable<T> &, const T *) { ThrowUp("DoPutSync"); }                     \
-    void Engine::DoPutDeferred(Variable<T> &, const T *) { ThrowUp("DoPutDeferred"); }
+    void Engine::DoPutDeferred(Variable<T> &, const T *) { ThrowUp("DoPutDeferred"); }             \
+    size_t Engine::PutCount(Variable<T> &variable) { return variable.m_BlocksInfo.size(); }
 ADIOS2_FOREACH_STDTYPE_1ARG(declare_type)
 #undef declare_type
 

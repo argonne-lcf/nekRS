@@ -1,11 +1,14 @@
 /* -----------------------------------------------------------------
- * Programmer(s): Daniel Reynolds @ SMU
+ * Programmer(s): Daniel Reynolds @ UMBC
  *                David Gardner, Carol Woodward, Slaven Peles,
  *                Cody Balos @ LLNL
  * -----------------------------------------------------------------
  * SUNDIALS Copyright Start
- * Copyright (c) 2002-2022, Lawrence Livermore National Security
+ * Copyright (c) 2025-2026, Lawrence Livermore National Security,
+ * University of Maryland Baltimore County, and the SUNDIALS contributors.
+ * Copyright (c) 2013-2025, Lawrence Livermore National Security
  * and Southern Methodist University.
+ * Copyright (c) 2002-2013, Lawrence Livermore National Security.
  * All rights reserved.
  *
  * See the top-level LICENSE and NOTICE files for details.
@@ -44,9 +47,10 @@
 #ifndef _SUNMATRIX_H
 #define _SUNMATRIX_H
 
+#include <sundials/sundials_config.h>
 #include <sundials/sundials_context.h>
+#include <sundials/sundials_errors.h>
 #include <sundials/sundials_nvector.h>
-#include <sundials/sundials_types.h>
 
 #ifdef __cplusplus /* wrapper to enable C++ usage */
 extern "C" {
@@ -56,7 +60,7 @@ extern "C" {
  * Implemented SUNMatrix types
  * ----------------------------------------------------------------- */
 
-typedef enum
+enum SUNMatrix_ID
 {
   SUNMATRIX_DENSE,
   SUNMATRIX_MAGMADENSE,
@@ -66,9 +70,14 @@ typedef enum
   SUNMATRIX_SLUNRLOC,
   SUNMATRIX_CUSPARSE,
   SUNMATRIX_GINKGO,
+  SUNMATRIX_GINKGOBATCH,
   SUNMATRIX_KOKKOSDENSE,
   SUNMATRIX_CUSTOM
-} SUNMatrix_ID;
+};
+
+#ifndef SWIG
+typedef enum SUNMatrix_ID SUNMatrix_ID;
+#endif
 
 /* -----------------------------------------------------------------
  * Generic definition of SUNMatrix
@@ -86,16 +95,14 @@ struct _generic_SUNMatrix_Ops
   SUNMatrix_ID (*getid)(SUNMatrix);
   SUNMatrix (*clone)(SUNMatrix);
   void (*destroy)(SUNMatrix);
-  int (*zero)(SUNMatrix);
-  int (*copy)(SUNMatrix, SUNMatrix);
-  int (*scaleadd)(realtype, SUNMatrix, SUNMatrix);
-  int (*scaleaddi)(realtype, SUNMatrix);
-  int (*matvecsetup)(SUNMatrix);
-  int (*matvec)(SUNMatrix, N_Vector, N_Vector);
-  int (*space)(SUNMatrix, long int*, long int*);
-#ifdef __cplusplus
-  _generic_SUNMatrix_Ops() = default;
-#endif
+  SUNErrCode (*zero)(SUNMatrix);
+  SUNErrCode (*copy)(SUNMatrix, SUNMatrix);
+  SUNErrCode (*scaleadd)(sunrealtype, SUNMatrix, SUNMatrix);
+  SUNErrCode (*scaleaddi)(sunrealtype, SUNMatrix);
+  SUNErrCode (*matvecsetup)(SUNMatrix);
+  SUNErrCode (*matvec)(SUNMatrix, N_Vector, N_Vector);
+  SUNErrCode (*mathermitiantransposevec)(SUNMatrix, N_Vector, N_Vector);
+  SUNErrCode (*space)(SUNMatrix, long int*, long int*);
 };
 
 /* A matrix is a structure with an implementation-dependent
@@ -106,40 +113,54 @@ struct _generic_SUNMatrix
   void* content;
   SUNMatrix_Ops ops;
   SUNContext sunctx;
-#ifdef __cplusplus
-  _generic_SUNMatrix() = default;
-#endif
 };
 
 /* -----------------------------------------------------------------
  * Functions exported by SUNMatrix module
  * ----------------------------------------------------------------- */
 
-SUNDIALS_EXPORT SUNMatrix SUNMatNewEmpty(SUNContext sunctx);
-SUNDIALS_EXPORT void SUNMatFreeEmpty(SUNMatrix A);
-SUNDIALS_EXPORT int SUNMatCopyOps(SUNMatrix A, SUNMatrix B);
-SUNDIALS_EXPORT SUNMatrix_ID SUNMatGetID(SUNMatrix A);
-SUNDIALS_EXPORT SUNMatrix SUNMatClone(SUNMatrix A);
-SUNDIALS_EXPORT void SUNMatDestroy(SUNMatrix A);
-SUNDIALS_EXPORT int SUNMatZero(SUNMatrix A);
-SUNDIALS_EXPORT int SUNMatCopy(SUNMatrix A, SUNMatrix B);
-SUNDIALS_EXPORT int SUNMatScaleAdd(realtype c, SUNMatrix A, SUNMatrix B);
-SUNDIALS_EXPORT int SUNMatScaleAddI(realtype c, SUNMatrix A);
-SUNDIALS_EXPORT int SUNMatMatvecSetup(SUNMatrix A);
-SUNDIALS_EXPORT int SUNMatMatvec(SUNMatrix A, N_Vector x, N_Vector y);
-SUNDIALS_EXPORT int SUNMatSpace(SUNMatrix A, long int* lenrw, long int* leniw);
+SUNDIALS_EXPORT
+SUNMatrix SUNMatNewEmpty(SUNContext sunctx);
 
-/*
- * -----------------------------------------------------------------
- * IV. SUNMatrix error codes
- * ---------------------------------------------------------------
- */
+SUNDIALS_EXPORT
+void SUNMatFreeEmpty(SUNMatrix A);
 
-#define SUNMAT_SUCCESS               0    /* function successfull          */
-#define SUNMAT_ILL_INPUT             -701 /* illegal function input        */
-#define SUNMAT_MEM_FAIL              -702 /* failed memory access/alloc    */
-#define SUNMAT_OPERATION_FAIL        -703 /* a SUNMatrix operation returned nonzero */
-#define SUNMAT_MATVEC_SETUP_REQUIRED -704 /* the SUNMatMatvecSetup routine needs to be called */
+SUNDIALS_EXPORT
+SUNErrCode SUNMatCopyOps(SUNMatrix A, SUNMatrix B);
+
+SUNDIALS_EXPORT
+SUNMatrix_ID SUNMatGetID(SUNMatrix A);
+
+SUNDIALS_EXPORT
+SUNMatrix SUNMatClone(SUNMatrix A);
+
+SUNDIALS_EXPORT
+void SUNMatDestroy(SUNMatrix A);
+
+SUNDIALS_EXPORT
+SUNErrCode SUNMatZero(SUNMatrix A);
+
+SUNDIALS_EXPORT
+SUNErrCode SUNMatCopy(SUNMatrix A, SUNMatrix B);
+
+SUNDIALS_EXPORT
+SUNErrCode SUNMatScaleAdd(sunrealtype c, SUNMatrix A, SUNMatrix B);
+
+SUNDIALS_EXPORT
+SUNErrCode SUNMatScaleAddI(sunrealtype c, SUNMatrix A);
+
+SUNDIALS_EXPORT
+SUNErrCode SUNMatMatvecSetup(SUNMatrix A);
+
+SUNDIALS_EXPORT
+SUNErrCode SUNMatMatvec(SUNMatrix A, N_Vector x, N_Vector y);
+
+SUNDIALS_EXPORT
+SUNErrCode SUNMatHermitianTransposeVec(SUNMatrix A, N_Vector x, N_Vector y);
+
+SUNDIALS_DEPRECATED_EXPORT_MSG(
+  "Work space functions will be removed in version 8.0.0")
+SUNErrCode SUNMatSpace(SUNMatrix A, long int* lenrw, long int* leniw);
 
 #ifdef __cplusplus
 }

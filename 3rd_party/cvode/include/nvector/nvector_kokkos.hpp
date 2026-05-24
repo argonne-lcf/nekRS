@@ -2,8 +2,11 @@
  * Programmer(s): Daniel McGreer, Cody Balos @ LLNL
  * -----------------------------------------------------------------------------
  * SUNDIALS Copyright Start
- * Copyright (c) 2002-2020, Lawrence Livermore National Security
+ * Copyright (c) 2025-2026, Lawrence Livermore National Security,
+ * University of Maryland Baltimore County, and the SUNDIALS contributors.
+ * Copyright (c) 2013-2025, Lawrence Livermore National Security
  * and Southern Methodist University.
+ * Copyright (c) 2002-2013, Lawrence Livermore National Security.
  * All rights reserved.
  *
  * See the top-level LICENSE and NOTICE files for details.
@@ -25,7 +28,7 @@ namespace sundials {
 namespace kokkos {
 
 // Forward declaration
-template<class ExecutionSpace, class MemorySpace>
+template<class ExecutionSpace, class MemorySpace, class MemoryTraits>
 class Vector;
 
 // Get the Kokkos vector wrapped by an N_Vector
@@ -74,8 +77,8 @@ template<class VectorType>
 N_Vector N_VClone_Kokkos(N_Vector w)
 {
   auto vec{GetVec<VectorType>(w)};
-  auto new_vec{new VectorType(*vec)};
-  return new_vec->Convert();
+  auto new_vec = VectorType::Clone(*vec, w->sunctx);
+  return new_vec->get();
 }
 
 template<class VectorType>
@@ -208,7 +211,7 @@ void N_VConst_Kokkos(sunrealtype c, N_Vector z)
 }
 
 template<class VectorType>
-booleantype N_VConstrMask_Kokkos(N_Vector c, N_Vector x, N_Vector m)
+sunbooleantype N_VConstrMask_Kokkos(N_Vector c, N_Vector x, N_Vector m)
 {
   auto cvec{GetVec<VectorType>(c)};
   auto cdata{cvec->View()};
@@ -289,7 +292,7 @@ void N_VInv_Kokkos(N_Vector x, N_Vector z)
 }
 
 template<class VectorType>
-booleantype N_VInvTest_Kokkos(N_Vector x, N_Vector z)
+sunbooleantype N_VInvTest_Kokkos(N_Vector x, N_Vector z)
 {
   auto xvec{GetVec<VectorType>(x)};
   auto xdata{xvec->View()};
@@ -470,57 +473,68 @@ sunrealtype N_VWrmsNormMask_Kokkos(N_Vector x, N_Vector w, N_Vector id)
 // =============================================================================
 
 template<class ExecutionSpace = Kokkos::DefaultExecutionSpace,
-         class MemorySpace    = typename ExecutionSpace::memory_space>
+         class MemorySpace    = typename ExecutionSpace::memory_space,
+         // Kokkos::MemoryManaged was deprecated in v4.7 and a default added
+         // TODO(DJG): Remove 0 when v4.7+ is required
+         class MemoryTraits = Kokkos::MemoryTraits<0>>
 class Vector : public sundials::impl::BaseNVector,
                public sundials::ConvertibleTo<N_Vector>
 {
 public:
-  using view_type      = Kokkos::View<sunrealtype*, MemorySpace>;
-  using size_type      = typename view_type::size_type;
+  using view_type = Kokkos::View<sunrealtype*, MemorySpace, MemoryTraits>;
+#if KOKKOS_VERSION / 10000 > 4
+  using host_view_type = typename view_type::host_mirror_type;
+#else
   using host_view_type = typename view_type::HostMirror;
-  using memory_space   = MemorySpace;
-  using exec_space     = typename MemorySpace::execution_space;
-  using range_policy   = Kokkos::RangePolicy<exec_space>;
+#endif
+  using memory_space  = MemorySpace;
+  using memory_traits = MemoryTraits;
+  using exec_space    = typename MemorySpace::execution_space;
+  using range_policy  = Kokkos::RangePolicy<exec_space>;
+  using size_type     = typename view_type::size_type;
 
   // Default constructor
   Vector() = default;
 
   Vector(size_type length, SUNContext sunctx)
-    : view_("Vector device view", length),
-      host_view_(Kokkos::create_mirror_view(view_)),
-      sundials::impl::BaseNVector(sunctx)
+    : sundials::impl::BaseNVector(sunctx),
+      view_("Vector device view", length),
+      host_view_(Kokkos::create_mirror_view(view_))
+
   {
     initNvector();
   }
 
   Vector(view_type view, SUNContext sunctx)
-    : view_(view),
-      host_view_(Kokkos::create_mirror_view(view_)),
-      sundials::impl::BaseNVector(sunctx)
+    : sundials::impl::BaseNVector(sunctx),
+      view_(view),
+      host_view_(Kokkos::create_mirror_view(view_))
+
   {
     initNvector();
   }
 
   Vector(view_type view, host_view_type host_view, SUNContext sunctx)
-    : view_(view), host_view_(host_view), sundials::impl::BaseNVector(sunctx)
+    : sundials::impl::BaseNVector(sunctx), view_(view), host_view_(host_view)
   {
     initNvector();
   }
 
   // Move constructor
   Vector(Vector&& that_vector) noexcept
-    : view_(std::move(that_vector.view_)),
-      host_view_(std::move(that_vector.host_view_)),
-      sundials::impl::BaseNVector(std::move(that_vector))
+    : sundials::impl::BaseNVector(std::move(that_vector)),
+      view_(std::move(that_vector.view_)),
+      host_view_(std::move(that_vector.host_view_))
+
   {
     initNvector();
   }
 
   // Copy constructor
   Vector(const Vector& that_vector)
-    : view_("Vector device view", that_vector.Length()),
-      host_view_(Kokkos::create_mirror_view(view_)),
-      sundials::impl::BaseNVector(that_vector)
+    : sundials::impl::BaseNVector(that_vector),
+      view_("Vector device view", that_vector.Length()),
+      host_view_(Kokkos::create_mirror_view(view_))
   {
     initNvector();
   }
@@ -560,13 +574,33 @@ public:
 
   // Override ConvertibleTo operations
 
-  operator N_Vector() override { return object_.get(); }
+  operator N_Vector() noexcept override { return object_.get(); }
 
-  operator N_Vector() const override { return object_.get(); }
+  operator N_Vector() const noexcept override { return object_.get(); }
 
-  N_Vector Convert() override { return object_.get(); }
+  N_Vector get() noexcept override { return object_.get(); }
 
-  N_Vector Convert() const override { return object_.get(); }
+  N_Vector get() const noexcept override { return object_.get(); }
+
+  // Static routines to create clones of the vector that are always managed
+  // Kokkos::MemoryManaged was deprecated in v4.7 and a default was added
+  // TODO(DJG): Remove 0 when v4.7+ is required
+
+  static Vector<exec_space, memory_space, Kokkos::MemoryTraits<0>>* Clone(
+    const Vector<exec_space, memory_space, Kokkos::MemoryTraits<0>>& that_vector,
+    SUNContext sunctx)
+  {
+    return new Vector<exec_space, memory_space,
+                      Kokkos::MemoryTraits<0>>(that_vector.Length(), sunctx);
+  }
+
+  static Vector<exec_space, memory_space, Kokkos::MemoryTraits<0>>* Clone(
+    const Vector<exec_space, memory_space, Kokkos::MemoryUnmanaged>& that_vector,
+    SUNContext sunctx)
+  {
+    return new Vector<exec_space, memory_space,
+                      Kokkos::MemoryTraits<0>>(that_vector.Length(), sunctx);
+  }
 
 private:
   view_type view_;
@@ -574,7 +608,7 @@ private:
 
   void initNvector()
   {
-    using this_type = Vector<ExecutionSpace, MemorySpace>;
+    using this_type = Vector<ExecutionSpace, MemorySpace, MemoryTraits>;
 
     this->object_->content = this;
 
@@ -589,33 +623,33 @@ private:
     this->object_->ops->nvgetvectorid = impl::N_VGetVectorID_Kokkos;
 
     /* standard vector operations */
-    this->object_->ops->nvabs          = impl::N_VAbs_Kokkos<this_type>;
-    this->object_->ops->nvaddconst     = impl::N_VAddConst_Kokkos<this_type>;
-    this->object_->ops->nvcompare      = impl::N_VCompare_Kokkos<this_type>;
-    this->object_->ops->nvconst        = impl::N_VConst_Kokkos<this_type>;
-    this->object_->ops->nvconstrmask   = impl::N_VConstrMask_Kokkos<this_type>;
-    this->object_->ops->nvdiv          = impl::N_VDiv_Kokkos<this_type>;
-    this->object_->ops->nvdotprod      = impl::N_VDotProd_Kokkos<this_type>;
-    this->object_->ops->nvinv          = impl::N_VInv_Kokkos<this_type>;
-    this->object_->ops->nvinvtest      = impl::N_VInvTest_Kokkos<this_type>;
-    this->object_->ops->nvl1norm       = impl::N_VL1Norm_Kokkos<this_type>;
-    this->object_->ops->nvlinearsum    = impl::N_VLinearSum_Kokkos<this_type>;
-    this->object_->ops->nvmaxnorm      = impl::N_VMaxNorm_Kokkos<this_type>;
-    this->object_->ops->nvmin          = impl::N_VMin_Kokkos<this_type>;
-    this->object_->ops->nvminquotient  = impl::N_VMinQuotient_Kokkos<this_type>;
-    this->object_->ops->nvprod         = impl::N_VProd_Kokkos<this_type>;
-    this->object_->ops->nvscale        = impl::N_VScale_Kokkos<this_type>;
-    this->object_->ops->nvwl2norm      = impl::N_VWL2Norm_Kokkos<this_type>;
-    this->object_->ops->nvwrmsnorm     = impl::N_VWrmsNorm_Kokkos<this_type>;
+    this->object_->ops->nvabs         = impl::N_VAbs_Kokkos<this_type>;
+    this->object_->ops->nvaddconst    = impl::N_VAddConst_Kokkos<this_type>;
+    this->object_->ops->nvcompare     = impl::N_VCompare_Kokkos<this_type>;
+    this->object_->ops->nvconst       = impl::N_VConst_Kokkos<this_type>;
+    this->object_->ops->nvconstrmask  = impl::N_VConstrMask_Kokkos<this_type>;
+    this->object_->ops->nvdiv         = impl::N_VDiv_Kokkos<this_type>;
+    this->object_->ops->nvdotprod     = impl::N_VDotProd_Kokkos<this_type>;
+    this->object_->ops->nvinv         = impl::N_VInv_Kokkos<this_type>;
+    this->object_->ops->nvinvtest     = impl::N_VInvTest_Kokkos<this_type>;
+    this->object_->ops->nvl1norm      = impl::N_VL1Norm_Kokkos<this_type>;
+    this->object_->ops->nvlinearsum   = impl::N_VLinearSum_Kokkos<this_type>;
+    this->object_->ops->nvmaxnorm     = impl::N_VMaxNorm_Kokkos<this_type>;
+    this->object_->ops->nvmin         = impl::N_VMin_Kokkos<this_type>;
+    this->object_->ops->nvminquotient = impl::N_VMinQuotient_Kokkos<this_type>;
+    this->object_->ops->nvprod        = impl::N_VProd_Kokkos<this_type>;
+    this->object_->ops->nvscale       = impl::N_VScale_Kokkos<this_type>;
+    this->object_->ops->nvwl2norm     = impl::N_VWL2Norm_Kokkos<this_type>;
+    this->object_->ops->nvwrmsnorm    = impl::N_VWrmsNorm_Kokkos<this_type>;
     this->object_->ops->nvwrmsnormmask = impl::N_VWrmsNormMask_Kokkos<this_type>;
 
     /* local reduction operations */
     this->object_->ops->nvconstrmasklocal = impl::N_VConstrMask_Kokkos<this_type>;
-    this->object_->ops->nvdotprodlocal    = impl::N_VDotProd_Kokkos<this_type>;
-    this->object_->ops->nvinvtestlocal    = impl::N_VInvTest_Kokkos<this_type>;
-    this->object_->ops->nvl1normlocal     = impl::N_VL1Norm_Kokkos<this_type>;
-    this->object_->ops->nvmaxnormlocal    = impl::N_VMaxNorm_Kokkos<this_type>;
-    this->object_->ops->nvminlocal        = impl::N_VMin_Kokkos<this_type>;
+    this->object_->ops->nvdotprodlocal = impl::N_VDotProd_Kokkos<this_type>;
+    this->object_->ops->nvinvtestlocal = impl::N_VInvTest_Kokkos<this_type>;
+    this->object_->ops->nvl1normlocal  = impl::N_VL1Norm_Kokkos<this_type>;
+    this->object_->ops->nvmaxnormlocal = impl::N_VMaxNorm_Kokkos<this_type>;
+    this->object_->ops->nvminlocal     = impl::N_VMin_Kokkos<this_type>;
     this->object_->ops->nvminquotientlocal =
       impl::N_VMinQuotient_Kokkos<this_type>;
     this->object_->ops->nvwsqrsumlocal = impl::N_VWSqrSumLocal_Kokkos<this_type>;
@@ -648,6 +682,20 @@ template<class VectorType>
 void CopyFromDevice(VectorType& v)
 {
   Kokkos::deep_copy(v.HostView(), v.View());
+}
+
+template<class VectorType, class view_type>
+view_type GetView(N_Vector v)
+{
+  auto vec{GetVec<VectorType>(v)};
+  return vec->View();
+}
+
+template<class VectorType, class host_view_type>
+host_view_type GetHostView(N_Vector v)
+{
+  auto vec{GetVec<VectorType>(v)};
+  return vec->HostView();
 }
 
 } // namespace kokkos

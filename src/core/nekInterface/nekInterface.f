@@ -583,6 +583,30 @@ c-----------------------------------------------------------------------
       return
       end
 c-----------------------------------------------------------------------
+      integer function nekf_gllnid(eg)
+
+      integer eg
+
+      include 'SIZE'
+      include 'PARALLEL'
+
+      nekf_gllnid = gllnid(eg)
+
+      return
+      end
+c-----------------------------------------------------------------------
+      integer function nekf_gllel(eg)
+
+      integer eg
+
+      include 'SIZE'
+      include 'PARALLEL'
+
+      nekf_gllel = gllel(eg)
+
+      return
+      end
+c-----------------------------------------------------------------------
       integer function nekf_lglel(e)
 
       integer e
@@ -1268,9 +1292,6 @@ c-----------------------------------------------------------------------
 
       character*132  fname
       common /nekf_rfname/ fname 
-
-      lbrst = lelt
-      ifcrrs = .false.
 
       if (ifpi.eq.1) then 
         call gfldr(fname)

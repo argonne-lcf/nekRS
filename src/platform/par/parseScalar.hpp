@@ -131,6 +131,13 @@ void parseScalarSections(const int rank, setupAide &options, inipp::Ini *ini)
         auto newKey = keyWord;
         newKey.erase(delPos, defaultSettingStr.size());
         options.setArgs("SCALAR" + sid + " " + newKey, value);
+
+        auto it = std::find_if(
+            scalarMap.begin(),
+            scalarMap.end(),
+            [&](const auto& p){ return p.second == is; }
+        );
+        options.setArgs("SCALAR" + sid + " NAME", upperCase(it->first));
       }
     }
   }
@@ -146,8 +153,7 @@ void parseScalarSections(const int rank, setupAide &options, inipp::Ini *ini)
     ini->extract("scalar", "boundarytypemap", s_bcMapDefault);
     for (int is = 0; is < nscal; ++is) {
       std::string sid = scalarDigitStr(is);
-      std::string dummy;
-      if (!ini->extract("scalar" + sid, "boundarytypemap", dummy)) {
+      if (options.getArgs("SCALAR" + sid + " BOUNDARY TYPE MAP").empty()) {
         if (s_bcMapDefault.size() > 0) {
           options.setArgs("SCALAR" + sid + " BOUNDARY TYPE MAP", s_bcMapDefault);
         }

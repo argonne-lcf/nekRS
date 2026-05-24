@@ -268,9 +268,6 @@ void userq(double time)
 
 void UDF_LoadKernels(deviceKernelProperties& kernelInfo)
 {
-  int maxRank = platform->comm.mpiRank();
-  MPI_Allreduce(MPI_IN_PLACE, &maxRank, 1, MPI_INT, MPI_MAX, platform->comm.mpiComm());
-
   setupAide &options = platform->options;
 
   dfloat mue, rho;
@@ -321,7 +318,7 @@ void particleRHS(lpm_t *lpm, double time, const deviceMemory<dfloat>& o_y, void 
   // evaluate fluid fields at particle positions
   lpm->interpolate();
 
-  auto o_Uinterp = lpm->getInterpField("fluid_velocity");
+  auto o_Uinterp = lpm->interpField("fluid_velocity");
 
   if (lpm->numParticles()) {
     fRHS(lpm->numParticles(), offset, o_y, o_Uinterp, o_ydot);
@@ -407,7 +404,7 @@ void UDF_Setup()
     particles->initialize(np, t0, y0);
 
     deviceMemory<dfloat> o_pid(pid0);
-    particles->setProp("gid", o_pid);
+    particles->prop("gid").copyFrom(o_pid);
   }
 
   mesh_t *mesh = nrs->meshV;
@@ -434,7 +431,7 @@ void overwriteParticleSolution(nrs_t *nrs, double time)
   std::vector<dfloat> xp0_g(particles->numParticles()); // based on current rank
   std::vector<dfloat> yp0_g(particles->numParticles());
   std::vector<dfloat> zp0_g(particles->numParticles());
-  auto o_gidFloat = particles->getProp("gid");
+  auto o_gidFloat = particles->prop("gid");
   std::vector<dfloat> gidFloat(o_gidFloat.length());
   o_gidFloat.copyTo(gidFloat.data());
 
@@ -464,9 +461,9 @@ void overwriteParticleSolution(nrs_t *nrs, double time)
     auto o_ycoord = o_y.slice(1 * xp0_g.size());
     auto o_zcoord = o_y.slice(2 * xp0_g.size());
 
-    auto o_xp = particles->getDOF("x");
-    auto o_yp = particles->getDOF("y");
-    auto o_zp = particles->getDOF("z");
+    auto o_xp = particles->dof("x");
+    auto o_yp = particles->dof("y");
+    auto o_zp = particles->dof("z");
 
     o_xp.copyFrom(o_xcoord, xp0_g.size());
     o_yp.copyFrom(o_ycoord, yp0_g.size());
@@ -478,6 +475,10 @@ void UDF_ExecuteStep(double time, int tstep)
 {
   auto& mesh = nrs->meshV;
   auto& scalar = nrs->scalar;
+
+  if (tstep <= 1) {
+    platform->flopCounter->clear(); 
+  }
 
 #if 0
   exactUVWP(mesh->Nlocal, time, mesh->o_x, mesh->o_y, mesh->o_z, nrs->fieldOffset, nrs->fluid->o_P, nrs->fluid->o_solution());

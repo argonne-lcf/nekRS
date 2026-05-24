@@ -8,6 +8,19 @@
 #include "adios2/common/ADIOSConfig.h"
 #include <atl.h>
 #include <evpath.h>
+#ifndef _MSC_VER
+#include <netinet/in.h>
+#include <pthread.h>
+#include <sys/socket.h>
+#include <sys/time.h>
+
+#include <arpa/inet.h>
+#include <netdb.h>
+#include <netinet/in.h>
+#include <unistd.h>
+#else
+#include "../win_interface.h"
+#endif
 
 #include "sst.h"
 
@@ -443,7 +456,7 @@ static FMStructDescRec MetaDataPlusDPInfoStructs[] = {
 
 static FMField TimestepMetadataList[] = {
     {"RS_Stream", "integer", sizeof(void *), FMOffset(struct _TimestepMetadataMsg *, RS_Stream)},
-    {"timestep", "integer", sizeof(int), FMOffset(struct _TimestepMetadataMsg *, Timestep)},
+    {"timestep", "integer", sizeof(ssize_t), FMOffset(struct _TimestepMetadataMsg *, Timestep)},
     {"cohort_size", "integer", sizeof(int), FMOffset(struct _TimestepMetadataMsg *, CohortSize)},
     {"preload_mode", "integer", sizeof(int), FMOffset(struct _TimestepMetadataMsg *, PreloadMode)},
     {"formats", "*FFSFormatBlock", sizeof(struct FFSFormatBlock),
@@ -470,7 +483,7 @@ static FMField TimestepMetadataDistributionList[] = {
     {NULL, NULL, 0, 0}};
 
 static FMField ReleaseRecList[] = {
-    {"Timestep", "integer", sizeof(long), FMOffset(struct _ReleaseRec *, Timestep)},
+    {"Timestep", "integer", sizeof(ssize_t), FMOffset(struct _ReleaseRec *, Timestep)},
     {"Reader", "integer", sizeof(void *), FMOffset(struct _ReleaseRec *, Reader)},
     {NULL, NULL, 0, 0}};
 
@@ -512,7 +525,7 @@ static FMStructDescRec ReturnMetadataInfoStructs[] = {
 
 static FMField ReleaseTimestepList[] = {
     {"WSR_Stream", "integer", sizeof(void *), FMOffset(struct _ReleaseTimestepMsg *, WSR_Stream)},
-    {"Timestep", "integer", sizeof(int), FMOffset(struct _ReleaseTimestepMsg *, Timestep)},
+    {"Timestep", "integer", sizeof(ssize_t), FMOffset(struct _ReleaseTimestepMsg *, Timestep)},
     {NULL, NULL, 0, 0}};
 
 static FMStructDescRec ReleaseTimestepStructs[] = {
@@ -522,7 +535,8 @@ static FMStructDescRec ReleaseTimestepStructs[] = {
 static FMField LockReaderDefinitionsList[] = {
     {"WSR_Stream", "integer", sizeof(void *),
      FMOffset(struct _LockReaderDefinitionsMsg *, WSR_Stream)},
-    {"Timestep", "integer", sizeof(int), FMOffset(struct _LockReaderDefinitionsMsg *, Timestep)},
+    {"Timestep", "integer", sizeof(ssize_t),
+     FMOffset(struct _LockReaderDefinitionsMsg *, Timestep)},
     {NULL, NULL, 0, 0}};
 
 static FMStructDescRec LockReaderDefinitionsStructs[] = {
@@ -532,7 +546,7 @@ static FMStructDescRec LockReaderDefinitionsStructs[] = {
 
 static FMField CommPatternLockedList[] = {
     {"RS_Stream", "integer", sizeof(void *), FMOffset(struct _CommPatternLockedMsg *, RS_Stream)},
-    {"Timestep", "integer", sizeof(int), FMOffset(struct _CommPatternLockedMsg *, Timestep)},
+    {"Timestep", "integer", sizeof(ssize_t), FMOffset(struct _CommPatternLockedMsg *, Timestep)},
     {NULL, NULL, 0, 0}};
 
 static FMStructDescRec CommPatternLockedStructs[] = {
@@ -567,7 +581,8 @@ static FMStructDescRec ReaderRequestStepStructs[] = {
 
 static FMField WriterCloseList[] = {
     {"RS_Stream", "integer", sizeof(void *), FMOffset(struct _WriterCloseMsg *, RS_Stream)},
-    {"FinalTimestep", "integer", sizeof(int), FMOffset(struct _WriterCloseMsg *, FinalTimestep)},
+    {"FinalTimestep", "integer", sizeof(ssize_t),
+     FMOffset(struct _WriterCloseMsg *, FinalTimestep)},
     {NULL, NULL, 0, 0}};
 
 static FMStructDescRec WriterCloseStructs[] = {
@@ -729,7 +744,7 @@ void **CP_consolidateDataToRankZero(SstStream Stream, void *LocalInfo, FFSTypeHa
      * can gather the data
      */
 
-    SMPI_Gatherv(Buffer, DataSize, SMPI_CHAR, RecvBuffer, RecvCounts, Displs, SMPI_CHAR, 0,
+    SMPI_Gatherv(Buffer, (int)DataSize, SMPI_CHAR, RecvBuffer, RecvCounts, Displs, SMPI_CHAR, 0,
                  Stream->mpiComm);
     free_FFSBuffer(Buf);
 
@@ -836,7 +851,7 @@ void **CP_consolidateDataToAll(SstStream Stream, void *LocalInfo, FFSTypeHandle 
      * can gather the data
      */
 
-    SMPI_Allgatherv(Buffer, DataSize, SMPI_CHAR, RecvBuffer, RecvCounts, Displs, SMPI_CHAR,
+    SMPI_Allgatherv(Buffer, (int)DataSize, SMPI_CHAR, RecvBuffer, RecvCounts, Displs, SMPI_CHAR,
                     Stream->mpiComm);
     free_FFSBuffer(Buf);
 
@@ -856,7 +871,11 @@ void **CP_consolidateDataToAll(SstStream Stream, void *LocalInfo, FFSTypeHandle 
 
 atom_t CM_TRANSPORT_ATOM = 0;
 static atom_t IP_INTERFACE_ATOM = 0;
+atom_t IP_PORT_ATOM = 0;
+atom_t IP_ADDR_ATOM = 0;
+atom_t IP_HOST_ATOM = 0;
 static atom_t CM_ENET_CONN_TIMEOUT = -1;
+static atom_t SST_GROUP_ID_ATOM = -1;
 
 static void initAtomList()
 {
@@ -865,7 +884,12 @@ static void initAtomList()
 
     CM_TRANSPORT_ATOM = attr_atom_from_string("CM_TRANSPORT");
     IP_INTERFACE_ATOM = attr_atom_from_string("IP_INTERFACE");
+    IP_PORT_ATOM = attr_atom_from_string("IP_PORT");
+    IP_ADDR_ATOM = attr_atom_from_string("IP_ADDR");
+    IP_HOST_ATOM = attr_atom_from_string("IP_HOST");
+    SST_GROUP_ID_ATOM = attr_atom_from_string("SST_GROUP_ID");
     CM_ENET_CONN_TIMEOUT = attr_atom_from_string("CM_ENET_CONN_TIMEOUT");
+    SST_GROUP_ID_ATOM = attr_atom_from_string("SST_GROUP_ID");
 }
 
 static void AddCustomStruct(CP_StructList *List, FMStructDescList Struct)
@@ -1025,7 +1049,7 @@ static void ReadableSizeString(size_t SizeInBytes, char *Output, size_t size)
     }
     else
     {
-        snprintf(Output, size, "%ld %s", SizeInBytes, byteUnits[i]);
+        snprintf(Output, size, "%zd %s", SizeInBytes, byteUnits[i]);
     }
 };
 
@@ -1108,6 +1132,12 @@ extern void SstStreamDestroy(SstStream Stream)
         Stream->Timesteps = Next;
     }
 
+    while (Stream->StepRequestQueue)
+    {
+        StepRequest Request = Stream->StepRequestQueue;
+        Stream->StepRequestQueue = Request->Next;
+        free(Request);
+    }
     if (Stream->DP_Stream)
     {
         STREAM_MUTEX_UNLOCK(Stream);
@@ -1290,6 +1320,10 @@ extern char *CP_GetContactString(SstStream Stream, attr_list DPAttrs)
     if (strcmp(Stream->ConfigParams->ControlTransport, "enet") == 0)
     {
         set_int_attr(ContactList, CM_ENET_CONN_TIMEOUT, 60000); /* 60 seconds */
+    }
+    if (Stream->ConfigParams->RemoteGroup)
+    {
+        set_string_attr(ContactList, SST_GROUP_ID_ATOM, strdup(Stream->ConfigParams->RemoteGroup));
     }
     if (DPAttrs)
     {
@@ -1548,9 +1582,13 @@ static void DP_verbose(SstStream s, int Level, char *Format, ...)
         {
             Role = "Reader";
         }
+        // on TraceDupVerbose, we don't want that for higher ranks because it's too much
+        if ((Level == TraceDupVerbose) && (s->Rank > 2))
+            return;
         switch (s->CPVerbosityLevel)
         {
         case TraceVerbose:
+        case TraceDupVerbose:
         case PerRankVerbose:
         case CriticalVerbose:
             fprintf(stderr, "DP %s %d (%p): ", Role, s->Rank, s);
@@ -1619,12 +1657,151 @@ static SMPI_Comm CP_getMPIComm(SstStream Stream) { return Stream->mpiComm; }
 
 extern void WriterConnCloseHandler(CManager cm, CMConnection closed_conn, void *client_data);
 extern void ReaderConnCloseHandler(CManager cm, CMConnection ClosedConn, void *client_data);
+CMConnection Tunneling_get_conn(CManager cm, attr_list attrs)
+{
+    char *group_id = NULL;
+    if (get_string_attr(attrs, SST_GROUP_ID_ATOM, &group_id))
+    {
+        attr_list conn_attrs;
+        // do the tunneling
+        char request[1024] = {'\0'};
+        const char *format_string = "/connect_port?group=%s&service=%s&dhost=%s&dport=%d";
+        int DestinationIP;
+        int DestinationPort;
+        char *DestinationHostStr;
+        if (!get_int_attr(attrs, IP_PORT_ATOM, &DestinationPort))
+        {
+            fprintf(stderr, "No IP_PORT atom\n");
+            return NULL;
+        }
+        if (!get_int_attr(attrs, IP_ADDR_ATOM, &DestinationIP))
+        {
+            DestinationIP = 0;
+        }
+        if (!get_string_attr(attrs, IP_HOST_ATOM, &DestinationHostStr))
+        {
+            fprintf(stderr, "No IP_HOST");
+            DestinationHostStr = NULL;
+        }
+        char IPstr[INET_ADDRSTRLEN];
+        if ((DestinationHostStr == NULL) && (DestinationIP == 0))
+        {
+            fprintf(stderr, "NO IP or Hostname for tunnel\n");
+            return NULL;
+        }
+        else if (DestinationHostStr == NULL)
+        {
+            inet_ntop(AF_INET, &DestinationIP, IPstr, INET_ADDRSTRLEN);
+            DestinationHostStr = &IPstr[0];
+        }
+        int request_len = snprintf(request, sizeof(request), format_string, group_id, "service_5",
+                                   DestinationHostStr, DestinationPort);
+        union
+        {
+            struct sockaddr s;
+            struct sockaddr_in s_I4;
+        } sock_addr;
+
+        int server_addr = INADDR_LOOPBACK;
+        char *server_hostname = getenv("TUNNEL_SERVER_HOST");
+        if (server_hostname)
+        {
+            struct hostent *host_addr;
+            host_addr = gethostbyname(server_hostname);
+            if (host_addr == NULL)
+            {
+                int _addr;
+                _addr = inet_addr(server_hostname);
+                if (_addr == -1)
+                {
+                    /*
+                     *  not translatable as a hostname or
+                     * as a dot-style string IP address
+                     */
+                    return 0;
+                }
+                if (sizeof(int) == sizeof(struct in_addr))
+                    server_addr = (int)_addr;
+                else
+                {
+                    printf("Bad struct size\n");
+                    return NULL;
+                }
+            }
+            else
+            {
+                int tmp;
+                memcpy(&tmp, host_addr->h_addr, host_addr->h_length);
+                server_addr = ntohl(tmp);
+            }
+        }
+        sock_addr.s_I4.sin_family = AF_INET;
+        sock_addr.s_I4.sin_addr.s_addr = htonl(server_addr);
+        sock_addr.s_I4.sin_port = htons(30000);
+
+        int sock = socket(AF_INET, SOCK_STREAM, 0);
+        /* Actually connect. */
+        if (connect(sock, (struct sockaddr *)&sock_addr.s_I4, sizeof(sock_addr)) == -1)
+        {
+            printf("connect Error\n");
+            return NULL;
+        }
+
+        /* Send request. */
+        printf("Request is \"%s\"\n", request);
+        int nbytes_total = 0;
+        while (nbytes_total < request_len)
+        {
+            int nbytes_last = write(sock, request + nbytes_total, request_len - nbytes_total);
+            if (nbytes_last == -1)
+                printf("Error\n");
+            nbytes_total += nbytes_last;
+        }
+
+        /* Read the response. */
+        size_t bytes_recd = 0;
+        char recv_buffer[2048];
+        while (1)
+        {
+            size_t remaining = sizeof(recv_buffer) - bytes_recd;
+            int read_len = remaining;
+            nbytes_total = read(sock, recv_buffer + bytes_recd, read_len);
+            if (nbytes_total == 0)
+            {
+                break;
+            }
+            if (nbytes_total == -1)
+            {
+                printf("Error\n");
+            }
+            bytes_recd += nbytes_total;
+        }
+
+        close(sock);
+        printf("We got %s from the tunnel server\n", recv_buffer);
+        char msg[256];
+        int forward_port;
+        sscanf(recv_buffer, "port:%d,msg:%s", &forward_port, &msg[0]);
+        printf("Forward port is %d\n", forward_port);
+        conn_attrs = create_attr_list();
+        add_attr(conn_attrs, IP_PORT_ATOM, Attr_Int4, (attr_value)(intptr_t)forward_port);
+
+        add_attr(conn_attrs, IP_ADDR_ATOM, Attr_Int4, (attr_value)server_addr);
+
+        return CMget_conn(cm, conn_attrs);
+    }
+    else
+    {
+        return CMget_conn(cm, attrs);
+    }
+}
+
 static int CP_sendToPeer(SstStream s, CP_PeerCohort Cohort, int Rank, CMFormat Format, void *Data)
 {
     CP_PeerConnection *Peers = (CP_PeerConnection *)Cohort;
     if (Peers[Rank].CMconn == NULL)
     {
-        Peers[Rank].CMconn = CMget_conn(s->CPInfo->SharedCM->cm, Peers[Rank].ContactList);
+        Peers[Rank].CMconn = Tunneling_get_conn(s->CPInfo->SharedCM->cm, Peers[Rank].ContactList);
         if (!Peers[Rank].CMconn)
         {
             CP_error(s, "Connection failed in CP_sendToPeer! Contact list was:\n");

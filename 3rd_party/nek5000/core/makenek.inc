@@ -88,6 +88,7 @@ function config_nek() {
 : ${PROFILING:=1}
 : ${VISIT:=0}
 : ${PPLIST:=""}
+: ${NEK_DEPS_LOCAL_SRC:=0}
 
 # first do some checks ...
 if [ "$1" == "-h" ] || [ "$1" == "-help" ] || [ "$PPLIST" == "?" ]; then
@@ -133,6 +134,7 @@ SOURCE_ROOT_CVODE="$NEK_SOURCE_ROOT/3rd_party/cvode"
 export SOURCE_ROOT_CVODE
 SOURCE_ROOT_HYPRE="$NEK_SOURCE_ROOT/3rd_party/hypre"
 export SOURCE_ROOT_HYPRE
+export NEK_DEPS_LOCAL_SRC
 
 NODEP=1
 if [ "$1" == "-build-dep" ]; then
@@ -298,12 +300,22 @@ cat > _test.f << _ACEOF
       program test
       end
 _ACEOF
+
 $FCcomp -Wl,--allow-multiple-definition -o _test _test.f >/dev/null 2>&1 || true
-\rm _test.f 2>/dev/null
 if [ -f _test ]; then
   LDFLAGS+=" -Wl,--allow-multiple-definition"
   \rm _test 2>/dev/null
 fi
+
+if [ "$(uname)" = "Darwin" ]; then
+  $FCcomp -Wl,-ld_classic -o _test _test.f >/dev/null 2>&1 || true
+  if [ -f _test ]; then
+    LDFLAGS+=" -Wl,-ld_classic"
+    \rm _test 2>/dev/null
+  fi
+fi
+
+\rm _test.f 2>/dev/null
 
 # set preprocessor symbols
 if [ $MPI -eq 0 ]; then
@@ -325,7 +337,6 @@ PPLIST="${PPLIST}"
 
 # add user defined preprocessor symbols
 MPIIO=1
-DPROCMAP=0
 PARRSB=0
 CVODE=0
 HYPRE=0
@@ -336,9 +347,6 @@ for i in $PPLIST
 do
    if [ "$i" == "NOMPIIO" ]; then
      MPIIO=0
-   fi
-   if [ "$i" == "DPROCMAP" ]; then
-     DPROCMAP=1
    fi
    if [ "$i" == "PARRSB" ]; then
      PARRSB=1
@@ -450,7 +458,6 @@ sed -e "s:^FC[ ]*=.*:FC=$FC:" \
 -e "s/^MPI[ ]*=.*/MPI=$MPI/" \
 -e "s/^CVODE[ ]*=.*/CVODE=$CVODE/" \
 -e "s:^GSLIB_IFLAGS[ ]*=.*:GSLIB_IFLAGS\:=${GSLIB_IFLAGS}:" \
--e "s/^DPROCMAP[ ]*=.*/DPROCMAP=${DPROCMAP}/" \
 -e "s/^VISIT[ ]*=.*/VISIT=${VISIT}/" \
 -e "s:^USR[ ]*=.*:USR=$USR:" \
 -e "s:^USR_LFLAGS[ ]*=.*:USR_LFLAGS=$USR_LFLAGS:" \

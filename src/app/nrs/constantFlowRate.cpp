@@ -4,6 +4,7 @@
 #include "udf.hpp"
 #include "alignment.hpp"
 #include "bdryBase.hpp"
+#include "constantFlowRate.hpp"
 
 namespace
 {
@@ -14,6 +15,9 @@ dfloat rescaleFactor = 0;
 occa::memory o_Uc;
 occa::memory o_Pc;
 occa::memory o_prevProp;
+
+occa::memory o_Urhs;
+occa::memory o_Prhs;
 
 inline dfloat distance(dfloat x1, dfloat x2, dfloat y1, dfloat y2, dfloat z1, dfloat z2)
 {
@@ -46,14 +50,48 @@ int fromBID;
 int toBID;
 dfloat flowDirection[3];
 
-bool checkIfRecomputeDirection(nrs_t *nrs, int tstep)
+bool checkIfRecomputeDirection(int tstep)
 {
   return platform->options.compareArgs("MOVING MESH", "TRUE") || tstep < 2;
 }
 
+auto getSolverData(elliptic *solver) 
+{
+  if (solver) {
+    std::tuple<int, dfloat, dfloat, dfloat> val(solver->Niter(),
+                                                solver->initialResidual(),
+                                                solver->initialGuessResidual(),
+                                                solver->finalResidual());
+    return val;
+  } else {
+    std::tuple<int, dfloat, dfloat, dfloat> val(0, 0, 0, 0);
+    return val;
+  }
+}
+
+auto setSolverData(elliptic *solver, int Niter, dfloat res00Norm, dfloat res0Norm, dfloat resNorm) 
+{
+  solver->Niter(solver->Niter() + Niter);
+  solver->initialResidual(res00Norm);
+  solver->initialGuessResidual(res0Norm);
+  solver->finalResidual(resNorm);
+}
+
 } // namespace
 
-void nrs_t::computeHomogenousStokesSolution(double time)
+
+flowRate_t::flowRate_t(fluidSolver_t *fluidRef)
+        : fluid(fluidRef)
+{
+  auto& mesh = fluid->mesh;
+  flops = 0.0;
+
+  o_Uc = platform->device.malloc<dfloat>(mesh->dim * fluid->fieldOffset);
+  o_prevProp = platform->device.malloc<dfloat>(fluid->o_prop.size());
+  o_prevProp.copyFrom(fluid->o_prop);
+}
+
+void flowRate_t::rhsPressure(double time, int iter)
 {
   auto &mesh = fluid->mesh;
   const auto fieldOffset = fluid->fieldOffset;
@@ -63,118 +101,100 @@ void nrs_t::computeHomogenousStokesSolution(double time)
   auto o_lambda0 = platform->deviceMemoryPool.reserve<dfloat>(mesh->Nlocal);
   platform->linAlg->adyz(mesh->Nlocal, 1.0, fluid->o_rho, o_lambda0);
 
-  auto o_Prhs = [&]() {
-    platform->timer.tic(fluid->pressureName + " rhs");
+  // t_flow \dot grad(1/rho)
+  platform->timer.tic(fluid->pressureName + " rhs");
+  auto o_gradPCoeff = platform->deviceMemoryPool.reserve<dfloat>(mesh->dim * fieldOffset);
+  launchKernel("core-wGradientVolumeHex3D",
+               mesh->Nelements,
+               mesh->o_vgeo,
+               mesh->o_D,
+               fieldOffset,
+               o_lambda0,
+               o_gradPCoeff);
 
-    auto o_gradPCoeff = platform->deviceMemoryPool.reserve<dfloat>(mesh->dim * fieldOffset);
-    launchKernel("core-wGradientVolumeHex3D",
-                 mesh->Nelements,
-                 mesh->o_vgeo,
-                 mesh->o_D,
-                 fieldOffset,
-                 o_lambda0,
-                 o_gradPCoeff);
+  double flopsGrad = 6 * mesh->Np * mesh->Nq + 18 * mesh->Np;
+  flopsGrad *= static_cast<double>(mesh->Nelements);
+  flops += flopsGrad;
 
-    double flopsGrad = 6 * mesh->Np * mesh->Nq + 18 * mesh->Np;
-    flopsGrad *= static_cast<double>(mesh->Nelements);
-    flops += flopsGrad;
-
-    auto o_rhs = platform->deviceMemoryPool.reserve<dfloat>(fieldOffset);
-    launchKernel("nrs-computeFieldDotNormal",
-                 mesh->Nlocal,
-                 fieldOffset,
-                 flowDirection[0],
-                 flowDirection[1],
-                 flowDirection[2],
-                 o_gradPCoeff,
-                 o_rhs);
-
-    flops += 5 * mesh->Nlocal;
-    platform->timer.toc(fluid->pressureName + " rhs");
-    return o_rhs;
-  }();
-
-  platform->timer.tic(fluid->pressureName + "Solve");
-  fluid->ellipticSolverP->solve(o_lambda0, o_NULL, o_Prhs, o_Pc);
-  platform->timer.toc(fluid->pressureName + "Solve");
-  o_Prhs.free();
-  o_lambda0.free();
-
-  auto o_RhsVel = [&]() {
-    platform->timer.tic(fluid->velocityName + " rhs");
-
-    occa::memory o_rhs = platform->deviceMemoryPool.reserve<dfloat>(mesh->dim * fieldOffset);
-
-    launchKernel("core-gradientVolumeHex3D",
-                 mesh->Nelements,
-                 mesh->o_vgeo,
-                 mesh->o_D,
-                 fieldOffset,
-                 o_Pc,
-                 o_rhs);
-
-    double flopsGrad = 6 * mesh->Np * mesh->Nq + 18 * mesh->Np;
-    flopsGrad *= static_cast<double>(mesh->Nelements);
-    flops += flopsGrad;
-
-    platform->linAlg->scaleMany(mesh->Nlocal, mesh->dim, fieldOffset, -1.0, o_rhs);
-
-    occa::memory o_JwF = platform->deviceMemoryPool.reserve<dfloat>(mesh->dim * fieldOffset);
-    o_JwF.copyFrom(mesh->o_LMM, mesh->Nlocal, 0 * fieldOffset, 0);
-    o_JwF.copyFrom(mesh->o_LMM, mesh->Nlocal, 1 * fieldOffset, 0);
-    o_JwF.copyFrom(mesh->o_LMM, mesh->Nlocal, 2 * fieldOffset, 0);
-
-    for (int dim = 0; dim < mesh->dim; ++dim) {
-      const dlong offset = dim * fieldOffset;
-      const dfloat n_dim = flowDirection[dim];
-      platform->linAlg->axpby(mesh->Nlocal, n_dim, o_JwF, 1.0, o_rhs, offset, offset);
-    }
-    platform->timer.toc(fluid->velocityName + " rhs");
-    return o_rhs;
-  }();
-
-  platform->timer.tic(fluid->velocityName + "Solve");
-
-  o_lambda0 = fluid->o_mue;
-  auto o_lambda1 = platform->deviceMemoryPool.reserve<dfloat>(mesh->Nlocal);
-  platform->linAlg->axpby(mesh->Nlocal, g0 / dt[0], fluid->o_rho, 0.0, o_lambda1);
-
-  if (fluid->ellipticSolver.size() == 1) {
-    fluid->ellipticSolver[0]->solve(o_lambda0, o_lambda1, o_RhsVel, o_Uc);
-  } else {
-    occa::memory o_Ucx = o_Uc + 0 * fieldOffset;
-    occa::memory o_Ucy = o_Uc + 1 * fieldOffset;
-    occa::memory o_Ucz = o_Uc + 2 * fieldOffset;
-    fluid->ellipticSolver[0]->solve(o_lambda0, o_lambda1, o_RhsVel.slice(0 * fieldOffset), o_Ucx);
-    fluid->ellipticSolver[1]->solve(o_lambda0, o_lambda1, o_RhsVel.slice(1 * fieldOffset), o_Ucy);
-    fluid->ellipticSolver[2]->solve(o_lambda0, o_lambda1, o_RhsVel.slice(2 * fieldOffset), o_Ucz);
+  if (!o_Prhs.isInitialized()) {
+    o_Prhs = platform->deviceMemoryPool.reserve<dfloat>(mesh->Nlocal);
   }
-  platform->timer.toc(fluid->velocityName + "Solve");
 
+  launchKernel("nrs-computeFieldDotNormal",
+               mesh->Nlocal,
+               fieldOffset,
+               flowDirection[0],
+               flowDirection[1],
+               flowDirection[2],
+               o_gradPCoeff,
+               o_Prhs);
+
+  flops += 5 * mesh->Nlocal;
   platform->flopCounter->add("ConstantFlowRate::compute", flops);
+
+  platform->timer.toc(fluid->pressureName + " rhs");
 }
 
-void nrs_t::computeBaseFlowRate(double time, int tstep)
+void flowRate_t::solvePressure(double time, int iter)
 {
-  if (platform->verbose() && platform->comm.mpiRank() == 0) {
-    printf("computing base flow rate (dir: %g, %g, %g)\n",
-           flowDirection[0],
-           flowDirection[1],
-           flowDirection[2]);
+  auto &mesh = fluid->mesh;
+  auto &pSolver = fluid->ellipticSolverP;
+  const auto [NiterP, res00NormP, res0NormP, resNormP] = getSolverData(pSolver);
+
+  if (!o_Pc.isInitialized()) {
+    o_Pc = platform->deviceMemoryPool.reserve<dfloat>(mesh->Nlocal);
+  }
+  platform->linAlg->fill(o_Pc.size(), 0, o_Pc);
+
+  fluid->solvePressure(time, iter, o_Prhs, o_Pc);
+  o_Prhs.free();
+
+  setSolverData(pSolver, NiterP, res00NormP, res0NormP, resNormP);
+}
+
+void flowRate_t::rhsVelocity(double time, int iter)
+{
+  auto &mesh = fluid->mesh;
+  const auto fieldOffset = fluid->fieldOffset;
+
+  double flops = 0.0;
+
+  platform->timer.tic(fluid->velocityName + " rhs");
+
+  if (!o_Urhs.isInitialized()){
+    o_Urhs = platform->deviceMemoryPool.reserve<dfloat>(mesh->dim * fieldOffset);
   }
 
-  auto getSolverData = [](elliptic *solver) {
-    if (solver) {
-      std::tuple<int, dfloat, dfloat, dfloat> val(solver->Niter(),
-                                                  solver->initialResidual(),
-                                                  solver->initialGuessResidual(),
-                                                  solver->finalResidual());
-      return val;
-    } else {
-      std::tuple<int, dfloat, dfloat, dfloat> val(0, 0, 0, 0);
-      return val;
-    }
-  };
+  launchKernel("core-gradientVolumeHex3D",
+               mesh->Nelements,
+               mesh->o_vgeo,
+               mesh->o_D,
+               fieldOffset,
+               o_Pc,
+               o_Urhs);
+
+  double flopsGrad = 6 * mesh->Np * mesh->Nq + 18 * mesh->Np;
+  flopsGrad *= static_cast<double>(mesh->Nelements);
+  flops += flopsGrad;
+
+  platform->linAlg->scaleMany(mesh->Nlocal, mesh->dim, fieldOffset, -1.0, o_Urhs);
+
+  auto o_JwF = platform->deviceMemoryPool.reserve<dfloat>(mesh->dim * fieldOffset);
+  o_JwF.copyFrom(mesh->o_LMM, mesh->Nlocal, 0 * fieldOffset, 0);
+  o_JwF.copyFrom(mesh->o_LMM, mesh->Nlocal, 1 * fieldOffset, 0);
+  o_JwF.copyFrom(mesh->o_LMM, mesh->Nlocal, 2 * fieldOffset, 0);
+
+  for (int dim = 0; dim < mesh->dim; ++dim) {
+    const dlong offset = dim * fieldOffset;
+    const dfloat n_dim = flowDirection[dim];
+    platform->linAlg->axpby(mesh->Nlocal, n_dim, o_JwF, 1.0, o_Urhs, offset, offset);
+  }
+  platform->timer.toc(fluid->velocityName + " rhs");
+}
+
+void flowRate_t::solveVelocity(double time, int iter)
+{
+  auto &mesh = fluid->mesh;
 
   auto &uvwSolver = fluid->ellipticSolver.at(0);
   const auto [NiterUVW, res00NormUVW, res0NormUVW, resNormUVW] = getSolverData(uvwSolver);
@@ -186,31 +206,20 @@ void nrs_t::computeBaseFlowRate(double time, int tstep)
   const auto [NiterV, res00NormV, res0NormV, resNormV] = getSolverData(vSolver);
   const auto [NiterW, res00NormW, res0NormW, resNormW] = getSolverData(wSolver);
 
-  auto &pSolver = fluid->ellipticSolverP;
-  const auto [NiterP, res00NormP, res0NormP, resNormP] = getSolverData(pSolver);
+  fluid->solveVelocity(time, 2, o_Urhs, o_Uc);
+  o_Urhs.free(); 
 
-  computeHomogenousStokesSolution(time);
-
-  // restore norms + update iteration count
-  auto setSolverData = [](elliptic *solver, int Niter, dfloat res00Norm, dfloat res0Norm, dfloat resNorm) {
-    solver->Niter(solver->Niter() + Niter);
-    solver->initialResidual(res00Norm);
-    solver->initialGuessResidual(res0Norm);
-    solver->finalResidual(resNorm);
-  };
-
-  if (fluid->ellipticSolver.size() == 1) {
+  platform->flopCounter->add("ConstantFlowRate::compute", flops);
+  if (fluid->ellipticSolver.at(0)->Nfields() == mesh->dim) {
     setSolverData(uvwSolver, NiterUVW, res00NormUVW, res0NormUVW, resNormUVW);
   } else {
     setSolverData(uSolver, NiterU, res00NormU, res0NormU, resNormU);
     setSolverData(vSolver, NiterV, res00NormV, res0NormV, resNormV);
     setSolverData(wSolver, NiterW, res00NormW, res0NormW, resNormW);
   }
-  setSolverData(pSolver, NiterP, res00NormP, res0NormP, resNormP);
 
-  auto &mesh = fluid->mesh;
-
-  occa::memory o_baseFlowRate = platform->deviceMemoryPool.reserve<dfloat>(fluid->fieldOffset);
+  // Jw * n \dot Uc
+  auto o_baseFlowRate = platform->deviceMemoryPool.reserve<dfloat>(fluid->fieldOffset);
   launchKernel("nrs-computeFieldDotNormal",
                mesh->Nlocal,
                fluid->fieldOffset,
@@ -219,15 +228,15 @@ void nrs_t::computeBaseFlowRate(double time, int tstep)
                flowDirection[2],
                o_Uc,
                o_baseFlowRate);
-  flops += 5 * mesh->Nlocal;
-
   platform->linAlg->axmy(mesh->Nlocal, 1.0, mesh->o_LMM, o_baseFlowRate);
+  flops += 4 * mesh->Nlocal;
+
   baseFlowRate = platform->linAlg->sum(mesh->Nlocal, o_baseFlowRate, platform->comm.mpiComm()) / lengthScale;
 }
 
-void nrs_t::flowRatePrintInfo(int tstep, bool verboseInfo)
+void flowRate_t::printInfo(int tstep, bool verboseInfo) const
 {
-  auto mesh = this->meshV;
+  auto &mesh = fluid->mesh;
 
   if (platform->comm.mpiRank() != 0) {
     return;
@@ -265,13 +274,15 @@ void nrs_t::flowRatePrintInfo(int tstep, bool verboseInfo)
   }
 }
 
-void nrs_t::adjustFlowRate(int tstep, double time)
+bool flowRate_t::computationRequired(double time, int tstep)
 {
-  flops = 0.0;
+  if (platform->options.compareArgs(upperCase(fluid->velocityName) + " SOLVER", "NONE")) {
+    return false;
+  }
+
+  static dfloat prevTime = -1;
 
   platform->options.getArgs("FLOW RATE", flowRate);
-
-  const bool movingMesh = platform->options.compareArgs("MOVING MESH", "TRUE");
 
   const bool X_aligned = platform->options.compareArgs("CONSTANT FLOW DIRECTION", "X");
   const bool Y_aligned = platform->options.compareArgs("CONSTANT FLOW DIRECTION", "Y");
@@ -286,14 +297,7 @@ void nrs_t::adjustFlowRate(int tstep, double time)
 
   auto mesh = fluid->mesh;
 
-  if (!o_Uc.isInitialized()) {
-    o_Uc = platform->device.malloc<dfloat>(mesh->dim * fluid->fieldOffset);
-    o_Pc = platform->device.malloc<dfloat>(mesh->Nlocal);
-    o_prevProp = platform->device.malloc<dfloat>(fluid->o_prop.size());
-    o_prevProp.copyFrom(fluid->o_prop);
-  }
-
-  const bool recomputeDirection = checkIfRecomputeDirection(this, tstep);
+  const bool recomputeDirection = checkIfRecomputeDirection(tstep);
 
   if (recomputeDirection) {
     if (directionAligned) {
@@ -325,11 +329,11 @@ void nrs_t::adjustFlowRate(int tstep, double time)
       platform->options.getArgs("CONSTANT FLOW FROM BID", fromBID);
       platform->options.getArgs("CONSTANT FLOW TO BID", toBID);
 
-      occa::memory o_centroid =
+      auto o_centroid =
           platform->deviceMemoryPool.reserve<dfloat>(mesh->dim * mesh->Nelements * mesh->Nfaces);
       platform->linAlg->fill(mesh->Nelements * mesh->Nfaces * 3, 0.0, o_centroid);
 
-      occa::memory o_counts = platform->deviceMemoryPool.reserve<dfloat>(mesh->Nelements * mesh->Nfaces);
+      auto o_counts = platform->deviceMemoryPool.reserve<dfloat>(mesh->Nelements * mesh->Nfaces);
       platform->linAlg->fill(mesh->Nelements * mesh->Nfaces, 0.0, o_counts);
 
       launchKernel("nrs-computeFaceCentroid",
@@ -410,6 +414,7 @@ void nrs_t::adjustFlowRate(int tstep, double time)
     }
   }
 
+
   auto compute = [&]() {
     bool compute = false;
     const auto delta = platform->linAlg->maxRelativeError(mesh->Nlocal,
@@ -426,8 +431,8 @@ void nrs_t::adjustFlowRate(int tstep, double time)
     }
 
     compute |= platform->options.compareArgs("MOVING MESH", "TRUE");
-    compute |= tstep <= std::max(o_coeffEXT.size(), o_coeffBDF.size());
-    compute |= abs(dt[0] - dt[1]) > 1e-10;
+    compute |= tstep <= std::max(fluid->o_coeffEXT.size(), fluid->o_coeffBDF.size());
+    compute |= abs(time - prevTime) > 1e-10;
 
     static dfloat prevFlowRate = 0;
     if (std::abs(flowRate - prevFlowRate) > 10 * std::numeric_limits<dfloat>::epsilon()) {
@@ -438,13 +443,20 @@ void nrs_t::adjustFlowRate(int tstep, double time)
     return compute;
   }();
 
-  // Stokes solution
-  if (compute) {
-    computeBaseFlowRate(time, tstep);
+  prevTime = time;
+  return compute;
+}
+
+void flowRate_t::adjust()
+{
+  if (platform->options.compareArgs(upperCase(fluid->velocityName) + " SOLVER", "NONE")) {
+    return;
   }
 
+  auto& mesh = fluid->mesh;
+
   rescaleFactor = [&]() {
-    occa::memory o_currentFlowRate = platform->deviceMemoryPool.reserve<dfloat>(fluid->fieldOffset);
+    auto o_currentFlowRate = platform->deviceMemoryPool.reserve<dfloat>(fluid->fieldOffset);
     launchKernel("nrs-computeFieldDotNormal",
                  mesh->Nlocal,
                  fluid->fieldOffset,
@@ -469,19 +481,20 @@ void nrs_t::adjustFlowRate(int tstep, double time)
 
   // superimpose
   platform->linAlg
-      ->axpbyMany(mesh->Nlocal, mesh->dim, fluid->fieldOffset, rescaleFactor, o_Uc, 1.0, this->fluid->o_U);
-  platform->linAlg->axpby(mesh->Nlocal, rescaleFactor, o_Pc, 1.0, this->fluid->o_P);
+      ->axpbyMany(mesh->Nlocal, mesh->dim, fluid->fieldOffset, rescaleFactor, o_Uc, 1.0, fluid->o_U);
+  platform->linAlg->axpby(mesh->Nlocal, rescaleFactor, o_Pc, 1.0, fluid->o_P);
+  o_Pc.free();
 
-  // diagnostics
+  // just for diagnostics
   postCorrectionFlowRate = [&]() {
-    occa::memory o_currentFlowRate = platform->deviceMemoryPool.reserve<dfloat>(fluid->fieldOffset);
+    auto o_currentFlowRate = platform->deviceMemoryPool.reserve<dfloat>(fluid->fieldOffset);
     launchKernel("nrs-computeFieldDotNormal",
                  mesh->Nlocal,
                  fluid->fieldOffset,
                  flowDirection[0],
                  flowDirection[1],
                  flowDirection[2],
-                 this->fluid->o_U,
+                 fluid->o_U,
                  o_currentFlowRate);
 
     flops += 5 * mesh->Nlocal;
@@ -493,7 +506,7 @@ void nrs_t::adjustFlowRate(int tstep, double time)
   platform->flopCounter->add("ConstantFlowRate::adjust", flops);
 }
 
-dfloat nrs_t::flowRateScaleFactor()
+dfloat flowRate_t::scaleFactor() const
 {
   return rescaleFactor;
 }

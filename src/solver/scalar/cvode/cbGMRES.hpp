@@ -3,20 +3,10 @@
 
 #ifdef ENABLE_CVODE
 
-#include "sundials/sundials_types.h"
-#include "nvector/nvector_serial.h"
-#include "nvector/nvector_mpiplusx.h"
+#include "CvodeNVectorHelpers.hpp"
 
-#ifdef ENABLE_CUDA
-#include "nvector/nvector_cuda.h"
-#endif
-#ifdef ENABLE_HIP
-#include "nvector/nvector_hip.h"
-#endif
-
-#endif
-
-int cbGMRESSolve(SUNLinearSolver S, N_Vector x, N_Vector b, realtype delta);
+int cbGMRESSolve(SUNLinearSolver S, N_Vector x, N_Vector b, sunrealtype delta);
 void cbGMRESSetup(SUNLinearSolver S);
 
+#endif
 #endif

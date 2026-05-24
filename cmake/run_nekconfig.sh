@@ -7,6 +7,7 @@ for x in "$@"; do
 done
 
 export NEK_SOURCE_ROOT=$NEK5000_SOURCE_DIR
+export NEK_DEPS_LOCAL_SRC=1
 
 ${NEK5000_SOURCE_DIR}/bin/nekconfig -build-dep
 rm -f .state

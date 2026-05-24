@@ -1,0 +1,10 @@
+name: adios2
+variables:
+  CMAKE_PREFIX_PATH: "C:/Miniconda/envs/adios2/Library;$CMAKE_PREFIX_PATH"
+dependencies:
+  - c-blosc2
+  - hdf5
+  - mpi4py
+  - msmpi
+  - numpy>=1.19
+  - python<3.13

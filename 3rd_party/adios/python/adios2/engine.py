@@ -1,9 +1,24 @@
 """License:
-  Distributed under the OSI-approved Apache License, Version 2.0.  See
-  accompanying file Copyright.txt for details.
+Distributed under the OSI-approved Apache License, Version 2.0.  See
+accompanying file Copyright.txt for details.
 """
 
 import numpy as np
+
+# pylint: disable=duplicate-code
+try:
+    import cupy as cp
+
+    ADIOS2_HAS_CUPY = True
+except ImportError:
+    ADIOS2_HAS_CUPY = False
+try:
+    import torch
+
+    ADIOS2_HAS_TORCH = True
+except ImportError:
+    ADIOS2_HAS_TORCH = False
+# pylint: enable=duplicate-code
 
 from adios2 import bindings
 
@@ -110,6 +125,14 @@ class Engine:
             content = np.array([content])
             self.impl.Put(variable.impl, content)
         else:
+            if ADIOS2_HAS_CUPY:
+                if isinstance(content, cp.ndarray):
+                    self.impl.Put(variable.impl, content.data.ptr, mode)
+                    return
+            if ADIOS2_HAS_TORCH:
+                if isinstance(content, torch.Tensor):
+                    self.impl.Put(variable.impl, content.data_ptr(), mode)
+                    return
             raise ValueError
 
     def perform_puts(self):
@@ -140,6 +163,14 @@ class Engine:
             self.impl.Get(variable.impl, content, mode)
             return None
 
+        if ADIOS2_HAS_CUPY:
+            if isinstance(content, cp.ndarray):
+                self.impl.Get(variable.impl, content.data.ptr, mode)
+                return None
+        if ADIOS2_HAS_TORCH:
+            if isinstance(content, torch.Tensor):
+                self.impl.Get(variable.impl, content.data_ptr(), mode)
+                return None
         return self.impl.Get(variable.impl, mode)
 
     def perform_gets(self):
@@ -157,3 +188,11 @@ class Engine:
     def flush(self, transport_index=-1):
         """Flush all transports attached to this Engine instance"""
         self.impl.Flush(transport_index)
+
+    def get_metadata(self):
+        """
+        Get metadata of an open file in a serialized form that can be
+        sent to other processes and used to open the file again by
+        avoiding reading the metadata from disk.
+        """
+        return self.impl.GetMetadata()

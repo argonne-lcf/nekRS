@@ -40,6 +40,7 @@ public:
     size_t GetEstimatedSize(const size_t ElemCount, const size_t ElemSize, const size_t ndims,
                             const size_t *dims) const override;
 
+    void AddExtraParameters(const Params &params) override;
     size_t Operate(const char *dataIn, const Dims &blockStart, const Dims &blockCount,
                    const DataType type, char *bufferOut) override;
 
@@ -47,12 +48,17 @@ public:
 
     bool IsDataTypeValid(const DataType type) const override;
 
+    std::string m_PluginLibrary;
+    std::string m_PluginName;
+    bool m_OperatorNameQuery = false;
+
 protected:
     void PluginInit(const std::string &pluginName, const std::string &pluginLibrary);
 
 private:
     struct Impl;
     std::unique_ptr<Impl> m_Impl;
+    Params m_ExtraParams;
 };
 
 } // end namespace plugin

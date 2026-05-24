@@ -174,13 +174,16 @@ fldData openFld(const std::string &filename, std::vector<std::string> &_availabl
   if (*ptr<int>("getpr")) {
     _availableVariables.push_back("pressure");
   }
+
+  int scalarStart = 0;
   if (*ptr<int>("gettr")) {
     _availableVariables.push_back("temperature");
+    scalarStart = 1;
   }
 
   const auto nsr = *ptr<int>("npsr");
   for (int i = 0; i < nsr; i++) {
-    _availableVariables.push_back("scalar" + scalarDigitStr(i));
+    _availableVariables.push_back("scalar" + scalarDigitStr(i + scalarStart)); // 1 base
   }
 
   {
@@ -650,12 +653,15 @@ static void check_library_data_size(void *handle, const char *lib_name)
     cmd = (const load_command *)((const char *)cmd + cmd->cmdsize);
   }
 
+#if 0
   const size_t TWO_GB = 2UL * 1024 * 1024 * 1024;
   nekrsCheck(total_data > TWO_GB,
              platform->comm.mpiComm(),
              EXIT_FAILURE,
              "__DATA segment too large (%ld bytes) for ARM64 small code model and mcmodel=medium/large is not supported!\n",
              total_data);
+#endif
+
 #endif
 }
 
@@ -758,8 +764,6 @@ void set_usr_handles(const char *session_in, int verbose)
 
   nek_restart_ptr = (void (*)(char *, int *))dlsym(handle, fname("nekf_restart"));
   check_error(dlerror());
-  nek_lglel_ptr = (int (*)(int *))dlsym(handle, fname("nekf_lglel"));
-  check_error(dlerror());
   nek_ifoutfld_ptr = (void (*)(int *))dlsym(handle, fname("nekf_ifoutfld"));
   check_error(dlerror());
   nek_setics_ptr = (void (*)(void))dlsym(handle, fname("nekf_setics"));
@@ -786,9 +790,11 @@ void set_usr_handles(const char *session_in, int verbose)
   nek_meshmetrics_ptr = (void (*)(void))dlsym(handle, fname("mesh_metrics"));
   check_error(dlerror());
 
-  nek_gllnid_ptr = (int (*)(int *))dlsym(handle, fname("gllnid"));
+  nek_lglel_ptr = (int (*)(int *))dlsym(handle, fname("nekf_lglel"));
   check_error(dlerror());
-  nek_gllel_ptr = (int (*)(int *))dlsym(handle, fname("gllel"));
+  nek_gllnid_ptr = (int (*)(int *))dlsym(handle, fname("nekf_gllnid"));
+  check_error(dlerror());
+  nek_gllel_ptr = (int (*)(int *))dlsym(handle, fname("nekf_gllel"));
   check_error(dlerror());
 
 #define postfix(x) x##_ptr
@@ -1005,8 +1011,9 @@ void buildNekInterface(int ldimt, int N, int np, setupAide &options)
       const std::string meshFile = options.getArgs("MESH FILE");
       re2::nelg(meshFile, false, nelgt, nelgv, MPI_COMM_SELF);
 
-      int hRefineImbalance = 0; // extra load imbalance by h-refine
-      {
+      int imbalance = (nelgt==nelgv) ? 1 : 2;
+
+      { // extra load imbalance by h-refine
         std::string hSchedule;
         if (platform->options.getArgs("MESH HREFINEMENT SCHEDULE", hSchedule)) {
           int ncut = 1;
@@ -1016,12 +1023,12 @@ void buildNekInterface(int ldimt, int N, int np, setupAide &options)
 
           if (ncut > 1) {
             constexpr int ndim = 3;
-            hRefineImbalance = static_cast<int>(std::pow(ncut, ndim)) - 1;
+            imbalance *= static_cast<int>(std::pow(ncut, ndim));
           }
         }
       }
       
-      int lelt = (nelgt / np) + 3 + hRefineImbalance;
+      int lelt = (nelgt / np) + 2 + imbalance;
 
       if (lelt > nelgt) {
         lelt = nelgt + 1; // preserve 1-extra in h-refine
@@ -1053,6 +1060,10 @@ void buildNekInterface(int ldimt, int N, int np, setupAide &options)
         const std::string nekInterface_dir = installDir + "/nekInterface";
         std::string out_args = std::string(">" + makeOutput + " 2>&1");
         std::string make_args = "-j4 ";
+        std::string PPLIST;
+        if (nelgt > 1e6) {
+          PPLIST += "DPROCMAP ";
+        }
         if (!verbose) {
           make_args += "-s ";
         } else {
@@ -1066,6 +1077,7 @@ void buildNekInterface(int ldimt, int N, int np, setupAide &options)
                  "cd %s"
                  " && cp -f %s/makefile.template makefile"
                  " && FFLAGS=\"${NEKRS_FFLAGS}\" make %s"
+                 "PPLIST=\"%s\" "
                  "S=%s "
                  "OPT_INCDIR=\"%s\" "
                  "CASENAME=%s "
@@ -1075,6 +1087,7 @@ void buildNekInterface(int ldimt, int N, int np, setupAide &options)
                  cache_dir.c_str(),
                  nek5000_dir.c_str(),
                  make_args.c_str(),
+                 PPLIST.c_str(),
                  nek5000_dir.c_str(),
                  include_dirs.c_str(),
                  casename.c_str(),
@@ -1155,7 +1168,7 @@ void bootstrap()
   int npTarget = size;
   options->getArgs("NP TARGET", npTarget);
 
-  buildNekInterface(std::max(3, Nscalar), N, npTarget, *options);
+  buildNekInterface(std::max(2, Nscalar + 1), N, npTarget, *options);
 
   if (platform->options.compareArgs("BUILD ONLY", "FALSE")) {
     if (rank == 0) {
@@ -1232,10 +1245,10 @@ int setup(int numberActiveFields)
   options->getArgs("FLUID VISCOSITY", mue);
 
   double rhoCp;
-  options->getArgs("SCALAR00 DENSITY", rhoCp);
+  options->getArgs("SCALAR00 TRANSPORTCOEFF", rhoCp);
 
   double lambda;
-  options->getArgs("SCALAR00 DIFFUSIVITY", lambda);
+  options->getArgs("SCALAR00 DIFFUSIONCOEFF", lambda);
 
   int stressForm = 1; // avoid recompilation + bypass unligned SYM/SHL check
 

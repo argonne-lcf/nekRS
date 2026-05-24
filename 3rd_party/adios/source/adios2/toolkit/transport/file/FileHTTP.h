@@ -10,9 +10,28 @@
 #ifndef ADIOS2_FILEHTTP_H
 #define ADIOS2_FILEHTTP_H
 
+#ifdef _WIN32
+#ifndef FD_SET_SIZE
+#define FD_SETSIZE 1024
+#endif
+#include <winsock2.h>
+#endif
 #include "../Transport.h"
 #include "adios2/common/ADIOSConfig.h"
+#ifdef _MSC_VER
+#include <process.h>
+#include <time.h>
+#include <windows.h>
+#define getpid() _getpid()
+#else
+#ifndef _WIN32
+#include <arpa/inet.h>
 #include <netinet/in.h>
+#include <sys/socket.h>
+#endif
+
+#define SOCKET int
+#endif
 
 namespace adios2
 {
@@ -62,13 +81,15 @@ public:
 
     void Seek(const size_t start = MaxSizeT) final;
 
+    size_t CurrentPos() final { return 0; };
+
     void Truncate(const size_t length) final;
 
     void MkDir(const std::string &fileName) final;
 
 private:
     /** POSIX file handle returned by Open */
-    int m_socketFileDescriptor = -1;
+    SOCKET m_socketFileDescriptor = -1;
     int m_Errno = 0;
     bool m_IsOpening = false;
     /* if filename is very lomg, we can get lout from array boundaries */

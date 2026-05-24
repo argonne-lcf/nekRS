@@ -91,7 +91,7 @@ public:
                            bool output = true);
 
   // Get field index associated with a degree of freedom
-  int dofId(const std::string &dofName) const;
+  int dofIdx(const std::string &dofName) const;
 
   // Number of fields associated with a DOF
   int numDOFs(const std::string &dofName) const;
@@ -164,8 +164,6 @@ public:
   }
 
   // Integrate to state tf
-  // Pre:
-  //   initialized() = true
   void integrate(double tf);
 
   // Write particle data to file
@@ -175,24 +173,14 @@ public:
   // Can be called in lieu of construct
   void restart(const std::string &restartFile);
 
-  // Get particle degrees of freedom on device
-  // Pre:
-  //  initialized() = true
-  occa::memory getDOF(const std::string &dofName) const;
+  // Get particle degrees of freedom
+  occa::memory dof(const std::string &dofName);
 
-  // Get particle property on device
-  // Pre:
-  //  initialized() = true
-  occa::memory getProp(const std::string &propName) const;
+  // Get particle property
+  occa::memory prop(const std::string &propName);
 
-  std::vector<dfloat> getPropHost(const std::string &propName) const;
-
-  void setProp(const std::string &propName, const occa::memory &o_fld, dlong _offset = 0);
-
-  // Get interpolated field on device
-  // Pre:
-  //  initialized() = true
-  const occa::memory getInterpField(const std::string &interpFieldName);
+  // Get interpolated field
+  occa::memory interpField(const std::string &interpFieldName) const;
 
   // Get the underlying pointInterpolation_t object
   pointInterpolation_t &interpolator()
@@ -282,12 +270,6 @@ private:
 
   SolverType solverType = SolverType::AB;
 
-  // Get particle coordinates on host
-  const std::vector<dfloat> getDOFHost(const std::string &dofName);
-
-  // Get interpolated fields on host
-  const std::vector<dfloat> getInterpFieldHost(const std::string &interpFieldName);
-
   // Required to handle runtime -> compile time switch needed for sarray_transfer
   template <int N>
   void sendReceiveDataImpl(const std::vector<dfloat> &sendData,
@@ -349,7 +331,7 @@ private:
   int nDOFs_ = 0;
   int nProps_ = 0;
   int nInterpFields_ = 0;
-  int fieldOffset_ = 0; // page-aligned offset >= nParticles
+  dlong fieldOffset_ = 0; // page-aligned offset >= nParticles
   bool initialized_ = false;
   inline static bool kernelsRegistered_ = false;
 
@@ -376,7 +358,7 @@ private:
 
   // DOFs
   std::vector<std::string> dofNames;
-  std::map<std::string, int> dofIds;
+  std::map<std::string, int> dofOffset;
   std::map<std::string, int> dofCounts;
   std::map<std::string, bool> outputDofs;
 
@@ -419,6 +401,11 @@ private:
   void *userdata_ = nullptr;
   occa::kernel nStagesSumManyKernel;
   occa::kernel remapParticlesKernel;
+
+  std::vector<dfloat> getDOFHost(const std::string &dofName);
+  std::vector<dfloat> getPropHost(const std::string &propName);
+  std::vector<dfloat> interpFieldHost(const std::string &interpFieldName);
+
 };
 
 #endif

@@ -40,16 +40,18 @@ void ellipticPreconditioner(elliptic_t *elliptic, const occa::memory &o_r, occa:
     platform->linAlg
         ->axmyzMany(mesh->Nlocal, elliptic->Nfields, elliptic->fieldOffset, 1.0, o_r, precon->o_invDiagA, o_z);
     platform->flopCounter->add("jacobiPrecon", static_cast<double>(mesh->Nlocal) * elliptic->Nfields);
-  } else if (options.compareArgs("PRECONDITIONER", "MULTIGRID")) {
-    platform->linAlg->fill<pfloat>(elliptic->fieldOffset * elliptic->Nfields, 0.0, elliptic->o_zPfloat);
-    platform->copyDfloatToPfloatKernel(elliptic->fieldOffset * elliptic->Nfields, o_r, elliptic->o_rPfloat);
-    precon->MGSolver->Run(elliptic->o_rPfloat, elliptic->o_zPfloat);
-    platform->copyPfloatToDfloatKernel(elliptic->fieldOffset * elliptic->Nfields, elliptic->o_zPfloat, o_z);
-  } else if (options.compareArgs("PRECONDITIONER", "SEMFEM")) {
-    platform->linAlg->fill<pfloat>(elliptic->fieldOffset * elliptic->Nfields, 0.0, elliptic->o_zPfloat);
-    platform->copyDfloatToPfloatKernel(elliptic->fieldOffset * elliptic->Nfields, o_r, elliptic->o_rPfloat);
-    precon->SEMFEMSolver->run(elliptic->o_rPfloat, elliptic->o_zPfloat);
-    platform->copyPfloatToDfloatKernel(elliptic->fieldOffset * elliptic->Nfields, elliptic->o_zPfloat, o_z);
+  } else if (options.compareArgs("PRECONDITIONER", "SEMFEM") || options.compareArgs("PRECONDITIONER", "MULTIGRID")) {
+    if(!elliptic->o_rPfloat.isInitialized()) elliptic->o_rPfloat = platform->deviceMemoryPool.reserve<pfloat>(elliptic->fieldOffset * elliptic->Nfields);
+    if(!elliptic->o_zPfloat.isInitialized()) elliptic->o_zPfloat = platform->deviceMemoryPool.reserve<pfloat>(elliptic->fieldOffset * elliptic->Nfields);
+
+    platform->linAlg->fill<pfloat>(elliptic->o_zPfloat.size(), 0.0, elliptic->o_zPfloat);
+    platform->copyDfloatToPfloatKernel(elliptic->o_rPfloat.size(), o_r, elliptic->o_rPfloat);
+    if (options.compareArgs("PRECONDITIONER", "MULTIGRID")) {
+      precon->MGSolver->Run(elliptic->o_rPfloat, elliptic->o_zPfloat);
+    } else {
+      precon->SEMFEMSolver->run(elliptic->o_rPfloat, elliptic->o_zPfloat);
+    }
+    platform->copyPfloatToDfloatKernel(elliptic->o_zPfloat.size(), elliptic->o_zPfloat, o_z);
   } else if (options.compareArgs("PRECONDITIONER", "NONE")) {
     o_z.copyFrom(o_r, elliptic->fieldOffset * elliptic->Nfields);
   } else {

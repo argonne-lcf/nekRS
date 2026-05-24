@@ -28,7 +28,7 @@ elif [ "$1" == "adios" ]; then
 git rm -rf 3rd_party/adios
 rm -rf 3rd_party/adios
 git commit -m 'remove adios'
-git subtree add --prefix 3rd_party/adios https://github.com/ornladios/ADIOS2.git v2.10.1 --squash
+git subtree add --prefix 3rd_party/adios https://github.com/ornladios/ADIOS2.git v2.11.0 --squash
 git reset HEAD~2 --soft
 git add -u
 git commit -m 'import latest adios'

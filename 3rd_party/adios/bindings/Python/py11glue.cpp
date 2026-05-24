@@ -9,6 +9,7 @@
  */
 
 #include <pybind11/pybind11.h>
+#include <pybind11/pytypes.h>
 #include <pybind11/stl.h>
 
 #include <complex>
@@ -28,6 +29,7 @@
 #include "py11Operator.h"
 #include "py11Query.h"
 #include "py11Variable.h"
+#include "py11VariableDerived.h"
 
 #if ADIOS2_USE_MPI
 
@@ -92,7 +94,9 @@ PYBIND11_MODULE(ADIOS2_PYTHON_MODULE_NAME, m)
 #else
     m.attr("is_built_with_mpi") = false;
 #endif
-    m.attr("is_char_signed") = (char)-1 < 0;
+
+    m.attr("L2_norm") = adios2::L2_norm;
+    m.attr("Linf_norm") = adios2::Linf_norm;
 
     // enum classes
     pybind11::enum_<adios2::Mode>(m, "Mode")
@@ -124,6 +128,30 @@ PYBIND11_MODULE(ADIOS2_PYTHON_MODULE_NAME, m)
         .value("EndOfStream", adios2::StepStatus::EndOfStream)
         .value("OtherError", adios2::StepStatus::OtherError)
         .export_values();
+
+    pybind11::enum_<adios2::DerivedVarType>(m, "DerivedVarType")
+        .value("StatsOnly", adios2::DerivedVarType::StatsOnly)
+        .value("ExpressionString", adios2::DerivedVarType::ExpressionString)
+        .value("StoreData", adios2::DerivedVarType::StoreData)
+        .export_values();
+
+#ifdef ADIOS2_HAVE_GPU_SUPPORT
+    pybind11::enum_<adios2::MemorySpace>(m, "MemorySpace")
+        .value("Host", adios2::MemorySpace::Host)
+        .value("GPU", adios2::MemorySpace::GPU);
+#endif
+
+    pybind11::class_<adios2::Accuracy>(m, "Accuracy")
+        .def(pybind11::init<double, double, bool>())
+        .def_readwrite("error", &adios2::Accuracy::error)
+        .def_readwrite("norm", &adios2::Accuracy::norm)
+        .def_readwrite("relative", &adios2::Accuracy::relative)
+
+        .def("__repr__", [](const adios2::Accuracy &self) {
+            std::ostringstream _stream;
+            _stream << "(" << self.error << ", " << self.norm << ", " << self.relative << ")";
+            return _stream.str();
+        });
 
     pybind11::class_<adios2::py11::ADIOS>(m, "ADIOS")
         // Python 2
@@ -219,6 +247,14 @@ PYBIND11_MODULE(ADIOS2_PYTHON_MODULE_NAME, m)
                  adios2::py11::IO::DefineVariable,
              pybind11::return_value_policy::move, pybind11::arg("name"))
 
+        .def("DefineDerivedVariable",
+             (adios2::py11::VariableDerived(adios2::py11::IO::*)(
+                 const std::string &, const std::string &, const adios2::DerivedVarType)) &
+                 adios2::py11::IO::DefineDerivedVariable,
+             pybind11::return_value_policy::move, pybind11::arg("name"),
+             pybind11::arg("expression"),
+             pybind11::arg("vartype") = adios2::DerivedVarType::StatsOnly)
+
         .def("InquireVariable", &adios2::py11::IO::InquireVariable,
              pybind11::return_value_policy::move)
 
@@ -288,6 +324,10 @@ PYBIND11_MODULE(ADIOS2_PYTHON_MODULE_NAME, m)
 
         .def("Open", (adios2::py11::Engine(adios2::py11::IO::*)(const std::string &, const int)) &
                          adios2::py11::IO::Open)
+
+        .def("Open", (adios2::py11::Engine(adios2::py11::IO::*)(const std::string &,
+                                                                const pybind11::bytes &)) &
+                         adios2::py11::IO::Open)
 #if ADIOS2_USE_MPI
         .def("Open", (adios2::py11::Engine(adios2::py11::IO::*)(const std::string &, const int,
                                                                 adios2::py11::MPI4PY_Comm comm)) &
@@ -355,16 +395,33 @@ PYBIND11_MODULE(ADIOS2_PYTHON_MODULE_NAME, m)
                  return opBool;
              })
         .def("SetShape", &adios2::py11::Variable::SetShape)
+        .def("StoreStatsOnly", &adios2::py11::Variable::StoreStatsOnly)
         .def("SetBlockSelection", &adios2::py11::Variable::SetBlockSelection)
         .def("SetSelection", &adios2::py11::Variable::SetSelection)
         .def("SetStepSelection", &adios2::py11::Variable::SetStepSelection)
+        .def("SetAccuracy", &adios2::py11::Variable::SetAccuracy)
+        .def("GetAccuracy", &adios2::py11::Variable::GetAccuracy)
+        .def("GetAccuracyRequested", &adios2::py11::Variable::GetAccuracyRequested)
         .def("SelectionSize", &adios2::py11::Variable::SelectionSize)
         .def("Name", &adios2::py11::Variable::Name)
         .def("Type", &adios2::py11::Variable::Type)
         .def("Sizeof", &adios2::py11::Variable::Sizeof)
         .def("ShapeID", &adios2::py11::Variable::ShapeID)
-        .def("Shape", &adios2::py11::Variable::Shape,
+        .def("Shape",
+             (adios2::Dims(adios2::py11::Variable::*)(const size_t) const) &
+                 adios2::py11::Variable::Shape,
              pybind11::arg("step") = adios2::EngineCurrentStep)
+#ifdef ADIOS2_HAVE_GPU_SUPPORT
+        .def("Shape",
+             (adios2::Dims(adios2::py11::Variable::*)(const adios2::MemorySpace, const size_t)
+                  const) &
+                 adios2::py11::Variable::Shape,
+             pybind11::arg("memSpace"), pybind11::arg("step") = adios2::EngineCurrentStep)
+        .def("SetMemorySpace",
+             (void(adios2::py11::Variable::*)(const adios2::MemorySpace)) &
+                 adios2::py11::Variable::SetMemorySpace,
+             pybind11::arg("memSpace"))
+#endif
         .def("Start", &adios2::py11::Variable::Start)
         .def("Count", &adios2::py11::Variable::Count)
         .def("Steps", &adios2::py11::Variable::Steps)
@@ -379,6 +436,22 @@ PYBIND11_MODULE(ADIOS2_PYTHON_MODULE_NAME, m)
                  adios2::py11::Variable::AddOperation)
         .def("Operations", &adios2::py11::Variable::Operations)
         .def("RemoveOperations", &adios2::py11::Variable::RemoveOperations);
+
+    pybind11::class_<adios2::py11::VariableDerived>(m, "VariableDerived")
+        // Python 2
+        .def("__nonzero__",
+             [](const adios2::py11::VariableDerived &vd) {
+                 const bool opBool = vd ? true : false;
+                 return opBool;
+             })
+        // Python 3
+        .def("__bool__",
+             [](const adios2::py11::VariableDerived &vd) {
+                 const bool opBool = vd ? true : false;
+                 return opBool;
+             })
+        .def("Name", &adios2::py11::VariableDerived::Name)
+        .def("Type", &adios2::py11::VariableDerived::Type);
 
     pybind11::class_<adios2::py11::Attribute>(m, "Attribute")
         // Python 2
@@ -412,6 +485,9 @@ PYBIND11_MODULE(ADIOS2_PYTHON_MODULE_NAME, m)
                  const bool opBool = engine ? true : false;
                  return opBool;
              })
+
+        .def("GetMetadata", &adios2::py11::Engine::GetMetadata, pybind11::return_value_policy::move)
+
         .def("BeginStep",
              (adios2::StepStatus(adios2::py11::Engine::*)(const adios2::StepMode, const float)) &
                  adios2::py11::Engine::BeginStep,
@@ -447,6 +523,12 @@ PYBIND11_MODULE(ADIOS2_PYTHON_MODULE_NAME, m)
              pybind11::arg("launch") = adios2::Mode::Sync)
 
         .def("Put",
+             (void(adios2::py11::Engine::*)(adios2::py11::Variable variable, std::uintptr_t,
+                                            const adios2::Mode launch)) &
+                 adios2::py11::Engine::Put,
+             pybind11::arg("variable"), pybind11::arg("pointer"), pybind11::arg("launch"))
+
+        .def("Put",
              (void(adios2::py11::Engine::*)(adios2::py11::Variable,
                                             const std::vector<std::complex<double>> &,
                                             const adios2::Mode launch)) &
@@ -470,6 +552,12 @@ PYBIND11_MODULE(ADIOS2_PYTHON_MODULE_NAME, m)
                                                    const adios2::Mode launch)) &
                  adios2::py11::Engine::Get,
              pybind11::arg("variable"), pybind11::arg("launch") = adios2::Mode::Deferred)
+
+        .def("Get",
+             (void(adios2::py11::Engine::*)(adios2::py11::Variable variable, std::uintptr_t,
+                                            const adios2::Mode launch)) &
+                 adios2::py11::Engine::Get,
+             pybind11::arg("variable"), pybind11::arg("pointer"), pybind11::arg("launch"))
 
         .def("PerformGets", &adios2::py11::Engine::PerformGets)
 

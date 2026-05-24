@@ -232,7 +232,10 @@ void RANSktau::buildKernel(occa::properties _kernelInfo)
   platform->options.getArgs("NUMBER OF SCALARS", Nscalar);
 
   nekrsCheck(Nscalar < 2, platform->comm.mpiComm(), EXIT_FAILURE, "%s\n", "Nscalar needs to be >= 2!");
-  platform->options.setArgs("FLUID STRESSFORMULATION", "TRUE");
+
+  if (!platform->options.compareArgs("FLUID VELOCITY SOLVER", "NONE")) { 
+    platform->options.setArgs("FLUID STRESSFORMULATION", "TRUE");
+  }
 }
 
 void RANSktau::updateProperties()
@@ -395,8 +398,8 @@ void RANSktau::setup(int ifld, std::string modelIn)
     platform->linAlg->fill(o_rho.size(), rho, o_rho);
 
     const std::string sid = scalarDigitStr(kFieldIndex + i);
-    nekrsCheck(!platform->options.getArgs("SCALAR" + sid + " DIFFUSIVITY").empty() ||
-                   !platform->options.getArgs("SCALAR" + sid + " DENSITY").empty(),
+    nekrsCheck(!platform->options.getArgs("SCALAR" + sid + " DIFFUSIONCOEFF").empty() ||
+               !platform->options.getArgs("SCALAR" + sid + " TRANSPORTCOEFF").empty(),
                platform->comm.mpiComm(),
                EXIT_FAILURE,
                "%s\n",

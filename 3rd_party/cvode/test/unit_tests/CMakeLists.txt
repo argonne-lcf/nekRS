@@ -2,8 +2,11 @@
 # Programmer(s): David J. Gardner @ LLNL
 # ---------------------------------------------------------------
 # SUNDIALS Copyright Start
-# Copyright (c) 2002-2022, Lawrence Livermore National Security
+# Copyright (c) 2025-2026, Lawrence Livermore National Security,
+# University of Maryland Baltimore County, and the SUNDIALS contributors.
+# Copyright (c) 2013-2025, Lawrence Livermore National Security
 # and Southern Methodist University.
+# Copyright (c) 2002-2013, Lawrence Livermore National Security.
 # All rights reserved.
 #
 # See the top-level LICENSE and NOTICE files for details.
@@ -16,31 +19,60 @@
 
 message("Adding units tests")
 
-if(BUILD_ARKODE)
+# Disable some warnings for tests
+if(SUNDIALS_ENABLE_ALL_WARNINGS)
+  set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -Wno-unused-parameter")
+  set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wno-unused-parameter")
+endif()
+
+add_subdirectory(sundials)
+
+if(SUNDIALS_ENABLE_ARKODE)
   add_subdirectory(arkode)
 endif()
 
-if(BUILD_CVODE)
+if(SUNDIALS_ENABLE_CVODE)
   add_subdirectory(cvode)
 endif()
 
-if(BUILD_CVODES)
+if(SUNDIALS_ENABLE_CVODES)
   add_subdirectory(cvodes)
 endif()
 
-if(BUILD_IDA)
+if(SUNDIALS_ENABLE_IDA)
   add_subdirectory(ida)
 endif()
 
-if(BUILD_IDAS)
+if(SUNDIALS_ENABLE_IDAS)
   add_subdirectory(idas)
 endif()
 
-if(BUILD_KINSOL)
+if(SUNDIALS_ENABLE_KINSOL)
   add_subdirectory(kinsol)
 endif()
 
+add_subdirectory(constraints)
+
+add_subdirectory(nvector)
+
+add_subdirectory(sunmatrix)
+
+add_subdirectory(sunlinsol)
+
+add_subdirectory(sunnonlinsol)
+
+add_subdirectory(sunadjointcheckpointscheme)
+
+add_subdirectory(sundomeigest)
+
 if(CXX_FOUND)
-  add_subdirectory(reductions)
+  add_subdirectory(logging)
   add_subdirectory(sunmemory)
+  if(SUNDIALS_ENABLE_PROFILING)
+    add_subdirectory(profiling)
+  endif()
+endif()
+
+if(Python3_FOUND)
+  add_subdirectory(suntools)
 endif()

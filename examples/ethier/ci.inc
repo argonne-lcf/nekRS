@@ -131,7 +131,7 @@ void ciSetup(MPI_Comm comm, setupAide &options)
 
   options.setArgs("SCALAR INITIAL GUESS", "PREVIOUS");
   options.setArgs("FLUID VELOCITY INITIAL GUESS", "PREVIOUS");
-  options.setArgs("ADVECTION TYPE", "CONVECTIVE+CUBATURE");
+  options.setArgs("ADVECTION TYPE", "CONVECTIVE+OVERINTEGRATION");
 
   options.setArgs("FLUID VELOCITY SOLVER", "PCG");
   options.setArgs("SCALAR00 SOLVER", "PCG+COMBINED");
@@ -288,20 +288,15 @@ void ciSetup(MPI_Comm comm, setupAide &options)
   if (ciMode == 17) {
 
     options.setArgs("CVODE", "TRUE");
-
-    options.setArgs("SCALAR00 CVODE ABSOLUTE TOLERANCE", "1e-10");
     options.setArgs("SCALAR01 CVODE ABSOLUTE TOLERANCE", "1e-10");
-
     options.setArgs("CVODE RELATIVE TOLERANCE", "1e-10");
     options.setArgs("CVODE GMRES BASIS VECTORS", "20");
-
     options.setArgs("SCALAR01 SOLVER", "CVODE");
     options.setArgs("SUBCYCLING STEPS", std::string("1"));
   }
 
   // CVODE, both scalars, no dealiasing
   if (ciMode == 18) {
-
     options.setArgs("CVODE", "TRUE");
 
     options.setArgs("SCALAR00 CVODE ABSOLUTE TOLERANCE", "1e-10");
@@ -441,7 +436,7 @@ void ciTestParticles(nrs_t *nrs, lpm_t *particles, occa::kernel exactUVWPKernel,
   std::vector<dfloat> xp0_g(particles->numParticles()); // based on current rank
   std::vector<dfloat> yp0_g(particles->numParticles());
   std::vector<dfloat> zp0_g(particles->numParticles());
-  auto o_gidFloat = particles->getProp("gid");
+  auto o_gidFloat = particles->prop("gid");
 
   std::vector<dfloat> gidFloat(o_gidFloat.length());
   o_gidFloat.copyTo(gidFloat.data());
@@ -489,9 +484,9 @@ void ciTestParticles(nrs_t *nrs, lpm_t *particles, occa::kernel exactUVWPKernel,
   auto LinfErrY = 0.0;
   auto LinfErrZ = 0.0;
 
-  auto o_xP = particles->getDOF("x");
-  auto o_yP = particles->getDOF("y");
-  auto o_zP = particles->getDOF("z");
+  auto o_xP = particles->dof("x");
+  auto o_yP = particles->dof("y");
+  auto o_zP = particles->dof("z");
   
   std::vector<dfloat> xP(o_xP.length());
   std::vector<dfloat> yP(o_yP.length());
@@ -1196,13 +1191,13 @@ void ciTestErrors(nrs_t *nrs,
       expectedNiterS01 = 9;
     }
 
-    if (ciMode != 12 && nrs->timeStepConverged) {
+    if (ciMode != 12 && nrs->timeStepConverged && nrs->scalar->ellipticSolver[0]) {
       int sIterErr = abs(nrs->scalar->ellipticSolver[0]->Niter() - expectedNiterS00);
       CiEvalTest("scalar00 iter step=1 (sIterErr: " + to_string_f(sIterErr) + ")", sIterErr <= 1);
       nekrsCheck(sIterErr > 1, platform->comm.mpiComm(), EXIT_FAILURE, "%s", "");
     }
 
-    if (nrs->timeStepConverged){
+    if (nrs->timeStepConverged && nrs->scalar->ellipticSolver[1]){
       auto sIterErr = abs(nrs->scalar->ellipticSolver[1]->Niter() - expectedNiterS01);
       CiEvalTest("scalar01 iter step=1 (sIterErr: " + to_string_f(sIterErr) + ")", sIterErr <= 1);
       nekrsCheck(sIterErr > 1, platform->comm.mpiComm(), EXIT_FAILURE, "%s", "");
@@ -1505,10 +1500,10 @@ void ciTestErrors(nrs_t *nrs,
   case 16:
   case 18:
   {
-    velIterTest = abs(NiterU - 15) < 2;
+    velIterTest = abs(NiterU - 10) < 2;
     s1Test = abs((err[2] - 2.31E-08) / err[2]) < EPS;
     s2Test = abs((err[3] - 2.51E-08) / err[3]) < EPS;
-    pIterTest = abs(NiterP - 6) < 2;
+    pIterTest = abs(NiterP - 4) < 2;
     vxTest = abs((err[0] - 2.78E-10) / err[0]) < EPS;
     prTest = abs((err[1] - 7.11E-10) / err[1]) < EPS;
     s1IterTest = abs(NiterS01 - 3.5) < EPS; // nsteps
@@ -1517,10 +1512,10 @@ void ciTestErrors(nrs_t *nrs,
   }
   case 17:
   {
-    velIterTest = abs(NiterU - 15) < 2;
+    velIterTest = abs(NiterU - 10) < 2;
     s1Test = abs((err[2] - 6.11E-12) / err[2]) < EPS;
     s2Test = abs((err[3] - 4.92E-08) / err[3]) < EPS;
-    pIterTest = abs(NiterP - 6) < 2;
+    pIterTest = abs(NiterP - 4) < 2;
     vxTest = abs((err[0] - 2.78E-10) / err[0]) < EPS;
     prTest = abs((err[1] - 7.11E-10) / err[1]) < EPS;
     s1IterTest = abs(NiterS01 - 1.67) < EPS; // nsteps

@@ -1,13 +1,9 @@
-cmake_minimum_required(VERSION 3.5)
+cmake_minimum_required(VERSION 3.14)
 
 # The directory label is used for CDash to treat FFS as a subproject of GTKorvo
 set(CMAKE_DIRECTORY_LABELS FFS)
 
-if(POLICY CMP0074)
-  cmake_policy(SET CMP0074 NEW)
-endif()
-
-project(FFS VERSION 3.0.0)
+project(FFS VERSION 3.1.9)
 
 # Some boilerplate to setup nice output directories
 include(GNUInstallDirs)
@@ -68,7 +64,6 @@ if(WIN32)
       -D_SCL_SECURE_NO_DEPRECATE
       -D_WINSOCK_DEPRECATED_NO_WARNINGS
       -D_CRT_NONSTDC_NO_DEPRECATE)
-    set (MSVC_PERL_FLAGS "-msvc-long")
   endif()
 endif()
 
@@ -111,7 +106,11 @@ CHECK_TYPE_SIZE("long" SIZEOF_LONG)
 CHECK_TYPE_SIZE("long double" SIZEOF_LONG_DOUBLE)
 CHECK_TYPE_SIZE("long long" SIZEOF_LONG_LONG)
 CHECK_TYPE_SIZE("size_t" SIZEOF_SIZE_T)
-TEST_BIG_ENDIAN(WORDS_BIGENDIAN)
+if (${CMAKE_C_BYTE_ORDER} STREQUAL "BIG_ENDIAN")
+set (WORDS_BIGENDIAN 1)
+else()
+set (WORDS_BIGENDIAN 0)
+endif()
 
 if(NOT (DEFINED NO_SOCKETS))
   check_function_exists(socket SOCKETS_FOUND)
@@ -171,18 +170,29 @@ else()
   ADD_FLEX_BISON_DEPENDENCY(CODScanner CODParser)
 endif()
 
-find_package(Perl REQUIRED)
+find_package(Perl)
 
-add_custom_command(
-  OUTPUT "cod_node.c" 
-  COMMAND
-    ${PERL_EXECUTABLE} 
-      ${CMAKE_CURRENT_SOURCE_DIR}/cod/struct.pl
+if (PERL_FOUND) 
+  add_custom_command(
+    OUTPUT "cod_node.c" structs.h
+    COMMAND
+      ${PERL_EXECUTABLE} 
+        ${CMAKE_CURRENT_SOURCE_DIR}/cod/struct.pl
+        ${CMAKE_CURRENT_SOURCE_DIR}/cod/cod.structs
+    DEPENDS
+      lex.yy.c
       ${CMAKE_CURRENT_SOURCE_DIR}/cod/cod.structs
-  DEPENDS
-    lex.yy.c
-    ${CMAKE_CURRENT_SOURCE_DIR}/cod/cod.structs
-    ${CMAKE_CURRENT_SOURCE_DIR}/cod/struct.pl)
+      ${CMAKE_CURRENT_SOURCE_DIR}/cod/struct.pl)
+else()
+    add_custom_command(OUTPUT cod_node.c
+                   COMMAND ${CMAKE_COMMAND} -E copy
+                       ${PROJECT_SOURCE_DIR}/pregen-source/cod_node.c cod_node.c
+                   COMMENT "Copying pregen cod_node.c to build area")
+    add_custom_command(OUTPUT structs.h
+                   COMMAND ${CMAKE_COMMAND} -E copy
+                       ${PROJECT_SOURCE_DIR}/pregen-source/structs.h structs.h
+                   COMMENT "Copying pregen structs.h to build area")
+endif()
 
 add_custom_target(docs ALL DEPENDS "cod_node.c")
 
@@ -190,11 +200,12 @@ if (CMAKE_CXX_COMPILER_ID STREQUAL "Clang")
    SET_SOURCE_FILES_PROPERTIES(cod.tab.c PROPERTIES COMPILE_FLAGS -Wno-unused-function)
 endif()
 
-add_custom_target(generated DEPENDS cod_node.c ${BISON_CODParser_OUTPUT_SOURCE})
+add_custom_target(generated DEPENDS cod_node.c lex.yy.c ${BISON_CODParser_OUTPUT_SOURCE})
 
 list(APPEND COD_MASTER_SRC_LIST
   ${BISON_CODParser_OUTPUT_SOURCE}
-  ${CMAKE_CURRENT_BINARY_DIR}/cod_node.c)
+  ${CMAKE_CURRENT_BINARY_DIR}/cod_node.c
+  ${CMAKE_CURRENT_BINARY_DIR}/structs.h)
   
 list(APPEND FFS_MASTER_SRC_LIST ${FM_MASTER_SRC_LIST} ${COD_MASTER_SRC_LIST})
 
@@ -203,6 +214,7 @@ set(FFS_LIBRARY_PREFIX "" CACHE STRING
 mark_as_advanced(FFS_LIBRARY_PREFIX)
 
 add_library(ffs ${FFS_MASTER_SRC_LIST})
+add_dependencies(ffs generated)
 set_target_properties(ffs PROPERTIES
   OUTPUT_NAME ${FFS_LIBRARY_PREFIX}ffs
   VERSION ${FFS_VERSION}
@@ -233,7 +245,7 @@ target_include_directories(ffs PUBLIC
   $<BUILD_INTERFACE:${CMAKE_CURRENT_BINARY_DIR}/ffs>
   $<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}>)
 
-find_package(dill 3.0.0)
+find_package(dill 3.0.0 QUIET)
 
 option(FFS_USE_DILL "Enable Dill code generation" ${DILL_FOUND})
 
@@ -259,6 +271,7 @@ CHECK_INCLUDE_FILE(malloc.h HAVE_MALLOC_H)
 CHECK_INCLUDE_FILE(memory.h HAVE_MEMORY_H)
 CHECK_INCLUDE_FILE(netdb.h HAVE_NETDB_H)
 CHECK_INCLUDE_FILE(netinet/in.h HAVE_NETINET_IN_H)
+CHECK_INCLUDE_FILE(arpa/inet.h HAVE_ARPA_INET_H)
 CHECK_INCLUDE_FILE(sockLib.h HAVE_SOCKLIB_H)
 CHECK_INCLUDE_FILE(stdarg.h STDC_HEADERS)
 CHECK_INCLUDE_FILE(stdlib.h HAVE_STDLIB_H)
@@ -272,6 +285,7 @@ CHECK_INCLUDE_FILE(sys/un.h HAVE_SYS_UN_H)
 CHECK_INCLUDE_FILE(unistd.h HAVE_UNISTD_H)
 CHECK_INCLUDE_FILE(windows.h HAVE_WINDOWS_H)
 CHECK_INCLUDE_FILE(winsock.h HAVE_WINSOCK_H)
+CHECK_INCLUDE_FILE(winsock2.h HAVE_WINSOCK2_H)
 
 if(SIZEOF_SIZE_T EQUAL SIZEOF_INT)
   set(UIO_SIZE_T_TYPE "unsigned int")
@@ -303,6 +317,14 @@ CHECK_STRUCT_HAS_MEMBER("struct iovec" iov_base sys/uio.h HAS_IOV_BASE_IOVEC)
 if(NOT HAS_IOV_BASE_IOVEC)
   set(NEED_IOVEC_DEFINE TRUE)
 endif()
+
+TRY_RUN(RUN_RESULT COMPILE_RESULT
+        # Binary directory:
+        ${CMAKE_CURRENT_BINARY_DIR}/
+        # source file
+	${CMAKE_CURRENT_SOURCE_DIR}/cmake/float_format_test.c
+	RUN_OUTPUT_VARIABLE FFS_FLOAT_FORMAT)
+message(STATUS "Float format is ${FFS_FLOAT_FORMAT}")
 
 if(NOT DEFINED FORMAT_SERVER_HOST)
   set(FORMAT_SERVER_HOST "formathost.cercs.gatech.edu")

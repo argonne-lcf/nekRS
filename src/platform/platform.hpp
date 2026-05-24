@@ -46,6 +46,9 @@ public:
 
   bool serial() const { return _serial; };
 
+  bool hostSpilling() const { return _hostSpilling; };
+  void setHostSpilling(bool val) { _hostSpilling = val; };
+
 private:
   static platform_t *singleton;
 
@@ -62,6 +65,7 @@ public:
   Par *par;
   app_t *app;
   bool _serial;
+  bool _hostSpilling;
   linAlg_t *linAlg;
   std::unique_ptr<flopCounter_t> flopCounter;
   int exitValue;

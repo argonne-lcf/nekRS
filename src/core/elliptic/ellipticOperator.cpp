@@ -30,7 +30,8 @@ void ellipticAx(elliptic_t *elliptic,
                 dlong NelementsList,
                 const occa::memory &o_elementsList,
                 const occa::memory &o_q,
-                occa::memory &o_Aq)
+                occa::memory &o_Aq,
+                bool useCachedKernel)
 {
   if (NelementsList == 0) {
     return;
@@ -92,7 +93,7 @@ void ellipticAx(elliptic_t *elliptic,
     return platform->kernelRequests.load(kernelNamePrefix + "Partial" + kernelName);
   };
 
-  if (!elliptic->AxKernel.isInitialized()) elliptic->AxKernel = loadKernel();
+  if (!elliptic->AxKernel.isInitialized() || !useCachedKernel) elliptic->AxKernel = loadKernel();
   elliptic->AxKernel(NelementsList,
                      elliptic->fieldOffset,
                      elliptic->loffset,

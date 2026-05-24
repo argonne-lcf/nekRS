@@ -59,10 +59,10 @@ void iofldNek::openEngine()
 
 size_t iofldNek::write()
 {
-  const auto fileName = fileNameBase + fileSuffix();
+  const auto fileName = folderName + fileNameBase + fileSuffix();
 
   if (platform->comm.mpiRank() == 0) {
-    std::cout << " fileName: " << fileName << std::endl << std::flush;
+    std::cout << " fileName: " << folderName << fileName << std::endl << std::flush;
   }
 
   std::vector<occa::memory> o_x;
@@ -132,7 +132,7 @@ size_t iofldNek::write()
     std::string casename;
     platform->options.getArgs("CASENAME", casename);
 
-    std::ofstream outFile(fileNameBase + ".nek5000");
+    std::ofstream outFile(folderName + fileNameBase + ".nek5000");
     outFile << "filetemplate: " << fileNameBase + R"(%01d.f%05d)" << std::endl
             << "firsttimestep: 0" << std::endl
             << "numtimesteps: " << getStepCounter() + 1 << std::endl;
@@ -185,6 +185,20 @@ size_t iofldNek::read()
     }
   };
 
+  auto hasTemperature = false;
+  auto hasScalar00 = false;
+  for (auto &entry : userFields) { // temperature is scalar00
+    const auto &name = entry.first;
+    if (name == "temperature") {
+      hasTemperature = true;
+    }
+    if (name == "scalar" + scalarDigitStr(0)) {
+      hasScalar00 = true;
+    }
+  }
+
+  int scalarStart = (hasTemperature || !hasScalar00) ? 1 : 0;
+
   for (auto &entry : userFields) {
     const auto &name = entry.first;
 
@@ -200,9 +214,8 @@ size_t iofldNek::read()
     if (name == "temperature" && fldData.o_t.size()) {
       populateVariable(name, fldData.o_t);
     }
-
     for (int is = 0; is < fldData.o_s.size(); is++) {
-      if (name == "scalar" + scalarDigitStr(is) && fldData.o_s[is].size()) {
+      if (name == "scalar" + scalarDigitStr(is + scalarStart) && fldData.o_s[is].size()) {
         populateVariable(name, fldData.o_s[is]);
       }
     }

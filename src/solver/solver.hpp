@@ -30,6 +30,7 @@ public:
   virtual void restoreSolutionState() = 0;
   virtual void applyDirichlet(double time) = 0;
   virtual void setupEllipticSolver() = 0;
+  virtual void allocate() = 0;
   virtual void finalize() = 0;
   virtual void setTimeIntegrationCoeffs(int tstep) = 0;
 

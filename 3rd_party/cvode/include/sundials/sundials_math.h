@@ -4,8 +4,11 @@
  *                Aaron Collier @ LLNL
  * -----------------------------------------------------------------
  * SUNDIALS Copyright Start
- * Copyright (c) 2002-2022, Lawrence Livermore National Security
+ * Copyright (c) 2025-2026, Lawrence Livermore National Security,
+ * University of Maryland Baltimore County, and the SUNDIALS contributors.
+ * Copyright (c) 2013-2025, Lawrence Livermore National Security
  * and Southern Methodist University.
+ * Copyright (c) 2002-2013, Lawrence Livermore National Security.
  * All rights reserved.
  *
  * See the top-level LICENSE and NOTICE files for details.
@@ -23,10 +26,9 @@
 #define _SUNDIALSMATH_H
 
 #include <math.h>
-
 #include <sundials/sundials_types.h>
 
-#ifdef __cplusplus  /* wrapper to enable C++ usage */
+#ifdef __cplusplus /* wrapper to enable C++ usage */
 extern "C" {
 #endif
 
@@ -47,6 +49,8 @@ extern "C" {
  * SUNRexp calls the appropriate version of exp
  *
  * SUNRceil calls the appropriate version of ceil
+ *
+ * SUNRround calls the appropriate version of round
  * -----------------------------------------------------------------
  */
 
@@ -59,7 +63,7 @@ extern "C" {
 #endif
 
 #ifndef SUNSQR
-#define SUNSQR(A) ((A)*(A))
+#define SUNSQR(A) ((A) * (A))
 #endif
 
 /*
@@ -75,16 +79,15 @@ extern "C" {
  */
 
 #ifndef SUNRsqrt
-#if defined(__cplusplus) || defined(SUNDIALS_C_COMPILER_HAS_MATH_PRECISIONS)
-#  if defined(SUNDIALS_DOUBLE_PRECISION)
-#    define SUNRsqrt(x) ((x) <= RCONST(0.0) ? (RCONST(0.0)) : (sqrt((x))))
-#  elif defined(SUNDIALS_SINGLE_PRECISION)
-#    define SUNRsqrt(x) ((x) <= RCONST(0.0) ? (RCONST(0.0)) : (sqrtf((x))))
-#  elif defined(SUNDIALS_EXTENDED_PRECISION)
-#    define SUNRsqrt(x) ((x) <= RCONST(0.0) ? (RCONST(0.0)) : (sqrtl((x))))
-#  endif
+#if defined(SUNDIALS_DOUBLE_PRECISION)
+#define SUNRsqrt(x) ((x) <= SUN_RCONST(0.0) ? (SUN_RCONST(0.0)) : (sqrt((x))))
+#elif defined(SUNDIALS_SINGLE_PRECISION)
+#define SUNRsqrt(x) ((x) <= SUN_RCONST(0.0) ? (SUN_RCONST(0.0)) : (sqrtf((x))))
+#elif defined(SUNDIALS_EXTENDED_PRECISION)
+#define SUNRsqrt(x) ((x) <= SUN_RCONST(0.0) ? (SUN_RCONST(0.0)) : (sqrtl((x))))
 #else
-#  define SUNRsqrt(x) ((x) <= RCONST(0.0) ? (RCONST(0.0)) : ((sunrealtype) sqrt((double) (x))))
+#error \
+  "SUNDIALS precision not defined, report to github.com/LLNL/sundials/issues"
 #endif
 #endif
 
@@ -100,16 +103,15 @@ extern "C" {
  */
 
 #ifndef SUNRabs
-#if defined(__cplusplus) || defined(SUNDIALS_C_COMPILER_HAS_MATH_PRECISIONS)
-#  if defined(SUNDIALS_DOUBLE_PRECISION)
-#    define SUNRabs(x) (fabs((x)))
-#  elif defined(SUNDIALS_SINGLE_PRECISION)
-#    define SUNRabs(x) (fabsf((x)))
-#  elif defined(SUNDIALS_EXTENDED_PRECISION)
-#    define SUNRabs(x) (fabsl((x)))
-#  endif
+#if defined(SUNDIALS_DOUBLE_PRECISION)
+#define SUNRabs(x) (fabs((x)))
+#elif defined(SUNDIALS_SINGLE_PRECISION)
+#define SUNRabs(x) (fabsf((x)))
+#elif defined(SUNDIALS_EXTENDED_PRECISION)
+#define SUNRabs(x) (fabsl((x)))
 #else
-#  define SUNRabs(x) ((sunrealtype) fabs((double) (x)))
+#error \
+  "SUNDIALS precision not defined, report to github.com/LLNL/sundials/issues"
 #endif
 #endif
 
@@ -125,16 +127,15 @@ extern "C" {
  */
 
 #ifndef SUNRexp
-#if defined(__cplusplus) || defined(SUNDIALS_C_COMPILER_HAS_MATH_PRECISIONS)
-#  if defined(SUNDIALS_DOUBLE_PRECISION)
-#    define SUNRexp(x) (exp((x)))
-#  elif defined(SUNDIALS_SINGLE_PRECISION)
-#    define SUNRexp(x) (expf((x)))
-#  elif defined(SUNDIALS_EXTENDED_PRECISION)
-#    define SUNRexp(x) (expl((x)))
-#  endif
+#if defined(SUNDIALS_DOUBLE_PRECISION)
+#define SUNRexp(x) (exp((x)))
+#elif defined(SUNDIALS_SINGLE_PRECISION)
+#define SUNRexp(x) (expf((x)))
+#elif defined(SUNDIALS_EXTENDED_PRECISION)
+#define SUNRexp(x) (expl((x)))
 #else
-#  define SUNRexp(x) ((sunrealtype) exp((double) (x)))
+#error \
+  "SUNDIALS precision not defined, report to github.com/LLNL/sundials/issues"
 #endif
 #endif
 
@@ -150,18 +151,135 @@ extern "C" {
  */
 
 #ifndef SUNRceil
-#if defined(__cplusplus) || defined(SUNDIALS_C_COMPILER_HAS_MATH_PRECISIONS)
-#  if defined(SUNDIALS_DOUBLE_PRECISION)
-#    define SUNRceil(x) (ceil((x)))
-#  elif defined(SUNDIALS_SINGLE_PRECISION)
-#    define SUNRceil(x) (ceilf((x)))
-#  elif defined(SUNDIALS_EXTENDED_PRECISION)
-#    define SUNRceil(x) (ceill((x)))
-#  endif
+#if defined(SUNDIALS_DOUBLE_PRECISION)
+#define SUNRceil(x) (ceil((x)))
+#elif defined(SUNDIALS_SINGLE_PRECISION)
+#define SUNRceil(x) (ceilf((x)))
+#elif defined(SUNDIALS_EXTENDED_PRECISION)
+#define SUNRceil(x) (ceill((x)))
 #else
-#  define SUNRceil(x) ((sunrealtype) ceil((double) (x)))
+#error \
+  "SUNDIALS precision not defined, report to github.com/LLNL/sundials/issues"
 #endif
 #endif
+
+/*
+ * -----------------------------------------------------------------
+ * Function : SUNRcopysign
+ * -----------------------------------------------------------------
+ * Usage : sunrealtype z;
+ *         z = SUNRcopysign(x, y);
+ * -----------------------------------------------------------------
+ * SUNRcopysign(x, y) returns x with the sign of y.
+ * -----------------------------------------------------------------
+ */
+
+#ifndef SUNRcopysign
+#if defined(SUNDIALS_DOUBLE_PRECISION)
+#define SUNRcopysign(x, y) (copysign((x), (y)))
+#elif defined(SUNDIALS_SINGLE_PRECISION)
+#define SUNRcopysign(x, y) (copysignf((x), (y)))
+#elif defined(SUNDIALS_EXTENDED_PRECISION)
+#define SUNRcopysign(x, y) (copysignl((x), (y)))
+#else
+#error \
+  "SUNDIALS precision not defined, report to github.com/LLNL/sundials/issues"
+#endif
+#endif
+
+/*
+ * -----------------------------------------------------------------
+ * Function : SUNRsamesign
+ * -----------------------------------------------------------------
+ * Usage : sunrealtype z;
+ *         z = SUNRsamesign(x, y);
+ * -----------------------------------------------------------------
+ * SUNRsamesign(x, y) returns true if x and y share the same sign,
+ * false otherwise
+ * -----------------------------------------------------------------
+ */
+
+#ifndef SUNRsamesign
+#define SUNRsamesign(x, y) (signbit((x)) == signbit((y)))
+#endif
+
+/*
+ * -----------------------------------------------------------------
+ * Function : SUNRdifferentsign
+ * -----------------------------------------------------------------
+ * Usage : sunrealtype z;
+ *         z = SUNRdifferentsign(x, y);
+ * -----------------------------------------------------------------
+ * SUNRdifferentsign(x) returns true if x and y have different
+ * signs, false otherwise
+ * -----------------------------------------------------------------
+ */
+
+#ifndef SUNRdifferentsign
+#define SUNRdifferentsign(x, y) (!SUNRsamesign((x), (y)))
+#endif
+
+/*
+ * -----------------------------------------------------------------
+ * Function : SUNRpowerR
+ * -----------------------------------------------------------------
+ * Usage : sunrealtype base, exponent, ans;
+ *         ans = SUNRpowerR(base,exponent);
+ * -----------------------------------------------------------------
+ * SUNRpowerR returns the value of base^exponent, where both base and
+ * exponent are of type sunrealtype.
+ * -----------------------------------------------------------------
+ */
+#ifndef SUNRpowerR
+#if defined(SUNDIALS_DOUBLE_PRECISION)
+#define SUNRpowerR(base, exponent) (pow(base, exponent))
+#elif defined(SUNDIALS_SINGLE_PRECISION)
+#define SUNRpowerR(base, exponent) (powf(base, exponent))
+#elif defined(SUNDIALS_EXTENDED_PRECISION)
+#define SUNRpowerR(base, exponent) (powl(base, exponent))
+#else
+#error \
+  "SUNDIALS precision not defined, report to github.com/LLNL/sundials/issues"
+#endif
+#endif
+
+/*
+ * -----------------------------------------------------------------
+ * Function : SUNRround
+ * -----------------------------------------------------------------
+ * Usage : sunrealtype round_x;
+ *         round_x = SUNRround(x);
+ * -----------------------------------------------------------------
+ * SUNRround(x) returns the smallest integer value not less than x.
+ * -----------------------------------------------------------------
+ */
+
+#ifndef SUNRround
+#if defined(SUNDIALS_DOUBLE_PRECISION)
+#define SUNRround(x) (round((x)))
+#elif defined(SUNDIALS_SINGLE_PRECISION)
+#define SUNRround(x) (roundf((x)))
+#elif defined(SUNDIALS_EXTENDED_PRECISION)
+#define SUNRround(x) (roundl((x)))
+#else
+#error \
+  "SUNDIALS precision not defined, report to github.com/LLNL/sundials/issues"
+#endif
+#endif
+
+/*
+ * -----------------------------------------------------------------
+ * Function : SUNIpowerI
+ * -----------------------------------------------------------------
+ * Usage : int exponent, base, ans;
+ *         ans = SUNIpowerI(base,exponent);
+ * -----------------------------------------------------------------
+ * SUNIpowerI returns the value of base^exponent, where base and
+ * exponent are of type int and exponent is nonnegative.
+ * -----------------------------------------------------------------
+ */
+
+SUNDIALS_EXPORT int SUNIpowerI(int base, int exponent);
 
 /*
  * -----------------------------------------------------------------
@@ -180,21 +298,6 @@ SUNDIALS_EXPORT sunrealtype SUNRpowerI(sunrealtype base, int exponent);
 
 /*
  * -----------------------------------------------------------------
- * Function : SUNRpowerR
- * -----------------------------------------------------------------
- * Usage : sunrealtype base, exponent, ans;
- *         ans = SUNRpowerR(base,exponent);
- * -----------------------------------------------------------------
- * SUNRpowerR returns the value of base^exponent, where both base and
- * exponent are of type sunrealtype. If base < ZERO, then SUNRpowerR
- * returns ZERO.
- * -----------------------------------------------------------------
- */
-
-SUNDIALS_EXPORT sunrealtype SUNRpowerR(sunrealtype base, sunrealtype exponent);
-
-/*
- * -----------------------------------------------------------------
  * Function : SUNRCompare
  * -----------------------------------------------------------------
  * Usage : int isNotEqual;
@@ -209,7 +312,7 @@ SUNDIALS_EXPORT sunrealtype SUNRpowerR(sunrealtype base, sunrealtype exponent);
  * -----------------------------------------------------------------
  */
 
-SUNDIALS_EXPORT booleantype SUNRCompare(sunrealtype a, sunrealtype b);
+SUNDIALS_EXPORT sunbooleantype SUNRCompare(sunrealtype a, sunrealtype b);
 
 /*
  * -----------------------------------------------------------------
@@ -227,15 +330,16 @@ SUNDIALS_EXPORT booleantype SUNRCompare(sunrealtype a, sunrealtype b);
  * -----------------------------------------------------------------
  */
 
-SUNDIALS_EXPORT booleantype SUNRCompareTol(sunrealtype a, sunrealtype b, sunrealtype tol);
+SUNDIALS_EXPORT sunbooleantype SUNRCompareTol(sunrealtype a, sunrealtype b,
+                                              sunrealtype tol);
 
 /*
  * -----------------------------------------------------------------
  * Function : SUNStrToReal
  * -----------------------------------------------------------------
- * Usage : realtype a = SUNStrToReal(const char* str)
+ * Usage : sunrealtype a = SUNStrToReal(const char* str)
  * -----------------------------------------------------------------
- * SUNStrToReal parses str into the realtype variable. Uses standard
+ * SUNStrToReal parses str into the sunrealtype variable. Uses standard
  * strtod variants when they are available.
  * -----------------------------------------------------------------
  */

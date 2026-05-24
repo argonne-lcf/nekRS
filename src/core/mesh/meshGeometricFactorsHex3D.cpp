@@ -30,6 +30,23 @@
 #include "platform.hpp"
 #include "linAlg.hpp"
 
+void mesh_t::cubatureGeometricFactors(occa::memory o_out)
+{
+  if (!o_out.isInitialized()) o_out = o_cubvgeo;
+
+  double flops = 0.0;
+  if (cubNq > 1) {
+    cubatureGeometricFactorsKernel(Nelements, o_cubD, o_x, o_y, o_z, o_cubInterpT, o_cubw, o_out);
+
+    flops += 18 * Np * Nq;                                             // deriv
+    flops += 18 * (cubNq * Np + cubNq * cubNq * Nq * Nq + cubNp * Nq); // c->f interp
+    flops += 55 * cubNp;
+    flops *= static_cast<double>(Nelements);
+  }
+  flops *= static_cast<double>(Nelements);
+  platform->flopCounter->add("mesh_t::update", flops);
+}
+
 int mesh_t::geometricFactors()
 {
   auto o_J = platform->deviceMemoryPool.reserve<dfloat>(Nlocal * sizeof(dfloat));
@@ -39,19 +56,9 @@ int mesh_t::geometricFactors()
   const dfloat minJ = platform->linAlg->min(Nlocal, o_J, platform->comm.mpiComm());
   const dfloat maxJ = platform->linAlg->max(Nlocal, o_J, platform->comm.mpiComm());
 
-  double flopsCubatureGeometricFactors = 0.0;
-  if (cubNq > 1) {
-    cubatureGeometricFactorsKernel(Nelements, o_cubD, o_x, o_y, o_z, o_cubInterpT, o_cubw, o_cubvgeo);
-
-    flopsCubatureGeometricFactors += 18 * Np * Nq;                                             // deriv
-    flopsCubatureGeometricFactors += 18 * (cubNq * Np + cubNq * cubNq * Nq * Nq + cubNp * Nq); // c->f interp
-    flopsCubatureGeometricFactors += 55 * cubNp; // geometric factor computation
-    flopsCubatureGeometricFactors *= static_cast<double>(Nelements);
-  }
-
-  double flopsGeometricFactors = 18 * Np * Nq + 91 * Np;
-  flopsGeometricFactors *= static_cast<double>(Nelements);
-  platform->flopCounter->add("mesh_t::update", flopsGeometricFactors + flopsCubatureGeometricFactors);
+  double flops = 18 * Np * Nq + 91 * Np;
+  flops *= static_cast<double>(Nelements);
+  platform->flopCounter->add("mesh_t::update", flops);
 
   return (minJ < 0 || maxJ < 0) ? 1 : 0;
 }

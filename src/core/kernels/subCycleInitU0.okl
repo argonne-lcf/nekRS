@@ -35,7 +35,7 @@
                             @ restrict const dfloat *S,
                             @ restrict dfloat *BS)
 {
-  if (torder == (nEXT - 1)) {
+  if (torder == (nEXT - 1)) { // initialize
 
     for (dlong n = 0; n < N; ++n; @tile(p_blockSize, @outer, @inner)) {
       const dfloat coef = bdfCoeffs[torder];

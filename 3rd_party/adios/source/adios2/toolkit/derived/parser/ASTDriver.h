@@ -27,6 +27,7 @@ public:
 
     // Defined in lexer.l
     void parse(const std::string input);
+    void destroy_lex_structures();
 
     ASTNode *getAST();
 
@@ -38,6 +39,7 @@ public:
 
     void add_lookup_entry(std::string alias, std::string var_name, indx_type indices);
     void add_lookup_entry(std::string alias, std::string var_name);
+    void add_number(double);
 
     void createNode(std::string, size_t);
     void createNode(std::string);

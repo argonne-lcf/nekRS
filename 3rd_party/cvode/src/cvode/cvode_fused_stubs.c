@@ -3,8 +3,11 @@
  * Programmer(s): Cody J. Balos @ LLNL
  * -----------------------------------------------------------------
  * SUNDIALS Copyright Start
- * Copyright (c) 2002-2022, Lawrence Livermore National Security
+ * Copyright (c) 2025-2026, Lawrence Livermore National Security,
+ * University of Maryland Baltimore County, and the SUNDIALS contributors.
+ * Copyright (c) 2013-2025, Lawrence Livermore National Security
  * and Southern Methodist University.
+ * Copyright (c) 2002-2013, Lawrence Livermore National Security.
  * All rights reserved.
  *
  * See the top-level LICENSE and NOTICE files for details.
@@ -16,15 +19,15 @@
  * -----------------------------------------------------------------
  */
 
-
 #include "cvode_diag_impl.h"
 #include "cvode_impl.h"
+#include "sundials_macros.h"
 
-#define ZERO   RCONST(0.0)
-#define PT1    RCONST(0.1)
-#define FRACT  RCONST(0.1)
-#define ONEPT5 RCONST(1.50)
-#define ONE    RCONST(1.0)
+#define ZERO   SUN_RCONST(0.0)
+#define PT1    SUN_RCONST(0.1)
+#define FRACT  SUN_RCONST(0.1)
+#define ONEPT5 SUN_RCONST(1.50)
+#define ONE    SUN_RCONST(1.0)
 
 /*
  * -----------------------------------------------------------------
@@ -32,18 +35,16 @@
  * -----------------------------------------------------------------
  */
 
-int cvEwtSetSS_fused(const booleantype atolmin0,
-                     const realtype reltol,
-                     const realtype Sabstol,
-                     const N_Vector ycur,
-                     N_Vector tempv,
-                     N_Vector weight)
+int cvEwtSetSS_fused(const sunbooleantype atolmin0, const sunrealtype reltol,
+                     const sunrealtype Sabstol, const N_Vector ycur,
+                     N_Vector tempv, N_Vector weight)
 {
   N_VAbs(ycur, tempv);
   N_VScale(reltol, tempv, tempv);
   N_VAddConst(tempv, Sabstol, tempv);
-  if (atolmin0) {
-    if (N_VMin(tempv) <= ZERO) return(-1);
+  if (atolmin0)
+  {
+    if (N_VMin(tempv) <= ZERO) { return (-1); }
   }
   N_VInv(tempv, weight);
   return 0;
@@ -55,24 +56,19 @@ int cvEwtSetSS_fused(const booleantype atolmin0,
  * -----------------------------------------------------------------
  */
 
-
-int cvEwtSetSV_fused(const booleantype atolmin0,
-                     const realtype reltol,
-                     const N_Vector Vabstol,
-                     const N_Vector ycur,
-                     N_Vector tempv,
-                     N_Vector weight)
+int cvEwtSetSV_fused(const sunbooleantype atolmin0, const sunrealtype reltol,
+                     const N_Vector Vabstol, const N_Vector ycur,
+                     N_Vector tempv, N_Vector weight)
 {
   N_VAbs(ycur, tempv);
-  N_VLinearSum(reltol, tempv, ONE,
-               Vabstol, tempv);
-  if (atolmin0) {
-    if (N_VMin(tempv) <= ZERO) return(-1);
+  N_VLinearSum(reltol, tempv, ONE, Vabstol, tempv);
+  if (atolmin0)
+  {
+    if (N_VMin(tempv) <= ZERO) { return (-1); }
   }
   N_VInv(tempv, weight);
   return 0;
 }
-
 
 /*
  * -----------------------------------------------------------------
@@ -81,21 +77,18 @@ int cvEwtSetSV_fused(const booleantype atolmin0,
  * -----------------------------------------------------------------
  */
 
-
-int cvCheckConstraints_fused(const N_Vector c,
-                             const N_Vector ewt,
-                             const N_Vector y,
-                             const N_Vector mm,
-                             N_Vector tmp)
+int cvCheckConstraints_fused(const N_Vector c, const N_Vector ewt,
+                             const N_Vector y, const N_Vector mm, N_Vector tmp,
+                             N_Vector save)
 {
-  N_VCompare(ONEPT5, c, tmp);           /* a[i]=1 when |c[i]|=2  */
-  N_VProd(tmp, c, tmp);                 /* a * c                 */
-  N_VDiv(tmp, ewt, tmp);                /* a * c * wt            */
+  N_VCompare(ONEPT5, c, tmp); /* a[i]=1 when |c[i]|=2  */
+  N_VProd(tmp, c, tmp);       /* a * c                 */
+  N_VDiv(tmp, ewt, tmp);      /* a * c * wt            */
+  N_VScale(-PT1, tmp, save);
   N_VLinearSum(ONE, y, -PT1, tmp, tmp); /* y - 0.1 * a * c * wt  */
   N_VProd(tmp, mm, tmp);                /* v = mm*(y-0.1*a*c*wt) */
   return 0;
 }
-
 
 /*
  * -----------------------------------------------------------------
@@ -103,13 +96,9 @@ int cvCheckConstraints_fused(const N_Vector c,
  * -----------------------------------------------------------------
  */
 
-
-int cvNlsResid_fused(const realtype rl1,
-                     const realtype ngamma,
-                     const N_Vector zn1,
-                     const N_Vector ycor,
-                     const N_Vector ftemp,
-                     N_Vector res)
+int cvNlsResid_fused(const sunrealtype rl1, const sunrealtype ngamma,
+                     const N_Vector zn1, const N_Vector ycor,
+                     const N_Vector ftemp, N_Vector res)
 {
   N_VLinearSum(rl1, zn1, ONE, ycor, res);
   N_VLinearSum(ngamma, ftemp, ONE, res, res);
@@ -122,13 +111,9 @@ int cvNlsResid_fused(const realtype rl1,
  * -----------------------------------------------------------------
  */
 
-int cvDiagSetup_formY(const realtype h,
-                      const realtype r,
-                      const N_Vector fpred,
-                      const N_Vector zn1,
-                      const N_Vector ypred,
-                      N_Vector ftemp,
-                      N_Vector y)
+int cvDiagSetup_formY(const sunrealtype h, const sunrealtype r,
+                      const N_Vector fpred, const N_Vector zn1,
+                      const N_Vector ypred, N_Vector ftemp, N_Vector y)
 {
   N_VLinearSum(h, fpred, -ONE, zn1, ftemp);
   N_VLinearSum(r, ftemp, ONE, ypred, y);
@@ -142,16 +127,11 @@ int cvDiagSetup_formY(const realtype h,
  * -----------------------------------------------------------------
  */
 
-int cvDiagSetup_buildM(const realtype fract,
-                       const realtype uround,
-                       const realtype h,
-                       const N_Vector ftemp,
-                       const N_Vector fpred,
-                       const N_Vector ewt,
-                       N_Vector bit,
-                       N_Vector bitcomp,
-                       N_Vector y,
-                       N_Vector M)
+int cvDiagSetup_buildM(SUNDIALS_MAYBE_UNUSED const sunrealtype fract,
+                       const sunrealtype uround, const sunrealtype h,
+                       const N_Vector ftemp, const N_Vector fpred,
+                       const N_Vector ewt, N_Vector bit, N_Vector bitcomp,
+                       N_Vector y, N_Vector M)
 {
   N_VLinearSum(ONE, M, -ONE, fpred, M);
   N_VLinearSum(FRACT, ftemp, -h, M, M);
@@ -167,14 +147,13 @@ int cvDiagSetup_buildM(const realtype fract,
   return 0;
 }
 
-
 /*
  * -----------------------------------------------------------------
  *  Update M with changed gamma so that M = I - gamma*J.
  * -----------------------------------------------------------------
  */
 
-int cvDiagSolve_updateM(const realtype r, N_Vector M)
+int cvDiagSolve_updateM(const sunrealtype r, N_Vector M)
 {
   N_VInv(M, M);
   N_VAddConst(M, -ONE, M);

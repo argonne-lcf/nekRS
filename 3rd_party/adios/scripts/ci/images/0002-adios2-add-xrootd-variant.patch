@@ -1,0 +1,42 @@
+From fc4753e9535fa9148728207a29e9ee5a4c630946 Mon Sep 17 00:00:00 2001
+From: Scott Wittenburg <scott.wittenburg@kitware.com>
+Date: Tue, 21 Oct 2025 21:14:18 +0000
+Subject: [PATCH] adios2: Add xrootd variant
+
+---
+ repos/spack_repo/builtin/packages/adios2/package.py | 5 +++++
+ 1 file changed, 5 insertions(+)
+
+diff --git a/repos/spack_repo/builtin/packages/adios2/package.py b/repos/spack_repo/builtin/packages/adios2/package.py
+index 511c5888..d4b96519 100644
+--- a/repos/spack_repo/builtin/packages/adios2/package.py
++++ b/repos/spack_repo/builtin/packages/adios2/package.py
+@@ -105,6 +105,8 @@ class Adios2(CMakePackage, CudaPackage, ROCmPackage):
+         description="Enable support for in situ visualization plugin using ParaView Catalyst",
+     )
+
++    variant("xrootd", default=True, description="Enable the XRootD")
++
+     # Optional language bindings, C++11 and C always provided
+     variant("kokkos", default=False, when="@2.9:", description="Enable Kokkos support")
+     variant("sycl", default=False, when="@2.10:", description="Enable SYCL support")
+@@ -209,6 +211,8 @@ class Adios2(CMakePackage, CudaPackage, ROCmPackage):
+     depends_on("aws-sdk-cpp", when="+aws")
+     depends_on("libcatalyst@2", when="+libcatalyst")
+
++    depends_on("xrootd~davix", when="+xrootd")
++
+     # error: invalid use of incomplete type 'PyFrameObject' {aka 'struct _frame'}
+     conflicts("^python@3.11:", when="@:2.7")
+
+@@ -275,6 +279,7 @@ class Adios2(CMakePackage, CudaPackage, ROCmPackage):
+             from_variant("CMAKE_POSITION_INDEPENDENT_CODE", "pic"),
+             from_variant("BUILD_SHARED_LIBS", "shared"),
+             from_variant("ADIOS2_USE_AWSSDK", "aws"),
++            from_variant("ADIOS2_USE_XRootD", "xrootd"),
+             from_variant("ADIOS2_USE_Blosc", "blosc"),
+             from_variant("ADIOS2_USE_Blosc2", "blosc2"),
+             from_variant("ADIOS2_USE_BZip2", "bzip2"),
+--
+2.34.1
+

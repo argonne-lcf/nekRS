@@ -64,6 +64,8 @@ public:
 
     void Seek(const size_t start = MaxSizeT) final;
 
+    size_t CurrentPos() final { return m_SeekPos; };
+
     void Truncate(const size_t length) final;
 
     void MkDir(const std::string &fileName) final;
@@ -73,7 +75,7 @@ private:
     // static class Impl m_ImplSingleton;
     // Impl *m_Impl;
     // std::unique_ptr<Impl> m_Impl;
-    Remote m_Remote;
+    std::unique_ptr<Remote> m_Remote;
     int m_Errno = 0;
     bool m_IsOpening = false;
     std::future<int> m_OpenFuture;
@@ -81,6 +83,7 @@ private:
     size_t m_Size = 0;
 
     void SetUpCache();
+    std::string m_Hostname; // name from hosts.yaml
     std::string m_FileName;
     std::string m_CachePath;        // local cache directory
     bool m_CachingThisFile = false; // save content to local cache

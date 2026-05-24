@@ -420,9 +420,9 @@ static void compute_1d_stiffness_matrix(dfloat *a,
       return sum / lambda0.size();
     }();
 
-    for (int i = 0; i < n + 1; ++i) {
-      for (int j = 0; j < n + 1; ++j) {
-        a[i * (n + 1) + j] *= lambda0AvgE;
+    for (int i = 0; i < nl; ++i) {
+      for (int j = 0; j < nl; ++j) {
+        a(i, j) *= lambda0AvgE;
       }
     }
   }
@@ -899,6 +899,9 @@ void pMGLevel::generateSchwarzWeights()
     wts[i] = 1.0 / wts[i];
   }
 
+  if(!o_wts.isInitialized()) {
+    o_wts = platform->deviceMemoryPool.reserve<pfloat>(weightSize);
+  }
   o_wts.copyFrom(wts, weightSize);
 
   free(work1);
@@ -930,11 +933,12 @@ void pMGLevel::updateSmootherSchwarz(elliptic_t *baseElliptic)
   free(lengths->length_right_z);
   free(lengths);
 
-  auto casted_Sx = (pfloat *)calloc(o_Sx.size(), sizeof(pfloat));
-  auto casted_Sy = (pfloat *)calloc(o_Sy.size(), sizeof(pfloat));
-  auto casted_Sz = (pfloat *)calloc(o_Sz.size(), sizeof(pfloat));
+  std::vector<pfloat> casted_Sx(Nq * Nq * Nelements);
+  std::vector<pfloat> casted_Sy(Nq * Nq * Nelements);
+  std::vector<pfloat> casted_Sz(Nq * Nq * Nelements);
+
   bool foundInvalidValues = false;
-  for (dlong i = 0; i < o_Sx.size(); ++i) {
+  for (dlong i = 0; i < casted_Sx.size(); ++i) {
     foundInvalidValues |= std::isnan(op->Sx[i]) || std::isinf(op->Sx[i]);
     casted_Sx[i] = static_cast<pfloat>(op->Sx[i]);
 
@@ -950,13 +954,24 @@ void pMGLevel::updateSmootherSchwarz(elliptic_t *baseElliptic)
              "%s\n",
              "found invalid Sx,Sy,Sz values!");
 
-  o_Sx.copyFrom(casted_Sx);
-  o_Sy.copyFrom(casted_Sy);
-  o_Sz.copyFrom(casted_Sz);
+  if (!o_Sx.isInitialized()) {
+    o_Sx = platform->deviceMemoryPool.reserve<pfloat>(casted_Sx.size());
+  }
+  o_Sx.copyFrom(casted_Sx.data());
+
+  if (!o_Sy.isInitialized()) {
+    o_Sy = platform->deviceMemoryPool.reserve<pfloat>(casted_Sy.size());
+  }
+  o_Sy.copyFrom(casted_Sy.data());
+
+  if (!o_Sz.isInitialized()) {
+    o_Sz = platform->deviceMemoryPool.reserve<pfloat>(casted_Sz.size());
+  }
+  o_Sz.copyFrom(casted_Sz.data());
 
   foundInvalidValues = false;
-  auto casted_D = (pfloat *)calloc(Np * Nelements, sizeof(pfloat));
-  for (dlong i = 0; i < o_invL.size(); ++i) {
+  std::vector<pfloat> casted_D(Np * Nelements);
+  for (dlong i = 0; i < casted_D.size(); ++i) {
     foundInvalidValues |= std::isnan(op->D[i]) || std::isinf(op->D[i]);
     casted_D[i] = static_cast<pfloat>(op->D[i]);
   }
@@ -966,12 +981,10 @@ void pMGLevel::updateSmootherSchwarz(elliptic_t *baseElliptic)
              "%s\n",
              "found invalid invL values!");
 
-  o_invL.copyFrom(casted_D);
-
-  free(casted_Sx);
-  free(casted_Sy);
-  free(casted_Sz);
-  free(casted_D);
+  if (!o_invL.isInitialized()) {
+    o_invL = platform->deviceMemoryPool.reserve<pfloat>(casted_D.size());
+  }
+  o_invL.copyFrom(casted_D.data());
 
   free(op->Sx);
   free(op->Sy);
@@ -1009,15 +1022,11 @@ void pMGLevel::setupSmootherSchwarz(elliptic_t *baseElliptic)
   const int Nq_e = extendedMesh->Nq;
   const int Np_e = extendedMesh->Np;
 
-  o_wts = platform->device.malloc<pfloat>(Np * Nelements);
-  o_Sx = platform->device.malloc<pfloat>(Nq_e * Nq_e * Nelements);
-  o_Sy = platform->device.malloc<pfloat>(Nq_e * Nq_e * Nelements);
-  o_Sz = platform->device.malloc<pfloat>(Nq_e * Nq_e * Nelements);
-  o_invL = platform->device.malloc<pfloat>(Np_e * Nelements);
+  const auto useRAS = options.compareArgs("MULTIGRID SMOOTHER", "RAS");
 
-  o_work1 = platform->device.malloc<pfloat>(Np_e * Nelements);
-  if (!options.compareArgs("MULTIGRID SMOOTHER", "RAS")) {
-    o_work2 = platform->device.malloc<pfloat>(Np_e * Nelements);
+  o_work1 = platform->deviceMemoryPool.reserve<pfloat>(Np_e * Nelements);
+  if (!useRAS) {
+    o_work2 = platform->deviceMemoryPool.reserve<pfloat>(Np_e * Nelements);
   }
 
   updateSmootherSchwarz(baseElliptic);
@@ -1025,7 +1034,7 @@ void pMGLevel::setupSmootherSchwarz(elliptic_t *baseElliptic)
   {
     const std::string suffix = std::string("_") + std::to_string(Nq_e - 1) + std::string("pfloat");
     preFDMKernel = platform->kernelRequests.load("preFDM" + suffix);
-    fusedFDMKernel = platform->kernelRequests.load("fusedFDM" + suffix);
+    fusedFDMKernel = platform->kernelRequests.load("fusedFDM" + ((useRAS) ? std::string("RAS") : std::string("")) + suffix);
     postFDMKernel = platform->kernelRequests.load("postFDM" + suffix);
   }
 
@@ -1057,14 +1066,14 @@ void pMGLevel::setupSmootherSchwarz(elliptic_t *baseElliptic)
     };
 
     if (platform->options.compareArgs("ENABLE GS COMM OVERLAP", "TRUE")) {
-      occa::memory o_u = platform->device.malloc<pfloat>(mesh->Nlocal);
-      occa::memory o_Su = platform->device.malloc<pfloat>(mesh->Nlocal);
+      occa::memory o_u = platform->deviceMemoryPool.reserve<pfloat>(mesh->Nlocal);
+      occa::memory o_Su = platform->deviceMemoryPool.reserve<pfloat>(mesh->Nlocal);
       const dlong Nelements = elliptic->mesh->Nelements;
 
       auto nonOverlappedTime = timeOperator(o_u, o_Su);
 
       auto callback = [&]() {
-        if (options.compareArgs("MULTIGRID SMOOTHER", "RAS")) {
+        if (useRAS) {
           if (mesh->NlocalGatherElements) {
             fusedFDMKernel(mesh->NlocalGatherElements,
                            mesh->o_localGatherElementList,
@@ -1092,7 +1101,7 @@ void pMGLevel::setupSmootherSchwarz(elliptic_t *baseElliptic)
 
       double overlappedTime;
       auto overlapEnabled = true;
-      if (options.compareArgs("MULTIGRID SMOOTHER", "RAS")) {
+      if (useRAS) {
         auto maskedGlobalIds = (hlong *)calloc(mesh->Nlocal, sizeof(hlong));
         memcpy(maskedGlobalIds, mesh->globalIds, mesh->Nlocal * sizeof(hlong));
         auto maskIds = (dlong *)std::malloc(elliptic->o_maskIds.byte_size());
@@ -1174,6 +1183,11 @@ void pMGLevel::smoothSchwarz(occa::memory &o_u, occa::memory &o_Su, bool xIsZero
 {
   const char *ogsDataTypeString = ogsPfloat;
   const dlong Nelements = elliptic->mesh->Nelements;
+
+  if (!o_work1.isInitialized()) {
+    o_work1 = platform->deviceMemoryPool.reserve<pfloat>(o_invL.size());
+  }
+
   preFDMKernel(Nelements, o_u, o_work1);
 
   oogs::startFinish(o_work1, 1, 0, ogsDataTypeString, ogsAdd, (oogs_t *)ogsExt);
@@ -1222,6 +1236,10 @@ void pMGLevel::smoothSchwarz(occa::memory &o_u, occa::memory &o_Su, bool xIsZero
 
     oogs::finish(o_Su, 1, 0, ogsDataTypeString, ogsAdd, ogsFdm);
   } else {
+    if (!o_work2.isInitialized()) {
+      o_work2 = platform->deviceMemoryPool.reserve<pfloat>(o_invL.size());
+    }
+
     const int overlap = (ogsExtOverlap != nullptr) ? 1 : 0;
     oogs_t *ogsFdm = (overlap) ? (oogs_t *)ogsExtOverlap : (oogs_t *)ogsExt;
 

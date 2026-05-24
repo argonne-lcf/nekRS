@@ -16,8 +16,8 @@ public:
   static_assert(std::is_floating_point<FPType>::value, "FPType must be a floating point type");
 
   // at the moment, only dfloat and pfloat are supported
-  static_assert(std::is_same<FPType, dfloat>::value || std::is_same<FPType, pfloat>::value,
-                "FPType must be either dfloat or pfloat");
+  static_assert(std::is_same<FPType, double>::value || std::is_same<FPType, float>::value,
+                "FPType must be either double or float");
 
   LVector_t(const std::vector<mesh_t *> &meshes, bool oallocate = true);
 

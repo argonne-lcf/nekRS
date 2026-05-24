@@ -2,10 +2,10 @@ userSections = CASEDATA
 
 [GENERAL]
 polynomialOrder = 3
-cubaturePolynomialOrder = 4
+overintegrationPolynomialOrder = 4
 
 #polynomialOrder = 7
-#cubaturePolynomialOrder = 9 
+#overintegrationPolynomialOrder = 9 
 
 #startFrom = "r.fld"+time=0
 stopAt = endTime

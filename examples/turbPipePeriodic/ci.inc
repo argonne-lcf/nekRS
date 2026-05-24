@@ -8,7 +8,7 @@ static int ciMode = 0;
 void ciSetup(MPI_Comm comm, setupAide &options)
 {
   options.setArgs("POLYNOMIAL DEGREE", std::string("7"));
-  options.setArgs("CUBATURE POLYNOMIAL DEGREE", std::string("10"));
+  options.setArgs("OVERINTEGRATION POLYNOMIAL DEGREE ", std::string("10"));
   options.setArgs("CONSTANT FLOW RATE", "FALSE");
   options.setArgs("SOLUTION OUTPUT INTERVAL", "-1");
   options.setArgs("FLUID VISCOSITY", std::to_string(1.0 / 19000.0));
@@ -16,7 +16,7 @@ void ciSetup(MPI_Comm comm, setupAide &options)
   options.setArgs("NUMBER TIMESTEPS", std::string("200"));
   options.setArgs("END TIME", std::string("-1"));
   options.setArgs("BDF ORDER", "2");
-  options.setArgs("ADVECTION TYPE", "CONVECTIVE+CUBATURE");
+  options.setArgs("ADVECTION TYPE", "CONVECTIVE+OVERINTEGRATION");
   options.setArgs("DT", std::string("6e-3"));
   options.setArgs("SUBCYCLING STEPS", std::string("2"));
 

@@ -28,6 +28,8 @@ set(CORE_SOURCES
     src/core/linearSolver/registerLinearSolverKernels.cpp
     src/core/linearSolver/linearSolverFactory.cpp
     src/core/linearSolver/amgx/AMGX.cpp
+    src/core/linearSolver/xxt/xxt.cpp
+    src/core/linearSolver/xxt/xxt.c
     src/core/neknek/neknek.cpp
     src/core/neknek/fixCoupledSurfaceFlux.cpp
     src/core/neknek/multirateNekNek.cpp
@@ -50,6 +52,7 @@ set(CORE_INCLUDE
     src/core/linearSolver
     src/core/linearSolver/hypre
     src/core/linearSolver/amgx
+    src/core/linearSolver/xxt
     src/core/udf
     src/core/advsub
     ${MESH_SOURCE_DIR}

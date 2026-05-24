@@ -27,12 +27,59 @@ int nrs_t::numberActiveFields()
   return fields;
 }
 
-void nrs_t::printSolutionMinMax()
+void nrs_t::printPropertiesMinMax()
 {
-  if (platform->comm.mpiRank() == 0) {
-    printf("================= INITIAL CONDITION ====================\n");
+  if (fluid) {
+    auto mesh = fluid->mesh;
+    auto o_ux = fluid->o_U + 0 * fluid->fieldOffset;
+    auto o_uy = fluid->o_U + 1 * fluid->fieldOffset;
+    auto o_uz = fluid->o_U + 2 * fluid->fieldOffset;
+
+    const auto minMax =
+        platform->linAlg->minMax(mesh->Nlocal, {fluid->o_rho, fluid->o_mue}, platform->comm.mpiComm());
+
+    if (platform->comm.mpiRank() == 0) {
+      printf("%-15s min/max: %g %g  %g %g\n",
+             "FLUID <trans,diff>",
+             minMax[0].first,
+             minMax[0].second,
+             minMax[1].first,
+             minMax[1].second);
+    }
   }
 
+  if (Nscalar) {
+    if (platform->comm.mpiRank() == 0) {
+      printf("%-15s min/max:", "SCALAR S <trans,diff>");
+    }
+
+    int cnt = 0;
+    for (int is = 0; is < scalar->NSfields; is++) {
+      cnt++;
+
+      auto mesh = scalar->mesh(is);
+      auto o_si = scalar->o_S + scalar->fieldOffsetScan[is];
+      auto o_rho = scalar->o_rho.slice(scalar->fieldOffsetScan[is], mesh->Nlocal);
+      auto o_diff = scalar->o_diff.slice(scalar->fieldOffsetScan[is], mesh->Nlocal);
+      const auto minMax = platform->linAlg->minMax(mesh->Nlocal, {o_rho, o_diff}, platform->comm.mpiComm());
+
+      if (platform->comm.mpiRank() == 0) {
+        if (cnt > 1) {
+          printf("  ");
+        } else {
+          printf(" ");
+        }
+        printf("%g %g  %g %g", minMax[0].first, minMax[0].second, minMax[1].first, minMax[1].second);
+      }
+    }
+    if (platform->comm.mpiRank() == 0) {
+      printf("\n");
+    }
+  }
+}
+
+void nrs_t::printSolutionMinMax()
+{
   {
     auto mesh = meshT;
     auto o_x = mesh->o_x;
@@ -129,12 +176,12 @@ void nrs_t::printSolutionMinMax()
 
 void nrs_t::setDefaultSettings(setupAide &options)
 {
-  // some settings are required for JIT compilation
+  // some settings are relevant for JIT compilation
   // user has no option to modify the settings defined here
   if (options.compareArgs("EQUATION TYPE", "NAVIERSTOKES")) {
     const auto dealiasing = (options.compareArgs("OVERINTEGRATION", "TRUE")) ? true : false;
     if (dealiasing) {
-      options.setArgs("ADVECTION TYPE", "CUBATURE+CONVECTIVE");
+      options.setArgs("ADVECTION TYPE", "OVERINTEGRATION+CONVECTIVE");
     } else {
       options.setArgs("ADVECTION TYPE", "CONVECTIVE");
     }
@@ -154,6 +201,11 @@ nrs_t::nrs_t()
 
 void nrs_t::init()
 {
+  if (platform->options.compareArgs("FLUID VELOCITY SOLVER", "NONE")) {
+    platform->options.removeArgs("FLUID STRESSFORMULATION");
+    platform->options.setArgs("CONSTANT FLOW RATE", "FALSE");
+  }
+
   if (platform->options.compareArgs("FLUID STRESSFORMULATION", "TRUE")) {
     nekrsCheck(!platform->options.compareArgs("FLUID VELOCITY SOLVER", "BLOCK"),
                platform->comm.mpiComm(),
@@ -198,8 +250,11 @@ void nrs_t::init()
   auto getMesh = [&]() {
     int N, cubN;
     platform->options.getArgs("POLYNOMIAL DEGREE", N);
-    platform->options.getArgs("CUBATURE POLYNOMIAL DEGREE", cubN);
+    platform->options.getArgs("OVERINTEGRATION POLYNOMIAL DEGREE ", cubN);
 
+    if (platform->comm.mpiRank() == 0) {
+      std::cout << "================ SETUP MESH ================" << std::endl;
+    }
     auto [meshT, meshV] = createMesh(platform->comm.mpiComm(), N, cubN, platform->kernelInfo);
 
     // use same fieldOffset
@@ -209,7 +264,7 @@ void nrs_t::init()
     meshV->fieldOffset = fieldOffset;
 
     auto cubOffset = offset;
-    if (platform->options.compareArgs("ADVECTION TYPE", "CUBATURE")) {
+    if (platform->options.compareArgs("ADVECTION TYPE", "OVERINTEGRATION")) {
       cubOffset = std::max(cubOffset, meshT->Nelements * meshT->cubNp);
     }
     cubatureOffset = alignStride<dfloat>(cubOffset);
@@ -218,11 +273,6 @@ void nrs_t::init()
   }();
   meshT = getMesh.first;
   meshV = getMesh.second;
-
-  printMeshMetrics(meshT);
-  if (meshV != meshT) {
-    printMeshMetrics(meshV);
-  }
 
   int nBDF;
   int nEXT;
@@ -251,6 +301,15 @@ void nrs_t::init()
 
   qqt = new QQt(meshV->oogs);
   qqtT = new QQt(meshT->oogs);
+
+  if (platform->comm.mpiRank() == 0) {
+    std::cout << "occa peak memory usage: " << platform->device.occaDevice().maxMemoryAllocated() << " bytes"
+              << std::endl;
+  }
+
+  if (platform->comm.mpiRank() == 0) {
+    std::cout << "creating solvers ...\n";
+  }
 
   if (platform->options.compareArgs("MOVING MESH", "TRUE")) {
     geom = [&]() {
@@ -283,6 +342,18 @@ void nrs_t::init()
 
       return std::make_unique<fluidSolver_t>(cfg, geom);
     }();
+
+    if (platform->options.compareArgs("CONSTANT FLOW RATE", "TRUE") &&
+        !platform->options.compareArgs(upperCase(fluid->velocityName) + " SOLVER", "NONE")) {
+
+      nekrsCheck(platform->options.compareArgs("FLUID PRESSURE RHO SPLITTING", "TRUE"),
+                 platform->comm.mpiComm(),
+                 EXIT_FAILURE,
+                 "%s\n",
+                 "CONSTANT FLOW RATE with RHO SPLITTING is not supported!");
+
+      flowRate = std::make_unique<flowRate_t>(fluid.get());
+    }
   }
 
   if (fluid && geom) {
@@ -297,17 +368,28 @@ void nrs_t::init()
       cfg.Nscalar = Nscalar;
       cfg.g0 = &g0;
       cfg.dt = dt;
-      cfg.dpdt = false;
       cfg.o_coeffBDF = o_coeffBDF;
       cfg.o_coeffEXT = o_coeffEXT;
       cfg.fieldOffset = fieldOffset;
       cfg.vCubatureOffset = cubatureOffset;
       if (fluid) {
+        cfg.dpdt = !bc.hasOutflow(fluid->name);
         cfg.vFieldOffset = fluid->fieldOffset;
-        cfg.dpdt = bc.hasOutflow(fluid->name);
-        cfg.o_U = fluid->o_U;
-        cfg.o_Ue = fluid->o_Ue;
-        cfg.o_relUrst = fluid->o_relUrst;
+        cfg.o_U = &fluid->o_U;
+        cfg.o_Ue = &fluid->o_Ue;
+        cfg.o_relUrst = &fluid->o_relUrst;
+      } else {
+        cfg.dpdt = false;
+
+        cfg.vFieldOffset = fieldOffset;
+        static auto o_U = platform->device.malloc(meshV->dim * cfg.vFieldOffset);
+        cfg.o_U = &o_U;
+
+        int Nsubsteps = 0;
+        platform->options.getArgs("SUBCYCLING STEPS", Nsubsteps);
+        const dlong Nstates = Nsubsteps ? std::max(o_coeffBDF.size(), o_coeffEXT.size()) : 1;
+        static auto o_relUrst = platform->device.malloc<dfloat>(Nstates * meshV->dim * cfg.vCubatureOffset);
+        cfg.o_relUrst = &o_relUrst;
       }
       cfg.mesh.resize(Nscalar);
       for (int is = 0; is < Nscalar; is++) {
@@ -315,8 +397,6 @@ void nrs_t::init()
             (platform->options.compareArgs("SCALAR" + scalarDigitStr(is) + " MESH", "SOLID")) ? meshT : meshV;
       }
       cfg.meshV = meshV;
-      cfg.dp0thdt = &dp0thdt;
-      cfg.alpha0Ref = &alpha0Ref;
 
       return std::make_unique<scalar_t>(cfg, geom);
     }();
@@ -338,16 +418,17 @@ void nrs_t::init()
     evaluateProperties(startTime);
   }
 
+  printMeshMetrics(meshT);
+#if 0
+  if (meshV != meshT) {
+    printMeshMetrics(meshV); // currently hardwired to meshT
+  }
+#endif
+
   g0 = 1;
   platform->options.getArgs("DT", dt[0]);
   if (dt[0] == 0) {
     dt[0] = 1e-3; // in case user specifies 0 (estimate from user forcing)
-  }
-
-  if (scalar) {
-    if (scalar->cvode) {
-      scalar->cvode->initialize(); // needs to be called after setIC and evaluateProperties
-    }
   }
 
   // rho, g0 * dt required for Helmholtz coefficients (eigenvalues for Chebyshev in ellipticSetup)
@@ -356,12 +437,34 @@ void nrs_t::init()
   }
   if (scalar) {
     scalar->setupEllipticSolver();
+    if (scalar->cvode) {
+      scalar->cvode->initialize(); // needs to be called after setIC and evaluateProperties
+    }
   }
   if (geom) {
     geom->setupEllipticSolver();
   }
 
   setupNeknek();
+
+  // allocate late to lower max memory usage during setup
+  if (fluid) {
+    fluid->allocate();
+    if (platform->hostSpilling()) {
+      fluid->o_relUrst = platform->deviceMemoryPool.reserve<dfloat>(fluid->h_relUrst.size());
+    }
+  }
+  if (scalar) {
+    scalar->allocate();
+  }
+  if (geom) {
+    geom->allocate();
+  }
+
+  if (fluid && platform->hostSpilling()) {
+    fluid->o_relUrst.copyTo(fluid->h_relUrst);
+    fluid->o_relUrst.free();
+  }
 }
 
 void nrs_t::setupNeknek()
@@ -526,19 +629,6 @@ void nrs_t::restartFromFiles(const std::vector<std::string> &fileList)
       return found;
     }();
 
-/*    auto hRefine = [&]() {
-      auto it = std::find_if(options.begin(), options.end(), [](const std::string &s) {
-        return s.find("href") != std::string::npos;
-      });
-
-      std::string val;
-      if (it != options.end()) {
-        val = serializeString(*it, '=').at(1);
-        options.erase(it);
-      }
-      return val;
-    }();*/
-
     const auto requestedFields = [&]() {
       std::vector<std::string> flds;
       for (const auto &entry : {"x", "u", "p", "t", "s"}) {
@@ -591,7 +681,7 @@ void nrs_t::restartFromFiles(const std::vector<std::string> &fileList)
     double time = -1;
     iofld->addVariable("time", time);
     if (platform->options.compareArgs("LOWMACH", "TRUE")) {
-      iofld->addVariable("p0th", p0th[0]);
+      iofld->addVariable("p0th", scalar->p0th[0]);
     }
 
     auto checkOption = [&](const std::string &name) {
@@ -639,7 +729,7 @@ void nrs_t::restartFromFiles(const std::vector<std::string> &fileList)
 
       const auto scalarStart = (o_iofldT.size()) ? 1 : 0;
       for (int i = scalarStart; i < Nscalar; i++) {
-        const auto sid = scalarDigitStr(i - scalarStart);
+        const auto sid = scalarDigitStr(i);
         if (checkOption("s" + sid) && isAvailable("scalar" + sid)) {
           auto o_Si = scalar->o_S.slice(scalar->fieldOffsetScan[i], scalar->mesh(i)->Nlocal);
           std::vector<occa::memory> o_iofldSi = {o_Si};
@@ -689,7 +779,7 @@ void nrs_t::setIC()
   if (nek::usrFile()) {
     copyToNek(startTime, 0, true);
     nek::userchk();
-    copyFromNek();
+    copyFromNek(true);
   }
 
   if (platform->comm.mpiRank() == 0) {
@@ -701,6 +791,7 @@ void nrs_t::setIC()
   meshT->update();
   if (meshT != meshV) {
     meshV->computeInvLMM();
+    meshV->volume = platform->linAlg->sum(meshV->Nlocal, meshV->o_LMM, platform->comm.mpiComm());
   }
 
   auto projC0 = [&](mesh_t *mesh, int nFields, dlong fieldOffset, occa::memory &o_in) {
@@ -727,11 +818,11 @@ void nrs_t::setIC()
 
   copyToNek(startTime, 0, true); // in case IC was updated in udf_setup
 
-  nekrsCheck(platform->options.compareArgs("LOWMACH", "TRUE") && p0th[0] <= 1e-6,
+  nekrsCheck(platform->options.compareArgs("LOWMACH", "TRUE") && scalar->p0th[0] <= 1e-6,
              platform->comm.mpiComm(),
              EXIT_FAILURE,
              "Unreasonable p0th value %g!",
-             p0th[0]);
+             scalar->p0th[0]);
 
   if (platform->comm.mpiRank() == 0) {
     printf("done (%gs)\n", MPI_Wtime() - tStart);
@@ -1100,6 +1191,7 @@ void nrs_t::printStepInfo(double time, int tstep, bool printStepInfo, bool solve
           const auto sid = scalarDigitStr(is);
           printSolverInfo(scalar->ellipticSolver.at(is), "SCALAR " + scalar->name[is]);
         } else if (scalar->cvodeSolve[is] && !cvodePrinted) {
+          printf("step=%-8d ", tstep);
           scalar->cvode->printInfo(true);
           cvodePrinted = true;
         }
@@ -1126,8 +1218,8 @@ void nrs_t::printStepInfo(double time, int tstep, bool printStepInfo, bool solve
       }
     }
 
-    if (platform->options.compareArgs("CONSTANT FLOW RATE", "TRUE")) {
-      flowRatePrintInfo(tstep, solverInfo);
+    if (flowRate) {
+      flowRate->printInfo(tstep, solverInfo);
     }
 
     const auto printTimers = printStepInfo && timeStepConverged;
@@ -1218,7 +1310,7 @@ void nrs_t::writeCheckpoint(double t, bool enforceOutXYZ, bool enforceFP64, int 
     checkpointWriter->open(visMesh, iofld::mode::write, platform->options.getArgs("CASENAME"));
 
     if (platform->options.compareArgs("LOWMACH", "TRUE")) {
-      checkpointWriter->addVariable("p0th", p0th[0]);
+      checkpointWriter->addVariable("p0th", scalar->p0th[0]);
     }
 
     if (fluid) {
@@ -1317,13 +1409,16 @@ void nrs_t::copyToNek(double time, int tstep, bool updateMesh)
 
 void nrs_t::copyToNek(double time, bool updateMesh_)
 {
+  updateMesh_ |= (geom != nullptr);
   if (platform->comm.mpiRank() == 0) {
-    printf("copying solution to nek\n");
+    printf("copying solution to nek %s\n", (updateMesh_) ? "(updateMesh=T)" : "");
     fflush(stdout);
   }
 
   *(nekData.time) = time;
-  *(nekData.p0th) = p0th[0];
+  if (scalar) {
+    *(nekData.p0th) = scalar->p0th[0];
+  }
 
   auto updateMesh = [&]() {
     auto mesh = meshT;
@@ -1394,21 +1489,42 @@ void nrs_t::copyToNek(double time, bool updateMesh_)
   }
 }
 
-void nrs_t::copyFromNek()
+void nrs_t::copyFromNek(bool updateMesh_)
 {
   double time; // dummy
-  copyFromNek(time);
+  copyFromNek(time, updateMesh_);
 }
 
-void nrs_t::copyFromNek(double &time)
+void nrs_t::copyFromNek(double &time, bool updateMesh_)
 {
+  updateMesh_ |= (geom != nullptr);
   if (platform->comm.mpiRank() == 0) {
-    printf("copying solution from nek\n");
+    printf("copying solution from nek %s\n", (updateMesh_) ? "(updateMesh=T)" : "");
     fflush(stdout);
   }
 
   time = *(nekData.time);
-  p0th[0] = *(nekData.p0th);
+  if (scalar) {
+    scalar->p0th[0] = *(nekData.p0th);
+  }
+
+  auto updateMesh = [&]() {
+    auto mesh = meshT;
+    auto [x, y, z] = mesh->xyzHost();
+    for (int i = 0; i < mesh->Nlocal; i++) {
+      x[i] = nekData.xm1[i];
+      y[i] = nekData.ym1[i];
+      z[i] = nekData.zm1[i];
+    }
+    mesh->o_x.copyFrom(x.data(), mesh->Nlocal);
+    mesh->o_y.copyFrom(y.data(), mesh->Nlocal);
+    mesh->o_z.copyFrom(z.data(), mesh->Nlocal);
+
+    meshT->update();
+    if (meshT != meshV) {
+      meshV->computeInvLMM();
+    }
+  };
 
   if (fluid) {
     auto U = platform->memoryPool.reserve<dfloat>(fluid->fieldOffsetSum);
@@ -1434,6 +1550,11 @@ void nrs_t::copyFromNek(double &time)
       wz[i] = nekData.wz[i];
     }
     geom->o_U.copyFrom(U, U.size());
+    updateMesh_ = true;
+  }
+
+  if (updateMesh_) {
+    updateMesh();
   }
 
   if (fluid) {
@@ -1616,6 +1737,22 @@ dfloat nrs_t::adjustDt(int tstep)
 
 void nrs_t::initStep(double time, dfloat _dt, int _tstep)
 {
+  static auto firstTime = true;
+  if (platform->hostSpilling() && firstTime) {
+    meshT->h_vgeo = platform->memoryPool.reserve<dfloat>(meshT->o_vgeo.size());
+    meshT->o_vgeo.copyTo(meshT->h_vgeo);
+
+    meshT->h_sgeo = platform->memoryPool.reserve<dfloat>(meshT->o_sgeo.size());
+    meshT->o_sgeo.copyTo(meshT->h_sgeo);
+    meshT->o_sgeo.free();
+
+    meshT->h_ggeo = platform->memoryPool.reserve<dfloat>(meshT->o_ggeo.size());
+    meshT->o_ggeo.copyTo(meshT->h_ggeo);
+    meshT->o_ggeo.free();
+
+    firstTime = false;
+  }
+
   if (platform->options.compareArgs("NEKNEK MULTIRATE TIMESTEPPER", "TRUE")) {
     initOuterStep(time, _dt, _tstep);
   } else {
@@ -1651,19 +1788,34 @@ void nrs_t::initInnerStep(double time, dfloat _dt, int _tstep)
     scalar->extrapolateSolution();
   }
 
+  if (fluid && platform->hostSpilling()) {
+    fluid->o_relUrst = platform->deviceMemoryPool.reserve<dfloat>(fluid->h_relUrst.size());
+    fluid->h_relUrst.copyTo(fluid->o_relUrst);
+  }
+
   computeUrst();
 
-  if (geom && advectionSubcycingSteps) { // used in makeAdvection
+  if (geom && advectionSubcycingSteps) { // used in fluid->makeAdvection
     geom->computeDiv();
   }
 
   if (scalar) {
+    if (platform->hostSpilling()) {
+      scalar->o_EXT = platform->deviceMemoryPool.reserve<dfloat>(scalar->h_EXT.size());
+      scalar->h_EXT.copyTo(scalar->o_EXT);
+    }
+
     if (scalar->anyEllipticSolver) {
       platform->linAlg->fill(scalar->fieldOffsetSum, 0.0, scalar->o_EXT);
     }
   }
 
   if (fluid) {
+    if (platform->hostSpilling()) {
+      fluid->o_EXT = platform->deviceMemoryPool.reserve<dfloat>(fluid->h_EXT.size());
+      fluid->h_EXT.copyTo(fluid->o_EXT);
+    }
+
     platform->linAlg->fill(fluid->fieldOffsetSum, 0.0, fluid->o_EXT);
   }
 
@@ -1677,6 +1829,11 @@ void nrs_t::initInnerStep(double time, dfloat _dt, int _tstep)
     if (scalar->anyEllipticSolver) {
       platform->timer.tic("makeq");
 
+      if (platform->hostSpilling() && platform->options.compareArgs("EQUATION TYPE", "NAVIERSTOKES")) {
+        scalar->o_ADV = platform->deviceMemoryPool.reserve<dfloat>(scalar->h_ADV.size());
+        scalar->h_ADV.copyTo(scalar->o_ADV);
+      }
+
       for (int is = 0; is < Nscalar; is++) {
         if (!scalar->compute[is] || scalar->cvodeSolve[is]) {
           continue;
@@ -1686,7 +1843,15 @@ void nrs_t::initInnerStep(double time, dfloat _dt, int _tstep)
         }
         scalar->makeExplicit(is, time, tstep);
       }
+
       scalar->makeForcing();
+
+      if (platform->hostSpilling()) {
+        scalar->o_ADV.copyTo(scalar->h_ADV);
+        scalar->o_ADV.free();
+        scalar->o_EXT.copyTo(scalar->h_EXT);
+        scalar->o_EXT.free();
+      }
 
       platform->timer.toc("makeq");
     }
@@ -1696,10 +1861,27 @@ void nrs_t::initInnerStep(double time, dfloat _dt, int _tstep)
     platform->timer.tic("makef");
 
     if (platform->options.compareArgs("EQUATION TYPE", "NAVIERSTOKES")) {
+      if (platform->hostSpilling()) {
+        fluid->o_ADV = platform->deviceMemoryPool.reserve<dfloat>(fluid->h_ADV.size());
+        fluid->h_ADV.copyTo(fluid->o_ADV);
+      }
+
       fluid->makeAdvection(time, tstep);
+
+      if (platform->hostSpilling()) {
+        fluid->o_relUrst.copyTo(fluid->h_relUrst);
+        fluid->o_relUrst.free();
+      }
     }
     fluid->makeExplicit(time, tstep);
     fluid->makeForcing();
+
+    if (platform->hostSpilling()) {
+      fluid->o_ADV.copyTo(fluid->h_ADV);
+      fluid->o_ADV.free();
+      fluid->o_EXT.copyTo(fluid->h_EXT);
+      fluid->o_EXT.free();
+    }
 
     platform->timer.toc("makef");
   }
@@ -1741,11 +1923,30 @@ bool nrs_t::runInnerStep(std::function<bool(int)> convergenceCheck, int iter, bo
 
   const auto checkpointStep0 = checkpointStep;
 
+  if (platform->hostSpilling()) {
+    meshT->o_sgeo = platform->deviceMemoryPool.reserve<dfloat>(meshT->h_sgeo.size());
+    meshV->o_sgeo = meshT->o_sgeo;
+
+    meshT->o_ggeo = platform->deviceMemoryPool.reserve<dfloat>(meshT->h_ggeo.size());
+    meshV->o_ggeo = meshT->o_ggeo;
+  }
+
   if (geom && iter == 1) {
     geom->integrate();
 
+    if (platform->hostSpilling()) {
+      meshT->o_vgeo.copyTo(meshT->h_vgeo);
+      meshT->o_ggeo.copyTo(meshT->h_ggeo);
+      meshT->o_sgeo.copyTo(meshT->h_sgeo);
+    }
+
     if (fluid) {
       fluid->updateZeroNormalMask();
+    }
+  } else {
+    if (platform->hostSpilling()) {
+      meshT->h_sgeo.copyTo(meshT->o_sgeo);
+      meshT->h_ggeo.copyTo(meshT->o_ggeo);
     }
   }
 
@@ -1773,49 +1974,99 @@ bool nrs_t::runInnerStep(std::function<bool(int)> convergenceCheck, int iter, bo
     }
   }
 
-  if (fluid) {
-    fluid->applyDirichlet(timeNew);
-    if (neknek && fieldsToSolveContains("fluid velocity")) {
-      if (!platform->app->bc->hasOutflow("fluid velocity")) {
-        neknek->fixCoupledSurfaceFlux(fluid->o_EToB, fluid->fieldOffset, fluid->o_U);
-      }
-    }
-  }
-
   if (Nscalar) {
     scalar->applyDirichlet(timeNew);
-  }
-
-  if (geom) {
-    geom->applyDirichlet(timeNew);
   }
 
   if (Nscalar) {
     scalar->solve(timeNew, iter);
   }
 
+  if (platform->hostSpilling()) {
+    meshT->o_ggeo.free();
+  }
+
   if (postScalar) {
     postScalar(timeNew, tstep);
   }
 
-  evaluateProperties(timeNew);
+  evaluateProperties(timeNew); // update based on new scalar solution
+
+  if (fluid) {
+    fluid->applyDirichlet(timeNew);
+  }
 
   evaluateDivergence(timeNew);
+
+  const auto updateFlowRate = [&]() {
+    if (flowRate) {
+      return flowRate->computationRequired(timeNew, tstep);
+    }
+    return false;
+  }();
+
+  if (fluid) {
+    if (neknek && fieldsToSolveContains("fluid velocity")) {
+      if (!platform->app->bc->hasOutflow("fluid velocity")) {
+        neknek->fixCoupledSurfaceFlux(fluid->o_EToB, fluid->fieldOffset, fluid->o_U);
+      }
+    }
+    fluid->rhsPressure(timeNew, iter);
+    if (updateFlowRate) {
+      flowRate->rhsPressure(timeNew, iter);
+    }
+  }
+
+  if (geom) {
+    geom->applyDirichlet(timeNew);
+    geom->rhs(timeNew, tstep);
+  }
+
+  if (platform->hostSpilling()) {
+    meshT->o_ggeo = platform->deviceMemoryPool.reserve<dfloat>(meshT->h_ggeo.size());
+    meshT->h_ggeo.copyTo(meshT->o_ggeo);
+    meshV->o_ggeo = meshT->o_ggeo;
+  }
 
   if (preFluid) {
     preFluid(timeNew, tstep);
   }
 
   if (fluid) {
-    fluid->solve(timeNew, iter);
+    if (platform->hostSpilling()) {
+      meshT->o_sgeo.free();
+      meshT->o_vgeo.free();
+    }
 
-    if (platform->options.compareArgs("CONSTANT FLOW RATE", "TRUE")) {
-      adjustFlowRate(tstep, timeNew);
+    fluid->solvePressure(timeNew, tstep);
+    if (updateFlowRate) {
+      flowRate->solvePressure(timeNew, tstep);
+    }
+
+    if (platform->hostSpilling()) {
+      meshT->o_sgeo = platform->deviceMemoryPool.reserve<dfloat>(meshT->h_sgeo.size());
+      meshT->h_sgeo.copyTo(meshT->o_sgeo);
+      meshV->o_sgeo = meshT->o_sgeo;
+
+      meshT->o_vgeo = platform->deviceMemoryPool.reserve<dfloat>(meshT->h_vgeo.size());
+      meshT->h_vgeo.copyTo(meshT->o_vgeo);
+      meshV->o_vgeo = meshT->o_vgeo;
+    }
+
+    fluid->rhsVelocity(timeNew, iter);
+    fluid->solveVelocity(timeNew, iter);
+    if (updateFlowRate) {
+      flowRate->rhsVelocity(timeNew, iter);
+      flowRate->solveVelocity(timeNew, iter);
+    }
+
+    if (flowRate) {
+      flowRate->adjust();
     }
   }
 
   if (geom) {
-    geom->solve(timeNew, iter);
+    geom->solve(timeNew, tstep);
   }
 
   const auto converged = convergenceCheck(iter);
@@ -1838,6 +2089,12 @@ bool nrs_t::runInnerStep(std::function<bool(int)> convergenceCheck, int iter, bo
     udf.executeStep(timeNew, tstep);
   }
   platform->timer.toc("udfExecuteStep");
+
+  if (platform->hostSpilling()) {
+    platform->device.finish();
+    meshT->o_sgeo.free();
+    meshT->o_ggeo.free();
+  }
 
   return converged;
 }
@@ -1942,7 +2199,7 @@ void nrs_t::evaluateProperties(const double timeNew)
     return rhsCVODE ? "udfPropertiesCVODE" : "udfProperties";
   }();
 
-  platform->timer.tic(tag, 1);
+  platform->timer.tic(tag);
 
   if (userProperties) {
     userProperties(timeNew);
@@ -1979,7 +2236,7 @@ void nrs_t::registerKernels(occa::properties kernelInfoBC)
 
   int N, cubN;
   platform->options.getArgs("POLYNOMIAL DEGREE", N);
-  platform->options.getArgs("CUBATURE POLYNOMIAL DEGREE", cubN);
+  platform->options.getArgs("OVERINTEGRATION POLYNOMIAL DEGREE ", cubN);
   const int Nq = N + 1;
   const int cubNq = cubN + 1;
   const int Np = Nq * Nq * Nq;
@@ -2052,8 +2309,6 @@ void nrs_t::registerKernels(occa::properties kernelInfoBC)
     fileName = oklpath + kernelName + ".okl";
     platform->kernelRequests.add(section + kernelName, fileName, prop);
 
-    const int movingMesh = platform->options.compareArgs("MOVING MESH", "TRUE");
-
     {
       int N;
       platform->options.getArgs("POLYNOMIAL DEGREE", N);
@@ -2067,7 +2322,7 @@ void nrs_t::registerKernels(occa::properties kernelInfoBC)
     }
 
     occa::properties cflProps = meshProps;
-    cflProps["defines/p_MovingMesh"] = movingMesh;
+    cflProps["defines/p_MovingMesh"] = static_cast<int>(platform->options.compareArgs("MOVING MESH", "TRUE"));
     kernelName = "cfl" + suffix;
     fileName = oklpath + kernelName + ".okl";
     platform->kernelRequests.add(section + kernelName, fileName, cflProps);
@@ -2104,7 +2359,7 @@ void nrs_t::registerKernels(occa::properties kernelInfoBC)
   {
     auto ellipticFieldsToRegister = fieldsToSolve();
 
-    auto list = serializeString(platform->options.getArgs("USER ELLIPTIC FIELDS"), ' ');
+    auto list = serializeString(platform->options.getArgs("USER ELLIPTIC FIELDS"), ',');
     for (auto &&entry : list) {
       if (!platform->options.compareArgs(std::string("ELLIPTIC ") + upperCase(entry) + " SOLVER", "NONE")) {
         ellipticFieldsToRegister.push_back("elliptic " + lowerCase(entry));
@@ -2185,12 +2440,54 @@ void nrs_t::runOuterStep(std::function<bool(int)> convergenceCheck, int stage)
 void nrs_t::computeUrst()
 {
   auto mesh = meshV;
+  static occa::memory o_cubvgeo;
+
+  if (platform->options.compareArgs("ADVECTION TYPE", "OVERINTEGRATION")) {
+
+    if (platform->hostSpilling()) {
+      meshT->o_vgeo.free();
+
+      if (!o_cubvgeo.isInitialized()) {
+        o_cubvgeo =
+            platform->deviceMemoryPool.reserve<dfloat>(mesh->Nelements * mesh->Ncubvgeo * mesh->cubNp);
+      }
+
+      if (geom) {
+        mesh->cubatureGeometricFactors(o_cubvgeo);
+      } else {
+        static occa::memory h_cubvgeo;
+        if (!h_cubvgeo.isInitialized()) {
+          h_cubvgeo = platform->memoryPool.reserve<dfloat>(o_cubvgeo.size());
+
+          mesh->cubatureGeometricFactors(o_cubvgeo);
+          o_cubvgeo.copyTo(h_cubvgeo);
+        }
+
+        h_cubvgeo.copyTo(o_cubvgeo);
+      }
+    } else {
+      if (!o_cubvgeo.isInitialized() && platform->options.compareArgs("ADVECTION TYPE", "OVERINTEGRATION")) {
+        o_cubvgeo =
+            platform->deviceMemoryPool.reserve<dfloat>(mesh->Nelements * mesh->Ncubvgeo * mesh->cubNp);
+      }
+    }
+
+    static auto firstTime = true;
+    if (geom || firstTime) {
+      mesh->cubatureGeometricFactors(o_cubvgeo);
+      firstTime = false;
+    }
+  }
+
   auto [fieldOffset, cubatureOffset, o_U, o_relUrst] = [&]() {
     if (fluid) {
       return std::make_tuple(fluid->fieldOffset, fluid->cubatureOffset, fluid->o_U, fluid->o_relUrst);
     }
     if (scalar) {
-      return std::make_tuple(scalar->fieldOffset(), scalar->vCubatureOffset, scalar->o_U, scalar->o_relUrst);
+      return std::make_tuple(scalar->fieldOffset(),
+                             scalar->vCubatureOffset,
+                             *scalar->o_U,
+                             *scalar->o_relUrst);
     }
     return std::make_tuple(0, 0, o_NULL, o_NULL);
   }();
@@ -2199,9 +2496,9 @@ void nrs_t::computeUrst()
     return;
   }
 
-  if (advectionSubcycingSteps) {
-    for (int s = o_coeffEXT.size(); s > 1; s--) {
-      auto lagOffset = mesh->dim * cubatureOffset;
+  {
+    const auto lagOffset = mesh->dim * cubatureOffset;
+    for (int s = o_relUrst.size() / lagOffset; s > 1; s--) {
       o_relUrst.copyFrom(o_relUrst, lagOffset, (s - 1) * lagOffset, (s - 2) * lagOffset);
     }
   }
@@ -2209,11 +2506,11 @@ void nrs_t::computeUrst()
   const auto relative = static_cast<int>(geom && advectionSubcycingSteps);
 
   double flopCount = 0.0;
-  if (platform->options.compareArgs("ADVECTION TYPE", "CUBATURE")) {
+  if (platform->options.compareArgs("ADVECTION TYPE", "OVERINTEGRATION")) {
     launchKernel("nrs-UrstCubatureHex3D",
                  mesh->Nelements,
                  relative,
-                 mesh->o_cubvgeo,
+                 o_cubvgeo,
                  mesh->o_cubInterpT,
                  fieldOffset,
                  (geom) ? geom->fieldOffset : 0,
@@ -2221,6 +2518,7 @@ void nrs_t::computeUrst()
                  o_U,
                  (geom) ? geom->o_U : o_NULL,
                  o_relUrst);
+
     flopCount += 6 * mesh->Np * mesh->cubNq;
     flopCount += 6 * mesh->Nq * mesh->Nq * mesh->cubNq * mesh->cubNq;
     flopCount += 6 * mesh->Nq * mesh->cubNp;
@@ -2241,24 +2539,42 @@ void nrs_t::computeUrst()
   platform->flopCounter->add("Urst", flopCount);
 
   if (platform->verbose()) {
-    const dfloat debugNorm = platform->linAlg->weightedNorm2Many(mesh->Nlocal,
-                                                                 mesh->dim,
-                                                                 fieldOffset,
-                                                                 mesh->ogs->o_invDegree,
-                                                                 o_relUrst,
-                                                                 platform->comm.mpiComm());
+    auto Nlocal = platform->options.compareArgs("ADVECTION TYPE", "OVERINTEGRATION")
+                      ? mesh->Nelements * mesh->cubNp
+                      : mesh->Nlocal;
+    auto offset =
+        platform->options.compareArgs("ADVECTION TYPE", "OVERINTEGRATION") ? cubatureOffset : fieldOffset;
+    const dfloat debugNorm =
+        platform->linAlg->norm2Many(Nlocal, mesh->dim, offset, o_relUrst, platform->comm.mpiComm());
     if (platform->comm.mpiRank() == 0) {
       printf("relUrst norm: %.15e\n", debugNorm);
     }
   }
+
+  if (platform->hostSpilling()) {
+    const auto cvode = scalar && scalar->cvode;
+    if (!cvode) {
+      o_cubvgeo.free();
+    }
+
+    if (!meshT->o_vgeo.isInitialized()) {
+      meshT->o_vgeo = platform->deviceMemoryPool.reserve<dfloat>(meshT->h_vgeo.size());
+      meshT->h_vgeo.copyTo(meshT->o_vgeo);
+      meshV->o_vgeo = meshT->o_vgeo;
+    }
+  }
+
+  if (o_cubvgeo.isInitialized()) {
+    meshV->o_cubvgeo = o_cubvgeo;
+  }
 }
 
-nrs_t::tavgLegacy_t::tavgLegacy_t()
+nrs_t::tavg::tavg()
 {
   auto nrs = dynamic_cast<nrs_t *>(platform->app);
   auto &fluid = nrs->fluid;
 
-  std::vector<tavg::field> avgFields;
+  std::vector<::tavg::field> avgFields;
   deviceMemory<dfloat> o_u(fluid->o_U.slice(0 * fluid->fieldOffset, fluid->fieldOffset));
   deviceMemory<dfloat> o_v(fluid->o_U.slice(1 * fluid->fieldOffset, fluid->fieldOffset));
   deviceMemory<dfloat> o_w(fluid->o_U.slice(2 * fluid->fieldOffset, fluid->fieldOffset));
@@ -2266,7 +2582,7 @@ nrs_t::tavgLegacy_t::tavgLegacy_t()
   avgFields.push_back({"", std::vector{o_v}});
   avgFields.push_back({"", std::vector{o_w}});
 
-  std::vector<tavg::field> rmsFields;
+  std::vector<::tavg::field> rmsFields;
   rmsFields.push_back({"", std::vector{o_u, o_u}});
   rmsFields.push_back({"", std::vector{o_v, o_v}});
   rmsFields.push_back({"", std::vector{o_w, o_w}});
@@ -2278,17 +2594,17 @@ nrs_t::tavgLegacy_t::tavgLegacy_t()
     rmsFields.push_back({"", std::vector{o_temp, o_temp}});
   }
 
-  std::vector<tavg::field> rm2Fields;
+  std::vector<::tavg::field> rm2Fields;
   rm2Fields.push_back({"", std::vector{o_u, o_v}});
   rm2Fields.push_back({"", std::vector{o_v, o_w}});
   rm2Fields.push_back({"", std::vector{o_w, o_u}});
 
-  _avg = std::make_unique<tavg>(fluid->fieldOffset, avgFields);
-  _rms = std::make_unique<tavg>(fluid->fieldOffset, rmsFields);
-  _rm2 = std::make_unique<tavg>(fluid->fieldOffset, rm2Fields);
+  _avg = std::make_unique<::tavg>(fluid->fieldOffset, avgFields);
+  _rms = std::make_unique<::tavg>(fluid->fieldOffset, rmsFields);
+  _rm2 = std::make_unique<::tavg>(fluid->fieldOffset, rm2Fields);
 }
 
-void nrs_t::tavgLegacy_t::writeToFile(mesh_t *mesh)
+void nrs_t::tavg::writeToFile(mesh_t *mesh)
 {
   static int outfldCounter = 0;
   const auto outXYZ = mesh && outfldCounter == 0;
@@ -2384,31 +2700,31 @@ void nrs_t::tavgLegacy_t::writeToFile(mesh_t *mesh)
   outfldCounter++;
 }
 
-void nrs_t::tavgLegacy_t::reset()
+void nrs_t::tavg::reset()
 {
   _avg->reset();
   _rms->reset();
   _rm2->reset();
 }
 
-void nrs_t::tavgLegacy_t::run(double time)
+void nrs_t::tavg::run(double time)
 {
   _avg->run(time);
   _rms->run(time);
   _rm2->run(time);
 }
 
-const deviceMemory<double> nrs_t::tavgLegacy_t::o_avg()
+const deviceMemory<double> nrs_t::tavg::o_avg()
 {
   return _avg->o_data();
 }
 
-const deviceMemory<double> nrs_t::tavgLegacy_t::o_rms()
+const deviceMemory<double> nrs_t::tavg::o_rms()
 {
   return _rms->o_data();
 }
 
-const deviceMemory<double> nrs_t::tavgLegacy_t::o_rm2()
+const deviceMemory<double> nrs_t::tavg::o_rm2()
 {
   return _rm2->o_data();
 }

@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.21)
-project(NekRS LANGUAGES C CXX Fortran VERSION 26.0.1)
+project(NekRS LANGUAGES C CXX Fortran VERSION 26.1.1)
 
 set(CMAKE_POLICY_DEFAULT_CMP0077 NEW)
 
@@ -156,6 +156,8 @@ set(NEKRS_BUILD_FLOAT ON CACHE BOOL "Build dfloat = float version")
 
 set(ENABLE_CPPTRACE OFF CACHE BOOL "Enable cpptrace for stack tracing")
 
+option(NEKRS_USE_PFLOAT_FLOAT "Use float precision for preconditioner" ON)
+ 
 ###############################################################################
 # Set compiler flags                                                          #
 ###############################################################################
@@ -228,8 +230,6 @@ endif()
 include(cmake/hypre.cmake)
 add_hypre()
 
-include(cmake/external_plugins.cmake)
-
 include(cmake/cvode.cmake)
 if (ENABLE_CVODE)
   add_cvode()
@@ -289,10 +289,10 @@ if (ENABLE_CVODE)
 endif()
 
 if (ENABLE_ADIOS)
-  target_link_libraries(nekrs-lib PUBLIC adios2::cxx11_mpi)
+  target_link_libraries(nekrs-lib PUBLIC adios2::cxx_mpi)
   target_compile_definitions(nekrs-lib PUBLIC NEKRS_ENABLE_ADIOS)
   if (NEKRS_BUILD_FLOAT)
-      target_link_libraries(nekrs-lib-fp32 PUBLIC adios2::cxx11_mpi)
+      target_link_libraries(nekrs-lib-fp32 PUBLIC adios2::cxx_mpi)
       target_compile_definitions(nekrs-lib-fp32 PUBLIC NEKRS_ENABLE_ADIOS)
   endif()
 endif()
@@ -301,6 +301,11 @@ target_link_libraries(nekrs-bin PRIVATE nekrs-lib)
 if (NEKRS_BUILD_FLOAT)
   target_link_libraries(nekrs-bin-fp32 PRIVATE nekrs-lib-fp32)
 endif()
+
+###############################################################################
+# external plugins 
+###############################################################################
+include(cmake/external_plugins.cmake)
 
 ###############################################################################
 # install
@@ -322,6 +327,18 @@ if(NEKRS_GPU_MPI)
   set(GPU_MPI "1")
 else(NEKRS_GPU_MPI)
   set(GPU_MPI "0")
+endif()
+
+if(NEKRS_USE_PFLOAT_FLOAT)
+  set(PFLOAT_TYPE float)
+  set(MPI_PFLOAT MPI_FLOAT)
+  set(PFLOAT_FORMAT "%f")
+  set(PFLOAT_STRING "float")
+else()
+  set(PFLOAT_TYPE double)
+  set(MPI_PFLOAT MPI_DOUBLE)
+  set(PFLOAT_FORMAT "%lf")
+  set(PFLOAT_STRING "double")
 endif()
 
 find_package(Filesystem REQUIRED)

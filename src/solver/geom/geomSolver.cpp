@@ -33,16 +33,9 @@ geomSolver_t::geomSolver_t(const geomSolverCfg_t &cfg)
 
   const auto n = std::max(o_coeffEXT.size(), o_coeffAB.size());
   o_U = platform->device.malloc<dfloat>(n * fieldOffsetSum);
-  o_Ue = platform->device.malloc<dfloat>(o_U.size());
 
   o_prop = platform->device.malloc<dfloat>(mesh->Nlocal);
   platform->linAlg->fill(o_prop.size(), 1.0, o_prop);
-
-  int Nsubsteps = 0;
-  platform->options.getArgs("SUBCYCLING STEPS", Nsubsteps);
-  if (Nsubsteps) {
-    o_div = platform->device.malloc<dfloat>(fieldOffset * n);
-  }
 
   auto resize = [&](mesh_t *mesh, occa::memory &in) {
     auto o_new = platform->device.malloc<dfloat>(mesh->fieldOffset * n);
@@ -53,7 +46,10 @@ geomSolver_t::geomSolver_t(const geomSolverCfg_t &cfg)
   };
 
   mesh->o_Jw = resize(mesh, mesh->o_Jw);
+  meshV->o_Jw = mesh->o_Jw;
+
   mesh->o_invAJw = resize(mesh, mesh->o_invAJw);
+  meshV->o_invAJw = mesh->o_invAJw;
 
   if (!platform->options.compareArgs(upperCase(name) + " SOLVER", "NONE")) {
     platform->app->bc->printBcTypeMapping(name);
@@ -78,6 +74,18 @@ geomSolver_t::geomSolver_t(const geomSolverCfg_t &cfg)
     verifyBC();
   }
 };
+
+void geomSolver_t::allocate()
+{
+  o_Ue = platform->device.malloc<dfloat>(fieldOffsetSum);
+
+  int Nsubsteps = 0;
+  platform->options.getArgs("SUBCYCLING STEPS", Nsubsteps);
+  if (Nsubsteps) {
+    const auto n = std::max(o_coeffEXT.size(), o_coeffAB.size());
+    o_div = platform->device.malloc<dfloat>(fieldOffset * n);
+  }
+}
 
 void geomSolver_t::integrate(bool lag)
 {
@@ -112,6 +120,9 @@ void geomSolver_t::integrate(bool lag)
   if (ellipticSolver.size()) {
     updateZeroNormalMask();
   }
+}
+void geomSolver_t::rhs(double time, int iter)
+{
 }
 
 void geomSolver_t::solve(double time, int iter)

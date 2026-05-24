@@ -2,8 +2,11 @@
 # Programmer(s): David J. Gardner @ LLNL
 # ------------------------------------------------------------------------------
 # SUNDIALS Copyright Start
-# Copyright (c) 2002-2022, Lawrence Livermore National Security
+# Copyright (c) 2025-2026, Lawrence Livermore National Security,
+# University of Maryland Baltimore County, and the SUNDIALS contributors.
+# Copyright (c) 2013-2025, Lawrence Livermore National Security
 # and Southern Methodist University.
+# Copyright (c) 2002-2013, Lawrence Livermore National Security.
 # All rights reserved.
 #
 # See the top-level LICENSE and NOTICE files for details.
@@ -13,31 +16,31 @@
 # ------------------------------------------------------------------------------
 
 # list of tests
-set(tests )
+set(tests)
 
-if(BUILD_ARKODE)
-  if(BUILD_NVECTOR_CUDA)
+if(SUNDIALS_ENABLE_ARKODE)
+  if(SUNDIALS_ENABLE_NVECTOR_CUDA)
     list(APPEND tests "arkode\;BENCHMARK_ODE\;USE_CUDA")
   endif()
-  if(BUILD_NVECTOR_HIP)
+  if(SUNDIALS_ENABLE_NVECTOR_HIP)
     list(APPEND tests "arkode\;BENCHMARK_ODE\;USE_HIP")
   endif()
 endif()
 
-if(BUILD_CVODE)
-  if(BUILD_NVECTOR_CUDA)
+if(SUNDIALS_ENABLE_CVODE)
+  if(SUNDIALS_ENABLE_NVECTOR_CUDA)
     list(APPEND tests "cvode\;BENCHMARK_ODE\;USE_CUDA")
   endif()
-  if(BUILD_NVECTOR_HIP)
+  if(SUNDIALS_ENABLE_NVECTOR_HIP)
     list(APPEND tests "cvode\;BENCHMARK_ODE\;USE_HIP")
   endif()
 endif()
 
-if(BUILD_IDA)
-  if(BUILD_NVECTOR_CUDA)
+if(SUNDIALS_ENABLE_IDA)
+  if(SUNDIALS_ENABLE_NVECTOR_CUDA)
     list(APPEND tests "ida\;BENCHMARK_DAE\;USE_CUDA")
   endif()
-  if(BUILD_NVECTOR_HIP)
+  if(SUNDIALS_ENABLE_NVECTOR_HIP)
     list(APPEND tests "ida\;BENCHMARK_DAE\;USE_HIP")
   endif()
 endif()
@@ -50,13 +53,8 @@ foreach(test_tuple ${tests})
   list(GET test_tuple 1 problem_type)
   list(GET test_tuple 2 backend)
 
-  set(sources
-    ${benchmark_prefix}/main_${package}.cpp
-    ${shared_sources}
-    buffers.cpp
-    diffusion.cpp
-    solution.cpp
-    utils.cpp)
+  set(sources ${benchmark_prefix}/main_${package}.cpp ${shared_sources}
+              buffers.cpp diffusion.cpp solution.cpp utils.cpp)
 
   if("${backend}" STREQUAL "USE_CUDA")
 
@@ -72,7 +70,17 @@ foreach(test_tuple ${tests})
 
   endif()
 
-  add_executable(${target} ${sources})
+  sundials_add_executable(${target} ${sources})
+
+  # if("${backend}" STREQUAL "USE_CUDA") sundials_add_benchmark(${target}
+  # ${target} diffusion_2D ENABLE_GPU NUM_CORES ${SUNDIALS_BENCHMARKS_NUM_GPUS}
+  # ) endif()
+
+  if("${backend}" STREQUAL "USE_HIP")
+    sundials_add_benchmark(${target} ${target} diffusion_2D ENABLE_GPU
+                           NUM_CORES ${SUNDIALS_BENCHMARKS_NUM_GPUS})
+
+  endif()
 
   set_target_properties(${target} PROPERTIES FOLDER "Benchmarks")
 
@@ -84,11 +92,9 @@ foreach(test_tuple ${tests})
 
     target_include_directories(${target} PRIVATE ${benchmark_prefix})
 
-    target_link_libraries(${target}
-      PRIVATE
-      sundials_${package}
-      sundials_nvecmpiplusx
-      sundials_nveccuda)
+    target_link_libraries(
+      ${target} PRIVATE sundials_${package} sundials_nvecmpiplusx
+                        sundials_nveccuda)
 
   else()
 
@@ -96,12 +102,9 @@ foreach(test_tuple ${tests})
 
     target_include_directories(${target} PRIVATE ${benchmark_prefix})
 
-    target_link_libraries(${target}
-      PRIVATE
-      sundials_${package}
-      sundials_nvecmpiplusx
-      sundials_nvechip
-      hip::device)
+    target_link_libraries(
+      ${target} PRIVATE sundials_${package} sundials_nvecmpiplusx
+                        sundials_nvechip hip::device)
 
   endif()
 
@@ -110,6 +113,6 @@ foreach(test_tuple ${tests})
   target_link_libraries(${target} PRIVATE ${MPI_CXX_LIBRARIES})
 
   install(TARGETS ${target}
-    DESTINATION "${CMAKE_INSTALL_BINDIR}/benchmarks/diffusion_2D")
+          DESTINATION "${SUNDIALS_BENCHMARKS_INSTALL_PATH}/diffusion_2D")
 
 endforeach()

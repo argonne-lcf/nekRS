@@ -13,18 +13,6 @@ void parsePressureSection(const int rank, setupAide &options, inipp::Ini *ini)
   parsePreconditioner(rank, options, ini, parScope);
 
   parseLinearSolver(rank, options, ini, parScope);
-
-  parseBoomerAmgSection(rank, options, ini);
-
-  if (ini->sections.count("amgx")) {
-    if (!AMGXenabled()) {
-      append_error("AMGX was requested but is not compiled!\n");
-    }
-    std::string configFile;
-    if (ini->extract("amgx", "configfile", configFile)) {
-      options.setArgs("AMGX CONFIG FILE", configFile);
-    }
-  }
 }
 
 void parseVelocitySection(const int rank, setupAide &options, inipp::Ini *ini)

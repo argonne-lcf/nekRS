@@ -5,7 +5,7 @@
 
 namespace adios2
 {
-namespace RemoteCommon
+namespace EVPathRemoteCommon
 {
 
 const int ServerPort = 26200;
@@ -36,6 +36,7 @@ typedef struct _OpenSimpleFileMsg
 {
     int OpenResponseCondition;
     char *FileName;
+    int ReadContents;
 } *OpenSimpleFileMsg;
 
 typedef struct _OpenSimpleResponseMsg
@@ -53,12 +54,16 @@ typedef struct _GetRequestMsg
     int GetResponseCondition;
     int RequestType;
     int64_t FileHandle;
-    char *VarName;
+    const char *VarName;
     size_t Step;
+    size_t StepCount;
     int64_t BlockID;
     int DimCount;
     size_t *Count;
     size_t *Start;
+    double Error;     // Requested error bound
+    double Norm;      // Requested error bound in this norm
+    uint8_t Relative; // relative or absolute error
     void *Dest;
 } *GetRequestMsg;
 
@@ -81,6 +86,7 @@ typedef struct _ReadResponseMsg
 {
     int ReadResponseCondition;
     void *Dest;
+    uint8_t OperatorType;
     size_t Size;
     char *ReadData;
 } *ReadResponseMsg;
@@ -89,8 +95,25 @@ typedef struct _ReadResponseMsg
  */
 typedef struct _CloseFileMsg
 {
-    void *FileHandle;
+    int CloseResponseCondition;
+    int64_t FileHandle;
 } *CloseFileMsg;
+
+/*
+ * There is something that happens when EVPath tries to marshall tiny
+ * (8-byte) stack-allocated (common) messages that causes problems
+ * when using Address Sanitation is used.  Some messages below have an
+ * "unused" field that pads them out to a larger size.  That field is
+ * undeclared to FFS/EVPath, but the larger message size avoids
+ * whatever issue is happening.
+ */
+typedef struct _CloseFileResponseMsg
+{
+    int CloseResponseCondition;
+    int Status;
+    size_t unused;  // small messages call stack addressing issues?
+    size_t unused2; // small messages call stack addressing issues?
+} *CloseFileResponseMsg;
 
 typedef struct _KillServerMsg
 {
@@ -107,6 +130,7 @@ typedef struct _KillResponseMsg
 typedef struct _StatusServerMsg
 {
     int StatusResponseCondition;
+    char *Status;
 } *StatusServerMsg;
 
 typedef struct _StatusResponseMsg
@@ -140,6 +164,7 @@ struct Remote_evpath_state
     CMFormat ReadRequestFormat;
     CMFormat ReadResponseFormat;
     CMFormat CloseFileFormat;
+    CMFormat CloseResponseFormat;
     CMFormat KillServerFormat;
     CMFormat KillResponseFormat;
     CMFormat StatusServerFormat;

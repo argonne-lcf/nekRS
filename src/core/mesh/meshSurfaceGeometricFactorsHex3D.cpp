@@ -32,7 +32,9 @@
 
 void mesh_t::surfaceGeometricFactors()
 {
-  surfaceGeometricFactorsKernel(Nelements, o_gllw, o_faceNodes, o_vgeo, o_sgeo);
+  if (o_sgeo.isInitialized()) {
+    surfaceGeometricFactorsKernel(Nelements, o_gllw, o_faceNodes, o_vgeo, o_sgeo);
+  }
 
   double flopsSurfaceGeometricFactors = 32 * Nq * Nq;
   flopsSurfaceGeometricFactors *= static_cast<double>(Nelements);

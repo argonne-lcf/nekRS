@@ -4,8 +4,11 @@
  * Based on CPODES by Radu Serban @ LLNL
  * -----------------------------------------------------------------------------
  * SUNDIALS Copyright Start
- * Copyright (c) 2002-2022, Lawrence Livermore National Security
+ * Copyright (c) 2025-2026, Lawrence Livermore National Security,
+ * University of Maryland Baltimore County, and the SUNDIALS contributors.
+ * Copyright (c) 2013-2025, Lawrence Livermore National Security
  * and Southern Methodist University.
+ * Copyright (c) 2002-2013, Lawrence Livermore National Security.
  * All rights reserved.
  *
  * See the top-level LICENSE and NOTICE files for details.
@@ -19,9 +22,9 @@
 #ifndef _CVODE_PROJ_IMPL_H
 #define _CVODE_PROJ_IMPL_H
 
-#include "cvode/cvode.h"
+#include <cvode/cvode.h>
 
-#ifdef __cplusplus  /* wrapper to enable C++ usage */
+#ifdef __cplusplus /* wrapper to enable C++ usage */
 extern "C" {
 #endif
 
@@ -34,8 +37,8 @@ extern "C" {
  * ===========================================================================*/
 
 #define PROJ_MAX_FAILS 10
-#define PROJ_EPS       RCONST(0.1)
-#define PROJ_FAIL_ETA  RCONST(0.25)
+#define PROJ_EPS       SUN_RCONST(0.1)
+#define PROJ_FAIL_ETA  SUN_RCONST(0.25)
 
 /* =============================================================================
  * Projection Data Structure
@@ -47,26 +50,26 @@ extern "C" {
  * The type CVodeProjMem is type pointer to struct CVodeProjMemRec. This
  * structure contains data pertaining to the use of projection capabilities.
  * ---------------------------------------------------------------------------*/
-typedef struct CVodeProjMemRec {
+typedef struct CVodeProjMemRec
+{
+  sunbooleantype internal_proj; /* use the internal projection algorithm?      */
+  sunbooleantype err_proj;   /* is error projection enabled?                */
+  sunbooleantype first_proj; /* is this the first time we project?          */
 
-  booleantype internal_proj;  /* use the internal projection algorithm?      */
-  booleantype err_proj;       /* is error projection enabled?                */
-  booleantype first_proj;     /* is this the first time we project?          */
+  long int freq;    /* projection frequency                        */
+  long int nstlprj; /* step number of last projection              */
 
-  long int freq;              /* projection frequency                        */
-  long int nstlprj;           /* step number of last projection              */
+  int max_fails; /* maximum number of projection failures       */
 
-  int max_fails;              /* maximum number of projection failures       */
+  CVProjFn pfun; /* function to perform projection              */
 
-  CVProjFn pfun;              /* function to perform projection              */
+  sunrealtype eps_proj;  /* projection solve tolerance                  */
+  sunrealtype eta_pfail; /* projection failure step reduction factor    */
 
-  realtype eps_proj;          /* projection solve tolerance                  */
-  realtype eta_pfail;         /* projection failure step reduction factor    */
+  long int nproj;   /* number of projections performed             */
+  long int npfails; /* number of projection failures               */
 
-  long int nproj;             /* number of projections performed             */
-  long int npfails;           /* number of projection failures               */
-
-} *CVodeProjMem;
+}* CVodeProjMem;
 
 #ifdef __cplusplus
 }

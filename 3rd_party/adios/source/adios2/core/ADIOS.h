@@ -164,8 +164,13 @@ public:
     void RecordOutputStep(const std::string &name, const size_t step = UnknownStep,
                           const double time = UnknownTime);
 
-    /** A constant reference to the user options from ~/.config/adios2/adios2.yaml */
+    /** A constant reference to the user options from
+     * ~/.config/adios2/adios2.yaml and ~/.config/hpc-campaign/config.yaml
+     */
     const adios2::UserOptions &GetUserOptions();
+
+    /** A constant reference to the host options from ~/.config/hpc-campaign/hosts.yaml */
+    const adios2::HostOptions &GetHostOptions();
 
 private:
     /** Communicator given to parallel constructor. */
@@ -208,8 +213,11 @@ private:
                     core::IO &io);
 
     adios2::UserOptions m_UserOptions;
+    adios2::HostOptions m_HostOptions;
+    adios2::HostConfig m_Test;
     void SetUserOptionDefaults();
     void ProcessUserConfig();
+    void ProcessHostConfig();
 
 private:
     /* Global services that we want to initialize at most once and shutdown
@@ -223,6 +231,8 @@ private:
 public:
     /** Global service AWS SDK initialization */
     static void Global_init_AWS_API();
+
+    static const adios2::HostOptions &StaticGetHostOptions();
 };
 
 } // end namespace core

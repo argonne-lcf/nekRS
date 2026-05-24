@@ -9,6 +9,11 @@
 #include "dp_interface.h"
 #include "sst.h"
 #include "sst_data.h"
+#ifdef _MSC_VER
+#define strncasecmp _strnicmp
+#define strcasecmp _stricmp
+#define strdup _strdup
+#endif
 
 #ifdef SST_HAVE_LIBFABRIC
 extern CP_DP_Interface LoadRdmaDP();
@@ -19,9 +24,9 @@ extern CP_DP_Interface LoadUcxDP();
 #ifdef SST_HAVE_DAOS
 extern CP_DP_Interface LoadDaosDP();
 #endif /* SST_HAVE_LIBFABRIC */
-#ifdef SST_HAVE_MPI
+#ifdef ADIOS2_HAVE_MPI
 extern CP_DP_Interface LoadMpiDP();
-#endif /* SST_HAVE_MPI*/
+#endif /* ADIOS2_HAVE_MPI */
 extern CP_DP_Interface LoadEVpathDP();
 
 typedef struct _DPElement
@@ -74,9 +79,9 @@ CP_DP_Interface SelectDP(CP_Services Svcs, void *CP_Stream, struct _SstParams *P
     List = AddDPPossibility(Svcs, CP_Stream, List, LoadDaosDP(), "daos", Params);
 #endif /* SST_HAVE_DAOS */
 
-#ifdef SST_HAVE_MPI
+#ifdef ADIOS2_HAVE_MPI
     List = AddDPPossibility(Svcs, CP_Stream, List, LoadMpiDP(), "mpi", Params);
-#endif /* SST_HAVE_MPI */
+#endif /* ADIOS2_HAVE_MPI */
 
     int SelectedDP = -1;
     int BestPriority = -1;
@@ -110,7 +115,7 @@ CP_DP_Interface SelectDP(CP_Services Svcs, void *CP_Stream, struct _SstParams *P
                 {
                     if (Rank == 0)
                         fprintf(stderr,
-                                "Warning:  Perferred DataPlane \"%s\" is "
+                                "Warning:  Preferred DataPlane \"%s\" is "
                                 "not available.\n",
                                 List[i].Name);
                 }

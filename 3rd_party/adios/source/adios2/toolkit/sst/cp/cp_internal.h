@@ -1,5 +1,7 @@
 #include "dp_interface.h"
+#ifndef _MSC_VER
 #include <pthread.h>
+#endif
 
 #define SSTMAGICV0 "#ADIOS2-SST v0\n"
 
@@ -83,7 +85,7 @@ extern char *SSTStreamStatusStr[];
 
 struct _SentTimestepRec
 {
-    long Timestep;
+    ssize_t Timestep;
     struct _SentTimestepRec *Next;
 };
 
@@ -92,15 +94,15 @@ typedef struct _WS_ReaderInfo
     SstStream ParentStream;
     enum StreamStatus ReaderStatus;
     void *RankZeroID;
-    long StartingTimestep;
-    long LastSentTimestep;
+    ssize_t StartingTimestep;
+    ssize_t LastSentTimestep;
     int LocalReaderDefinitionsLocked;
-    int LastReleasedTimestep;
+    ssize_t LastReleasedTimestep;
     int FullCommPatternLocked;
-    int CommPatternLockTimestep;
+    ssize_t CommPatternLockTimestep;
     SstPreloadModeType PreloadMode;
-    long PreloadModeActiveTimestep;
-    long OldestUnreleasedTimestep;
+    ssize_t PreloadModeActiveTimestep;
+    ssize_t OldestUnreleasedTimestep;
     size_t FormatSentCount;
     struct _SentTimestepRec *SentTimestepList;
     void *DP_WSR_Stream;
@@ -123,7 +125,7 @@ enum StreamRole
 
 typedef struct _CPTimestepEntry
 {
-    long Timestep;
+    ssize_t Timestep;
     struct _SstData Data;
     struct _TimestepMetadataMsg *Msg;
     int MetaDataSendCount;
@@ -174,13 +176,13 @@ struct _SstStream
     SstParams ConfigParams;
 
     /* WRITER-SIDE FIELDS */
-    int WriterTimestep;
-    int LastReleasedTimestep;
+    ssize_t WriterTimestep;
+    ssize_t LastReleasedTimestep;
     CPTimestepList QueuedTimesteps;
     int QueuedTimestepCount;
     int QueueLimit;
     SstQueueFullPolicy QueueFullPolicy;
-    int LastProvidedTimestep;
+    ssize_t LastProvidedTimestep;
     int WriterDefinitionsLocked;
     size_t NextRRDistribution;
     size_t LastDemandTimestep;
@@ -196,6 +198,7 @@ struct _SstStream
     char *AbsoluteFilename;
     int GlobalOpRequired;
     StepRequest StepRequestQueue;
+    int CloseMessagesSent;
 
     /* writer side marshal info */
     void *WriterMarshalData;
@@ -216,11 +219,11 @@ struct _SstStream
     /* READER-SIDE FIELDS */
     struct _TimestepMetadataList *Timesteps;
     int WriterCohortSize;
-    int ReaderTimestep;
+    ssize_t ReaderTimestep;
     int *Peers;
     CP_PeerConnection *ConnectionsToWriter;
-    int FinalTimestep;
-    int CurrentWorkingTimestep;
+    ssize_t FinalTimestep;
+    ssize_t CurrentWorkingTimestep;
     SstFullMetadata CurrentMetadata;
     struct _SstMetaMetaBlockInternal *InternalMetaMetaInfo;
     int InternalMetaMetaCount;
@@ -230,10 +233,10 @@ struct _SstStream
     struct _SstParams *WriterConfigParams;
     void *ParamsBlock;
     int CommPatternLocked;
-    int CommPatternLockedTimestep;
-    long DiscardPriorTimestep; /* timesteps numerically less than this will be
+    ssize_t CommPatternLockedTimestep;
+    ssize_t DiscardPriorTimestep; /* timesteps numerically less than this will be
                                   discarded with prejudice */
-    long LastDPNotifiedTimestep;
+    ssize_t LastDPNotifiedTimestep;
     int FailureContactRank;
 
     /* reader side marshal info */
@@ -409,7 +412,7 @@ struct _ReaderRequestStepMsg
 typedef struct _TimestepMetadataMsg
 {
     void *RS_Stream;
-    int Timestep;
+    ssize_t Timestep;
     int CohortSize;
     SstPreloadModeType PreloadMode;
     FFSFormatList Formats;
@@ -426,7 +429,7 @@ typedef struct _TimestepMetadataDistributionMsg
 {
     int ReturnValue;
     TSMetadataMsg TSmsg;
-    int CommPatternLockedTimestep;
+    ssize_t CommPatternLockedTimestep;
 } *TSMetadataDistributionMsg;
 
 /*
@@ -437,7 +440,7 @@ typedef struct _TimestepMetadataDistributionMsg
 
 typedef struct _ReleaseRec
 {
-    long Timestep;
+    ssize_t Timestep;
     void *Reader;
 } *ReleaseRecPtr;
 
@@ -462,7 +465,7 @@ typedef struct _ReturnMetadataInfo
 struct _ReleaseTimestepMsg
 {
     void *WSR_Stream;
-    int Timestep;
+    ssize_t Timestep;
 };
 
 /*
@@ -472,7 +475,7 @@ struct _ReleaseTimestepMsg
 struct _LockReaderDefinitionsMsg
 {
     void *WSR_Stream;
-    int Timestep;
+    ssize_t Timestep;
 };
 
 /*
@@ -482,7 +485,7 @@ struct _LockReaderDefinitionsMsg
 typedef struct _CommPatternLockedMsg
 {
     void *RS_Stream;
-    int Timestep;
+    ssize_t Timestep;
 } *CommPatternLockedMsg;
 
 /*
@@ -495,7 +498,7 @@ typedef struct _CommPatternLockedMsg
 typedef struct _WriterCloseMsg
 {
     void *RS_Stream;
-    int FinalTimestep;
+    ssize_t FinalTimestep;
 } *WriterCloseMsg;
 
 /*
@@ -530,7 +533,7 @@ extern CP_Info CP_getCPInfo(char *ControlModule);
 extern char *CP_GetContactString(SstStream s, attr_list DPAttrs);
 extern SstStream CP_newStream();
 extern void SstInternalProvideTimestep(SstStream s, SstData LocalMetadata, SstData Data,
-                                       long Timestep, FFSFormatList Formats,
+                                       ssize_t Timestep, FFSFormatList Formats,
                                        DataFreeFunc FreeTimestep, void *FreeClientData,
                                        SstData AttributeData, DataFreeFunc FreeAttributeData,
                                        void *FreeAttributeClientData);
@@ -575,6 +578,7 @@ extern void FFSFreeMarshalData(SstStream Stream);
 extern void getPeerArrays(int MySize, int MyRank, int PeerSize, int **forwardArray,
                           int **reverseArray);
 extern void AddToLastCallFreeList(void *Block);
+extern CMConnection Tunneling_get_conn(CManager cm, attr_list attrs);
 
 enum VerbosityLevel
 {
@@ -586,7 +590,8 @@ enum VerbosityLevel
                          // read, Begin/EndStep verbosity, etc.)
     PerRankVerbose = 4,  // Per-step info from each rank (for those things that
                          // might be different per rank).
-    TraceVerbose = 5,    // All debugging available
+    TraceDupVerbose = 5, // Stuff that is going to be the same everywhere, elided for compactness
+    TraceVerbose = 6,    // All debugging available
 };
 
 extern void CP_verbose(SstStream Stream, enum VerbosityLevel Level, char *Format, ...);
@@ -599,3 +604,5 @@ extern char *IPDiagString;
 extern CPNetworkInfoFunc globalNetinfoCallback;
 extern void SSTSetNetworkCallback(CPNetworkInfoFunc callback);
 extern void DoStreamSummary(SstStream Stream);
+#define SSIZE_T_MAX (9223372036854775807)
+extern int IP_PORT_ATOM;

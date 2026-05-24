@@ -28,6 +28,10 @@ public:
 
   void solve(double time, int iter) override;
 
+  void rhs(double time, int iter);
+
+  void allocate() override;
+
   void finalize() override
   {
     for (auto &entry : ellipticSolver) {

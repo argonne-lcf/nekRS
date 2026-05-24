@@ -660,7 +660,7 @@ oogs_t *oogs::setup(ogs_t *ogs,
         }
 
         // run Ntests measurements and take min to eliminate runtime variations
-        constexpr int Ntests = 100;
+        constexpr int Ntests = 50;
         double elapsedTest = std::numeric_limits<double>::max();
         for (int test = 0; test < Ntests; ++test) {
           device.finish();
@@ -674,11 +674,16 @@ oogs_t *oogs::setup(ogs_t *ogs,
           oogs::finish(o_q, nVec, stride, type, ogsAdd, gs);
 
           device.finish();
-          elapsedTest = std::min(elapsedTest, MPI_Wtime() - tStart);
-        }
-        MPI_Allreduce(MPI_IN_PLACE, &elapsedTest, 1, MPI_DOUBLE, MPI_MAX, gs->comm);
+          auto elapsed = MPI_Wtime() - tStart;
+          MPI_Allreduce(MPI_IN_PLACE, &elapsed, 1, MPI_DOUBLE, MPI_MAX, gs->comm);
+          if (gs->rank == 0 && platform->verbose()) {
+            printf(" %.4es ", elapsed);
+          }
 
-        if (gs->rank == 0) {
+          elapsedTest = std::min(elapsedTest, elapsed);
+        }
+
+        if (gs->rank == 0 && !platform->verbose()) {
           printf(" %.4es ", elapsedTest);
         }
 

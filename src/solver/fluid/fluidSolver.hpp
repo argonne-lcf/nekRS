@@ -16,16 +16,11 @@ public:
 class fluidSolver_t : public solver_t
 {
 private:
-  void solvePressure(double time, int stage);
-  void solveVelocity(double time, int stage);
-
   void advectionSubcycling(int nEXT, double time);
 
   occa::memory o_zeroNormalMask;
   occa::memory o_filterRT;
   int Nsubsteps;
-
-  occa::memory o_ADV;
 
   occa::memory o_U0;
   occa::memory o_P0;
@@ -37,6 +32,22 @@ private:
 
 public:
   fluidSolver_t(const fluidSolverCfg_t &cfg, const std::unique_ptr<geomSolver_t> &geom);
+
+  void solvePressure(double time, int stage, const occa::memory& o_rhs, occa::memory& o_inout);
+  void solvePressure(double time, int stage) 
+  {
+    occa::memory o_dummy; 
+    solvePressure(time, stage, o_dummy, o_dummy); 
+  };
+  void solveVelocity(double time, int stage, const occa::memory& o_rhs, occa::memory& o_inout);
+  void solveVelocity(double time, int stage) 
+  { 
+   occa::memory o_dummy; // pass dummy instead of o_U to control IC 
+   solveVelocity(time, stage, o_dummy, o_dummy); 
+  };
+
+  void rhsPressure(double time, int stage);
+  void rhsVelocity(double time, int stage);
 
   deviceMemory<dfloat> o_solution(std::string key = "") override
   {
@@ -86,6 +97,8 @@ public:
   void applyDirichlet(double time) override;
   void setupEllipticSolver() override;
 
+  void allocate() override;
+
   void makeAdvection(double time, int tstep);
   void makeExplicit(double time, int tstep);
 
@@ -126,6 +139,9 @@ public:
   occa::memory o_Ue;
   occa::memory o_div;
 
+  occa::memory o_Urhs;
+  occa::memory o_Prhs;
+
   occa::memory o_P;
   occa::memory o_Pe;
 
@@ -133,7 +149,13 @@ public:
   occa::memory o_rho;
   occa::memory o_mue;
 
+  occa::memory h_EXT;
+
+  occa::memory o_ADV;
+  occa::memory h_ADV;
+
   occa::memory o_relUrst;
+  occa::memory h_relUrst;
 
   void finalize() override
   {

@@ -61,7 +61,11 @@ PluginOperator::PluginOperator(const Params &parameters)
     }
 }
 
-PluginOperator::~PluginOperator() { m_Impl->m_HandleDestroy(m_Impl->m_Plugin); }
+PluginOperator::~PluginOperator()
+{
+    if (m_Impl->m_Plugin)
+        m_Impl->m_HandleDestroy(m_Impl->m_Plugin);
+}
 
 void PluginOperator::PluginInit(const std::string &pluginName, const std::string &pluginLibrary)
 {
@@ -72,11 +76,32 @@ void PluginOperator::PluginInit(const std::string &pluginName, const std::string
 
     auto &pluginManager = PluginManager::GetInstance();
     pluginManager.SetParameters(m_Parameters);
-    pluginManager.LoadPlugin(pluginName, pluginLibrary);
-
+    try
+    {
+        pluginManager.LoadPlugin(pluginName, pluginLibrary);
+    }
+    catch (...)
+    {
+        auto m = MakeMessage("Plugins", "PluginOperator", "PluginInit",
+                             "Failed to load library " + m_PluginLibrary + " looking for plugin " +
+                                 m_PluginName,
+                             -1, helper::LogMode::EXCEPTION);
+        throw PluginLoadFailure(m, pluginLibrary, pluginName);
+    }
     m_Impl->m_HandleCreate = pluginManager.GetOperatorCreateFun(pluginName);
     m_Impl->m_HandleDestroy = pluginManager.GetOperatorDestroyFun(pluginName);
     m_Impl->m_Plugin = m_Impl->m_HandleCreate(m_Parameters);
+    // add for external visibility
+    m_PluginName = pluginName;
+    m_PluginLibrary = pluginLibrary;
+    if (m_OperatorNameQuery)
+    {
+        auto m = MakeMessage("Plugins", "PluginOperator", "PluginInit",
+                             "Succeeding in load library " + m_PluginLibrary +
+                                 " looking for plugin " + m_PluginName,
+                             -1, helper::LogMode::EXCEPTION);
+        throw PluginLoadFailure(m, pluginLibrary, pluginName);
+    }
 }
 
 size_t PluginOperator::GetEstimatedSize(const size_t ElemCount, const size_t ElemSize,
@@ -101,9 +126,12 @@ size_t PluginOperator::GetEstimatedSize(const size_t ElemCount, const size_t Ele
     return commonHeaderSize + paramsSize + implSize;
 }
 
+void PluginOperator::AddExtraParameters(const Params &params) { m_ExtraParams = params; }
+
 size_t PluginOperator::Operate(const char *dataIn, const Dims &blockStart, const Dims &blockCount,
                                const DataType type, char *bufferOut)
 {
+    m_Impl->m_Plugin->AddExtraParameters(m_ExtraParams);
     // handle common header first
     size_t offset = 0;
     const uint8_t bufferVersion = 1;
@@ -146,6 +174,7 @@ size_t PluginOperator::InverseOperate(const char *bufferIn, const size_t sizeIn,
     // now set up the plugin if it hasn't already
     PluginInit(pluginName, pluginLibrary);
 
+    m_Impl->m_Plugin->AddExtraParameters(m_ExtraParams);
     // add offset to bufferIn, so plugin doesn't have to worry about plugin
     // header or common header
     size_t pluginSize =

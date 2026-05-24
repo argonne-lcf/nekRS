@@ -37,8 +37,6 @@ do {                                                                            
   kernel(__VA_ARGS__);                                                                                       \
 } while (0)
 
-#define USE_WEIGHTED_INNER_PROD_MULTI_DEVICE 0
-
 class linAlg_t
 {
 private:
@@ -89,6 +87,8 @@ public:
   void disableTimer();
 
 #include "linAlg.tpp"
+  void weightedInnerProdBenchmark(dlong Nlocal, MPI_Comm comm, int fields, int Nrep = 20, bool verbose = false);
+
   void dotProduct(const dlong N,
                   const dlong fieldOffset,
                   const occa::memory &o_x,

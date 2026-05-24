@@ -79,7 +79,7 @@ void uservp(double time)
   fillProp(mesh->Nelements,
            nrs->fieldOffset,
            nrs->scalar->fieldOffset(),
-           nrs->p0th[0],
+           nrs->scalar->p0th[0],
            nrs->scalar->o_S,
            nrs->fluid->o_prop,
            nrs->scalar->o_prop,

@@ -146,39 +146,41 @@ void lpm_t::addVariable(const std::string &dofName, bool output)
 
 void lpm_t::addVariable(dlong Nfields, const std::string &_dofName, bool output)
 {
-  auto dofName = lowerCase(_dofName);
+  const auto dofName = lowerCase(_dofName);
   nekrsCheck(this->initialized(),
              MPI_COMM_SELF,
              EXIT_FAILURE,
              "cannot register DOF %s after calling initialize!\n",
              dofName.c_str());
 
-  const auto nDOFs = dofIds.size();
-  if (dofIds.count(dofName) == 0) {
+  if (dofOffset.count(dofName) == 0) {
     dofNames.push_back(dofName);
-    dofIds[dofName] = nDOFs;
+
+    dofOffset[dofName] = nDOFs_; // running sum
+
     outputDofs[dofName] = output;
     dofCounts[dofName] = Nfields;
-    nDOFs_ += Nfields;
     fieldType[dofName] = FieldType::DOF;
+
+    nDOFs_ += Nfields;
   }
 }
 
-int lpm_t::dofId(const std::string &_dofName) const
+int lpm_t::dofIdx(const std::string &_dofName) const
 {
   auto dofName = lowerCase(_dofName);
-  nekrsCheck(dofIds.count(dofName) == 0,
+  nekrsCheck(dofOffset.count(dofName) == 0,
              MPI_COMM_SELF,
              EXIT_FAILURE,
              "DOF %s not registered!\n",
              dofName.c_str());
-  return dofIds.at(dofName);
+  return dofOffset.at(dofName);
 }
 
 int lpm_t::numDOFs(const std::string &_dofName) const
 {
   auto dofName = lowerCase(_dofName);
-  nekrsCheck(dofIds.count(dofName) == 0,
+  nekrsCheck(dofOffset.count(dofName) == 0,
              MPI_COMM_SELF,
              EXIT_FAILURE,
              "DOF %s not registered!\n",
@@ -293,66 +295,59 @@ void lpm_t::addUserData(void *userdata)
   userdata_ = userdata;
 }
 
-occa::memory lpm_t::getDOF(const std::string &dofName) const
+occa::memory lpm_t::dof(const std::string &dofName)
 {
-  const auto id = dofId(dofName);
-  auto Nfields = numDOFs(dofName);
-
-  return o_y.slice(id * fieldOffset_, Nfields * fieldOffset_);
+  const auto length = (numDOFs(dofName) == 1) ? nParticles_ : numDOFs(dofName) * fieldOffset_;
+  return o_y.slice(dofIdx(dofName) * fieldOffset_, length);
 }
 
-const std::vector<dfloat> lpm_t::getDOFHost(const std::string &dofName)
+std::vector<dfloat> lpm_t::getDOFHost(const std::string &dofName)
 {
-  auto o_dof = getDOF(dofName);
-  auto Nfields = numDOFs(dofName);
+  const auto length = (numDOFs(dofName) == 1) ? nParticles_ : numDOFs(dofName) * fieldOffset_;
 
-  std::vector<dfloat> h_dof(Nfields * fieldOffset_);
-  o_dof.copyTo(h_dof.data(), Nfields * fieldOffset_);
+  std::vector<dfloat> h_dof(length);
+  dof(dofName).copyTo(h_dof.data(), h_dof.size());
   return h_dof;
 }
 
-occa::memory lpm_t::getProp(const std::string &propName) const
+occa::memory lpm_t::prop(const std::string &propName)
 {
   const auto id = propId(propName);
   auto Nfields = numProps(propName);
-  return o_prop.slice(id * fieldOffset_, Nfields * fieldOffset_);
+  const auto length = (Nfields == 1) ? nParticles_ : Nfields * fieldOffset_;
+  return o_prop.slice(id * fieldOffset_, length);
 }
 
-std::vector<dfloat> lpm_t::getPropHost(const std::string &propName) const
+std::vector<dfloat> lpm_t::getPropHost(const std::string &propName) 
 {
-  auto o_propEntry = getProp(propName);
+  auto o_propEntry = prop(propName);
   auto Nfields = numProps(propName);
 
-  std::vector<dfloat> h_prop(Nfields * fieldOffset_);
-  o_propEntry.copyTo(h_prop.data(), Nfields * fieldOffset_);
+  const auto length = (Nfields == 1) ? nParticles_ : Nfields * fieldOffset_;
+
+  std::vector<dfloat> h_prop(length);
+  o_propEntry.copyTo(h_prop.data(), h_prop.size());
   return h_prop;
 }
 
-void lpm_t::setProp(const std::string &propName, const occa::memory &o_fld, dlong fldOffset)
-{
-  auto o_propEntry = getProp(propName);
-  auto Nfields = numProps(propName);
-  const auto offset = (fldOffset > 0) ? fldOffset : numParticles();
-
-  if (o_fld.byte_size()) {
-    o_propEntry.copyFrom(o_fld, Nfields * offset);
-  }
-}
-
-const occa::memory lpm_t::getInterpField(const std::string &interpFieldName)
+occa::memory lpm_t::interpField(const std::string &interpFieldName) const
 {
   const auto id = interpFieldId(interpFieldName);
   auto Nfields = numFieldsInterp(interpFieldName);
-  return o_interpFld.slice(id * fieldOffset_, Nfields * fieldOffset_);
+  const auto length = (Nfields == 1) ? nParticles_ : Nfields * fieldOffset_;
+
+  return o_interpFld.slice(id * fieldOffset_, length);
 }
 
-const std::vector<dfloat> lpm_t::getInterpFieldHost(const std::string &interpFieldName)
+std::vector<dfloat> lpm_t::interpFieldHost(const std::string &interpFieldName)
 {
-  auto o_interpFldEntry = getInterpField(interpFieldName);
+  auto o_interpFldEntry = interpField(interpFieldName);
   auto Nfields = numFieldsInterp(interpFieldName);
 
-  std::vector<dfloat> h_interpField(Nfields * fieldOffset_);
-  o_interpFldEntry.copyTo(h_interpField.data(), Nfields * fieldOffset_);
+  const auto length = (Nfields == 1) ? nParticles_ : Nfields * fieldOffset_;
+
+  std::vector<dfloat> h_interpField(length);
+  o_interpFldEntry.copyTo(h_interpField.data(), h_interpField.size());
   return h_interpField;
 }
 
@@ -411,11 +406,8 @@ void lpm_t::initialize(int nParticles, double t0, const occa::memory &o_y0)
 
   // set initial condition based on user-input
   if (nParticles_ > 0) {
-    for (auto &dof : dofNames) {
-      const auto id = dofId(dof);
-      auto o_y_dof = getDOF(dof);
-      auto o_y0_dof = o_y0 + id * nParticles_;
-      o_y_dof.copyFrom(o_y0_dof, nParticles_);
+    for (auto &entry : dofNames) {
+      dof(entry).copyFrom(o_y0 + dofIdx(entry) * nParticles_, numDOFs(entry) * nParticles_);
     }
   }
 
@@ -451,7 +443,7 @@ void lpm_t::interpolate(const std::string &interpFieldName)
     platform->timer.tic(timerName + "integrate::userRHS::interpolate");
   }
   auto o_fld = extrapolatedInterpFields.at(interpFieldName);
-  auto o_interpFld = getInterpField(interpFieldName);
+  auto o_interpFld = interpField(interpFieldName);
   const auto Nfields = numFieldsInterp(interpFieldName);
   const auto offset = offsetFieldsInterp[interpFieldName];
 
@@ -1040,9 +1032,9 @@ void lpm_t::migrate()
   }
 
   {
-    auto o_xcoord = getDOF("x");
-    auto o_ycoord = getDOF("y");
-    auto o_zcoord = getDOF("z");
+    auto o_xcoord = dof("x");
+    auto o_ycoord = dof("y");
+    auto o_zcoord = dof("z");
     interp->setPoints(o_xcoord, o_ycoord, o_zcoord);
   }
 
@@ -1324,9 +1316,9 @@ void lpm_t::migrate()
   }
 
   {
-    auto o_xcoord = getDOF("x");
-    auto o_ycoord = getDOF("y");
-    auto o_zcoord = getDOF("z");
+    auto o_xcoord = dof("x");
+    auto o_ycoord = dof("y");
+    auto o_zcoord = dof("z");
     interp->setPoints(o_xcoord, o_ycoord, o_zcoord);
   }
 
@@ -1543,9 +1535,9 @@ void lpm_t::addParticles(int newNParticles,
 
   // update findpts results for newly added particles
   {
-    auto o_xcoord = getDOF("x");
-    auto o_ycoord = getDOF("y");
-    auto o_zcoord = getDOF("z");
+    auto o_xcoord = dof("x");
+    auto o_ycoord = dof("y");
+    auto o_zcoord = dof("z");
     interp->setPoints(o_xcoord, o_ycoord, o_zcoord);
 
     if (timerLevel != TimerLevel::None) {
@@ -1662,9 +1654,9 @@ void lpm_t::deleteParticles()
 
   // update findpts results
   {
-    auto o_xcoord = getDOF("x");
-    auto o_ycoord = getDOF("y");
-    auto o_zcoord = getDOF("z");
+    auto o_xcoord = dof("x");
+    auto o_ycoord = dof("y");
+    auto o_zcoord = dof("z");
     interp->setPoints(o_xcoord, o_ycoord, o_zcoord);
 
     if (timerLevel != TimerLevel::None) {
@@ -1701,15 +1693,27 @@ void lpm_t::writeToFile()
     platform->timer.tic(timerName + "write");
   }
 
+  std::string folderName = "";
+  platform->options.getArgs("LPM CHECKPOINT DIRECTORY", folderName);
+  if (!folderName.empty()) {
+    folderName += "/";
+    if (!fs::is_directory(folderName)) {
+      if (platform->comm.mpiRank() == 0) {
+        std::cout << " directory: " << folderName << " does not exist, reset to ./" << std::endl << std::flush;
+      }
+      folderName = "";
+    }
+  }
+
   // Required to determine if points are outside of the domain
   // Do not output points outside of the domain
 
   long long int nPartOutput = 0;
   auto &code = interp->data().code;
   {
-    auto o_xcoord = getDOF("x");
-    auto o_ycoord = getDOF("y");
-    auto o_zcoord = getDOF("z");
+    auto o_xcoord = dof("x");
+    auto o_ycoord = dof("y");
+    auto o_zcoord = dof("z");
     interp->setPoints(o_xcoord, o_ycoord, o_zcoord);
 
     // disable findpts kernel timer for this call
@@ -1742,7 +1746,7 @@ void lpm_t::writeToFile()
   }
 
   std::ostringstream output;
-  output << "par" << std::setw(5) << std::setfill('0') << out_step << ".vtu";
+  output << folderName << "par" << std::setw(5) << std::setfill('0') << out_step << ".vtu";
   std::string fname = output.str();
 
   long long int pOffset = 0;
@@ -1906,7 +1910,7 @@ void lpm_t::writeToFile()
     if (!isOutput) {
       continue;
     }
-    auto interpFieldHost = getInterpFieldHost(interpFieldName);
+    auto dataIn = interpFieldHost(interpFieldName);
     auto Nfields = numFieldsInterp(interpFieldName);
 
     std::vector<float> interpFieldFloat(Nfields * nPartOutput, 0.0);
@@ -1915,7 +1919,7 @@ void lpm_t::writeToFile()
       if (code[particle] != findpts::CODE_NOT_FOUND) {
         for (int fld = 0; fld < Nfields; ++fld) {
           interpFieldFloat[Nfields * pid + fld] =
-              static_cast<float>(interpFieldHost[particle + fld * fieldOffset_]);
+              static_cast<float>(dataIn[particle + fld * fieldOffset_]);
         }
         pid++;
       }
@@ -2170,9 +2174,9 @@ void lpm_t::restart(const std::string &restartFile)
     zCoord[pid] = static_cast<dfloat>(coords[dim * pid + 2]);
   }
 
-  auto o_xCoord = getDOF("x");
-  auto o_yCoord = getDOF("y");
-  auto o_zCoord = getDOF("z");
+  auto o_xCoord = dof("x");
+  auto o_yCoord = dof("y");
+  auto o_zCoord = dof("z");
 
   o_xCoord.copyFrom(xCoord.data(), nPartLocal);
   o_yCoord.copyFrom(yCoord.data(), nPartLocal);
@@ -2194,13 +2198,13 @@ void lpm_t::restart(const std::string &restartFile)
     occa::memory o_fld;
     if (type == FieldType::DOF) {
       nComponents = dofCounts.at(fieldName);
-      o_fld = getDOF(fieldName);
+      o_fld = dof(fieldName);
     } else if (type == FieldType::PROP) {
       nComponents = propCounts.at(fieldName);
-      o_fld = getProp(fieldName);
+      o_fld = prop(fieldName);
     } else if (type == FieldType::INTERP_FIELD) {
       nComponents = interpFieldCounts.at(fieldName);
-      o_fld = getInterpField(fieldName);
+      o_fld = interpField(fieldName);
     }
 
     nekrsCheck(

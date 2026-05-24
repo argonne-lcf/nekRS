@@ -2,8 +2,11 @@
 # Programmer(s): Slaven Peles, Cody J. Balos @ LLNL
 # ---------------------------------------------------------------
 # SUNDIALS Copyright Start
-# Copyright (c) 2002-2022, Lawrence Livermore National Security
+# Copyright (c) 2025-2026, Lawrence Livermore National Security,
+# University of Maryland Baltimore County, and the SUNDIALS contributors.
+# Copyright (c) 2013-2025, Lawrence Livermore National Security
 # and Southern Methodist University.
+# Copyright (c) 2002-2013, Lawrence Livermore National Security.
 # All rights reserved.
 #
 # See the top-level LICENSE and NOTICE files for details.
@@ -16,36 +19,22 @@
 
 install(CODE "MESSAGE(\"\nInstall NVECTOR_Trilinos\n\")")
 
-# Set Trilinos compilers/flags
-set(CMAKE_CXX_COMPILER ${Trilinos_INTERFACE_CXX_COMPILER})
-set(CMAKE_C_COMPILER   ${Trilinos_INTERFACE_C_COMPILER})
-set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${Trilinos_INTERFACE_CXX_COMPILER_FLAGS}")
-set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} ${Trilinos_INTERFACE_C_COMPILER_FLAGS}")
-
 # Create the library
-sundials_add_library(sundials_nvectrilinos
-  SOURCES
-    nvector_trilinos.cpp
-  HEADERS
-    ${SUNDIALS_SOURCE_DIR}/include/nvector/nvector_trilinos.h
-  INCLUDE_SUBDIR
-    nvector
-  OBJECT_LIBRARIES
-    sundials_generic_obj
-  LINK_LIBRARIES
-    PUBLIC SUNDIALS::TRILINOS
-  OUTPUT_NAME
-    sundials_nvectrilinos
-  VERSION
-    ${nveclib_VERSION}
-  SOVERSION
-    ${nveclib_SOVERSION}
-)
+sundials_add_library(
+  sundials_nvectrilinos
+  SOURCES nvector_trilinos.cpp
+  HEADERS ${SUNDIALS_SOURCE_DIR}/include/nvector/nvector_trilinos.h
+  INCLUDE_SUBDIR nvector
+  LINK_LIBRARIES PUBLIC sundials_core Tpetra::all_libs
+  OUTPUT_NAME sundials_nvectrilinos
+  VERSION ${nveclib_VERSION}
+  SOVERSION ${nveclib_SOVERSION})
 
 # Install the exported NVECTRILINOS CXX header files in a separate subdirectory
-install(FILES
-        ${SUNDIALS_SOURCE_DIR}/include/nvector/trilinos/SundialsTpetraVectorInterface.hpp
-        ${SUNDIALS_SOURCE_DIR}/include/nvector/trilinos/SundialsTpetraVectorKernels.hpp
-        DESTINATION "${CMAKE_INSTALL_INCLUDEDIR}/nvector/trilinos")
+install(
+  FILES
+    ${SUNDIALS_SOURCE_DIR}/include/nvector/trilinos/SundialsTpetraVectorInterface.hpp
+    ${SUNDIALS_SOURCE_DIR}/include/nvector/trilinos/SundialsTpetraVectorKernels.hpp
+  DESTINATION "${CMAKE_INSTALL_INCLUDEDIR}/nvector/trilinos")
 
 message(STATUS "Added NVECTOR_Trilinos module")

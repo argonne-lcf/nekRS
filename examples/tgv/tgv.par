@@ -2,18 +2,17 @@ userSections = CASEDATA
 
 [GENERAL]
 polynomialOrder = 7
-cubaturePolynomialOrder = 9 
+overintegrationPolynomialOrder = 9 
 
 #startFrom = "r.fld"
 stopAt = endTime
 endTime = 20
 
-timeStepper = tombo3
+timeStepper = tombo2
 dt = 3e-3
 
 #timeStepper = tombo2
-#dt = targetCFL=2.5 + max=3e-3
-#subcyclingSteps = 1
+#dt = targetCFL=4
 
 checkpointControl = simulationTime 
 checkpointInterval = 0
@@ -22,12 +21,13 @@ regularization = hpfrt + nModes=1 + scalingCoeff=1
 
 [FLUID PRESSURE]
 residualTol = 1e-04
-#solver = gmres+flexbile
+
+smootherType = Jac+Cheby
 #smootherType = RAS+OptFourthChebyshev 
 #pMGSchedule = p=7+degree=2, p=3+degree=2, p=1, p=3+degree=2, p=7+degree=2
 
 solver = cg+flexible 
-smootherType = Jac+Cheby
+#solver = gmres+flexible+iR+nVector=3
 
 [FLUID VELOCITY]
 boundaryTypeMap = none

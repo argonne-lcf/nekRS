@@ -20,7 +20,7 @@ polynomialOrder             <int>
 
 dealiasing                  true [D], false
 
-  cubaturePolynomialOrder   <int>
+  overintegrationPolynomialOrder   <int>
                             3/2*(polynomialOrder+1) -1 [D] 
 
 redirectOutputTo            <string>
@@ -53,6 +53,8 @@ advectionSubCyclingSteps    <int>, auto                                number of
 
 checkpointEngine            <string>
                             nek [D], adios
+
+checkpointDirectory         "<string>"                                 default folder for new checkpoint files
 
 checkpointPrecision         <int>
                             32[D], 64 
@@ -132,15 +134,19 @@ coarseGridDiscretization    FEM [D]                                    linear fi
                               +Galerkin                                coarse grid matrix by Galerkin projection
                             SEMFEM                                     linear FEM approx on high-order nodes
 
-coarseSolver/semfemSolver   smoother
+coarseSolver               smoother
+                            xxt
                             jpcg                                       Jacobi preconditioned CG
                               + residualTol=<float> 
                               + maxIter=<int> 
                             boomerAMG [D]                              HYPRE's AMG solver
                               +smoother
                               +cpu [D for multigrid]
-                              +device [D for SEMFEM] 
                                 +overlap                               overlap coarse grid solve in additive MG cycle
+
+semfemSolver                boomerAMG [D]                              HYPRE's AMG solver
+                              +smoother
+                              +device
 
 pMGSchedule                 p=<int>, degree=<int>, ...                 custom polynomial order and Chebyshev order for each pMG level
 
@@ -268,9 +274,11 @@ jtvRecycleProperties        true [D], false                            recycle p
 dealiasing                  true, false
 ----------------------------------------------------------------------------------------------------------------------
 [ELLIPTIC FOO]
-vectorField                 true, false [D]
-poisson                     true, flase [D] 
-
+variableCoeff               true, false [D]
+poisson                     true, false [D] 
+----------------------------------------------------------------------------------------------------------------------
+[LPM]
+checkpointDirectory         "<string>"                                 default directory for new files
 ----------------------------------------------------------------------------------------------------------------------
 
 

@@ -12,31 +12,82 @@
 
 #include <string.h> // memcpy
 
-#ifndef _WIN32
+#ifdef _WIN32
 
-#include <netdb.h>      //getFQDN
-#include <sys/socket.h> //getFQDN
-#include <sys/types.h>  //getFQDN
-#include <unistd.h>     // gethostname
+#ifndef WIN32_LEAN_AND_MEAN
+#define WIN32_LEAN_AND_MEAN
+#endif
+#ifndef NOMINMAX
+#define NOMINMAX
+#endif
+#ifndef FD_SETSIZE
+#define FD_SETSIZE 1024
+#endif
+#include <winsock2.h>
+#include <ws2tcpip.h>
+// Link with Ws2_32.lib (MSVC)
+#ifdef _MSC_VER
+#pragma comment(lib, "Ws2_32.lib")
+#endif
+using socket_t = SOCKET;
 
-#if defined(ADIOS2_HAVE_DATAMAN) || defined(ADIOS2_HAVE_TABLE)
+inline void close_socket(socket_t s)
+{
+    if (s != INVALID_SOCKET)
+        closesocket(s);
+}
+inline bool is_valid_socket(socket_t s) { return (s != INVALID_SOCKET); }
+// Simple RAII to ensure WSA is initialized once
+struct WSAInit
+{
+    WSAInit()
+    {
+        WSADATA wsa{};
+        int r = WSAStartup(MAKEWORD(2, 2), &wsa);
+        if (r != 0)
+        {
+            throw std::runtime_error("WSAStartup failed: " + std::to_string(r));
+        }
+    }
+    ~WSAInit() { WSACleanup(); }
+};
 
-#include <iostream>
-#include <thread>
-
-#include <arpa/inet.h>  //AvailableIpAddresses() inet_ntoa
-#include <net/if.h>     //AvailableIpAddresses() struct if_nameindex
-#include <netinet/in.h> //AvailableIpAddresses() struct sockaddr_in
-#include <sys/ioctl.h>  //AvailableIpAddresses() ioctl
-
-#include <nlohmann_json.hpp>
-
-#endif // ADIOS2_HAVE_DATAMAN || ADIOS2_HAVE_TABLE
-
-#else // _WIN32
+#include <process.h>
+#include <time.h>
+#define getpid() _getpid()
+#define read(fd, buf, len) recv(fd, (buf), (len), 0)
+#define write(fd, buf, len) send(fd, buf, (len), 0)
+#define close(x) closesocket(x)
+#define INST_ADDRSTRLEN 50
 #include <tchar.h>
 #include <windows.h> // GetComputerName
-#endif               // _WIN32
+
+#else // not _WIN32
+
+#include <arpa/inet.h> //AvailableIpAddresses() inet_ntoa
+#include <net/if.h>    //AvailableIpAddresses() struct if_nameindex
+#include <netdb.h>
+#include <netinet/in.h> //AvailableIpAddresses() struct sockaddr_in
+#include <nlohmann_json.hpp>
+#include <sys/ioctl.h> //AvailableIpAddresses() ioctl
+#include <sys/socket.h>
+#include <sys/types.h>
+#include <unistd.h>
+using socket_t = int;
+constexpr int INVALID_SOCKET = -1;
+inline void close_socket(socket_t s)
+{
+    if (s >= 0)
+        close(s);
+}
+inline bool is_valid_socket(socket_t s) { return (s >= 0); }
+
+#if defined(ADIOS2_HAVE_DATAMAN) || defined(ADIOS2_HAVE_TABLE)
+#include <iostream>
+#include <thread>
+#endif // ADIOS2_HAVE_DATAMAN || ADIOS2_HAVE_TABLE
+
+#endif // _WIN32
 
 namespace adios2
 {
@@ -47,6 +98,8 @@ std::string GetFQDN() noexcept
 {
     char hostname[1024];
 #ifdef WIN32
+    // Ensure Winsock is initialized (runs only once thanks to static)
+    static WSAInit _wsa_guard;
     TCHAR infoBuf[1024];
     DWORD bufCharCount = sizeof(hostname);
     memset(hostname, 0, sizeof(hostname));
@@ -78,7 +131,7 @@ std::string GetFQDN() noexcept
         for (p = info; p != NULL; p = p->ai_next)
         {
             // printf("hostname: %s\n", p->ai_canonname);
-            if (strchr(p->ai_canonname, '.') != NULL)
+            if (p->ai_canonname && (strchr(p->ai_canonname, '.') != NULL))
             {
                 strncpy(hostname, p->ai_canonname, sizeof(hostname) - 1);
                 break;
@@ -229,7 +282,8 @@ void HandshakeWriter(Comm const &comm, size_t &appID, std::vector<std::string> &
     {
         std::string addr =
             "tcp://" + ip + ":" +
-            std::to_string(basePort + (100 * appID) + (mpiRank % 1000) * channelsPerRank + i) +
+            std::to_string(basePort + (100 * appID) +
+                           (mpiRank % 1000) * static_cast<unsigned long>(channelsPerRank) + i) +
             "\0";
         fullAddresses.push_back(addr);
     }
@@ -237,7 +291,8 @@ void HandshakeWriter(Comm const &comm, size_t &appID, std::vector<std::string> &
     std::string localAddressesStr = localAddressesJson.dump();
     std::vector<char> localAddressesChar(64 * channelsPerRank, '\0');
     std::memcpy(localAddressesChar.data(), localAddressesStr.c_str(), localAddressesStr.size());
-    std::vector<char> globalAddressesChar(64 * channelsPerRank * mpiSize, '\0');
+    std::vector<char> globalAddressesChar(static_cast<size_t>(64) * channelsPerRank * mpiSize,
+                                          '\0');
     comm.GatherArrays(localAddressesChar.data(), 64 * channelsPerRank, globalAddressesChar.data());
 
     // Writing handshake file
@@ -246,7 +301,9 @@ void HandshakeWriter(Comm const &comm, size_t &appID, std::vector<std::string> &
         nlohmann::json globalAddressesJson;
         for (int i = 0; i < mpiSize; ++i)
         {
-            auto j = nlohmann::json::parse(&globalAddressesChar[i * 64 * channelsPerRank]);
+            auto j = nlohmann::json::parse(
+                &globalAddressesChar[static_cast<size_t>(i) * static_cast<size_t>(64) *
+                                     static_cast<size_t>(channelsPerRank)]);
             for (auto &i : j)
             {
                 globalAddressesJson.push_back(i);
@@ -320,6 +377,193 @@ void HandshakeReader(Comm const &comm, size_t &appID, std::vector<std::string> &
 
 #endif // ADIOS2_HAVE_DATAMAN || ADIOS2_HAVE_TABLE
 #endif // _WIN32
+
+struct NetworkSocketData
+{
+    socket_t m_Socket;
+};
+
+NetworkSocket::NetworkSocket()
+{
+#ifdef _WIN32
+    // Ensure Winsock is initialized (runs only once thanks to static)
+    static WSAInit _wsa_guard;
+#endif
+
+    m_Data = new NetworkSocketData();
+    m_Data->m_Socket = INVALID_SOCKET;
+};
+
+NetworkSocket::~NetworkSocket() { delete m_Data; };
+
+bool NetworkSocket::valid() const { return is_valid_socket(m_Data->m_Socket); }
+int NetworkSocket::GetSocket() { return static_cast<int>(m_Data->m_Socket); }
+
+void NetworkSocket::Connect(const std::string &hostname, uint16_t port, std::string protocol)
+{
+    struct addrinfo hints
+    {
+    };
+    struct addrinfo *res, *rp;
+    m_Data->m_Socket = INVALID_SOCKET;
+    int ret;
+
+    std::memset(&hints, 0, sizeof(hints));
+    hints.ai_family = AF_UNSPEC;     // Allow IPv4 or IPv6
+    hints.ai_socktype = SOCK_STREAM; // TCP stream sockets
+    hints.ai_protocol = IPPROTO_TCP;
+    hints.ai_flags = AI_ADDRCONFIG; // Prefer addresses that are configured
+
+    std::string portStr = std::to_string(port);
+    ret = getaddrinfo(hostname.c_str(), portStr.c_str(), &hints, &res);
+    if (ret != 0)
+    {
+        helper::Throw<std::ios_base::failure>("Helper", "helper::adiosNetwork", "Connect",
+                                              "getaddrinfo failed :" +
+                                                  std::string(gai_strerror(ret)));
+    }
+
+    // Try each address until we successfully connect
+    for (rp = res; rp != nullptr; rp = rp->ai_next)
+    {
+        socket_t s = socket(rp->ai_family, rp->ai_socktype, rp->ai_protocol);
+        if (s == INVALID_SOCKET)
+            continue; // Try next address
+
+        if (connect(s, rp->ai_addr, static_cast<socklen_t>(rp->ai_addrlen)) == 0)
+        {
+            m_Data->m_Socket = s; // Success
+            break;
+        }
+        close_socket(s);
+    }
+
+    freeaddrinfo(res);
+
+    if (m_Data->m_Socket == INVALID_SOCKET)
+    {
+        helper::Throw<std::ios_base::failure>("Helper", "helper::adiosNetwork", "Connect",
+                                              "cannot make TCP connection to host = " + hostname +
+                                                  " port = " + std::to_string(port));
+    }
+}
+
+void NetworkSocket::RequestResponse(const std::string &request, char *response,
+                                    size_t maxResponseSize)
+{
+#ifdef _WIN32
+    int result;
+    int len = static_cast<int>(request.length());
+    int maxlen = static_cast<int>(maxResponseSize) - 1;
+#else
+    ssize_t result;
+    size_t len = request.length();
+    size_t maxlen = maxResponseSize - 1;
+#endif
+    result = write(m_Data->m_Socket, request.c_str(), len);
+    if (result == -1)
+    {
+        helper::Throw<std::ios_base::failure>("Helper", "helper:adiosNetwork", "RequestResponse",
+                                              "error: Cannot send request");
+    }
+
+    result = read(m_Data->m_Socket, response, maxlen);
+    if (result == -1)
+    {
+        helper::Throw<std::ios_base::failure>("Helper", "helper:adiosNetwork", "RequestResponse",
+                                              "error: Cannot get response");
+    }
+    // safely null terminate
+    response[result] = '\0';
+}
+
+void NetworkSocket::Close()
+{
+    if (m_Data->m_Socket != -1)
+    {
+        close(m_Data->m_Socket);
+        m_Data->m_Socket = -1;
+    }
+}
+
+#ifdef ADIOS2_HAVE_OPENSSL
+
+#include <openssl/err.h>
+#include <openssl/ssl.h>
+
+struct SSLData
+{
+    NetworkSocket m_Socket;
+    SSL *m_SSL;
+    SSL_CTX *m_sslCtx = nullptr;
+};
+
+SSLSocket::SSLSocket()
+{
+#if OPENSSL_VERSION_NUMBER < 0x10100000L
+    SSL_library_init();
+#else
+    OPENSSL_init_ssl(0, NULL);
+#endif
+    SSL_load_error_strings();
+    OpenSSL_add_all_algorithms();
+
+    m_Data = new SSLData();
+    m_Data->m_sslCtx = SSL_CTX_new(TLS_client_method());
+    if (!m_Data->m_sslCtx)
+    {
+        helper::Throw<std::ios_base::failure>("Helper", "helper::adiosNetwork::SSLSocket",
+                                              "SSLSocket", "cannot create SSL context");
+    }
+};
+
+SSLSocket::~SSLSocket()
+{
+    if (m_Data->m_sslCtx)
+    {
+        SSL_CTX_free(m_Data->m_sslCtx);
+        m_Data->m_sslCtx = nullptr;
+    };
+    delete m_Data;
+};
+
+bool SSLSocket::valid() const
+{
+    return (m_Data->m_Socket.valid() && m_Data->m_sslCtx != nullptr && m_Data->m_SSL != nullptr);
+};
+
+void SSLSocket::Connect(const std::string &hostname, uint16_t port, std::string protocol)
+{
+    m_Data->m_Socket.Connect(hostname, port);
+    m_Data->m_SSL = SSL_new(m_Data->m_sslCtx);
+    SSL_set_fd(m_Data->m_SSL, m_Data->m_Socket.GetSocket());
+
+    if (SSL_connect(m_Data->m_SSL) <= 0)
+    {
+        ERR_print_errors_fp(stderr);
+        helper::Throw<std::ios_base::failure>("Helper", "helper::adiosNetwork::SSLSocket",
+                                              "Connect", "SSL handshake failed");
+    }
+}
+
+int SSLSocket::Write(const char *buffer, int size)
+{
+    return SSL_write(m_Data->m_SSL, buffer, size);
+}
+int SSLSocket::Read(char *buffer, int size) { return SSL_read(m_Data->m_SSL, buffer, size); }
+
+void SSLSocket::Close()
+{
+    if (m_Data->m_SSL)
+    {
+        SSL_shutdown(m_Data->m_SSL);
+        SSL_free(m_Data->m_SSL);
+        m_Data->m_SSL = nullptr;
+    }
+    m_Data->m_Socket.Close();
+};
+
+#endif // ADIOS2_HAVE_OPENSSL
 
 } // end namespace helper
 } // end namespace adios2

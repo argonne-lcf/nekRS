@@ -33,10 +33,6 @@ SOFTWARE.
 #include "ellipticParseMultigridSchedule.hpp"
 #include "determineMGLevels.hpp"
 
-#include "hypreWrapper.hpp"
-#include "hypreWrapperDevice.hpp"
-#include "AMGX.hpp"
-
 class MGSolver_t
 {
 
@@ -96,14 +92,22 @@ public:
     coarseLevel_t(const std::string& name, setupAide options, MPI_Comm comm);
     ~coarseLevel_t();
 
-    void setupSolver(hlong *globalRowStarts, dlong nnz, hlong *Ai, hlong *Aj, dfloat *Avals, const occa::memory& o_weight, ogs_t *ogs, bool nullSpace);
+    void setupSolver(const std::vector<hlong>& globalRowStarts,
+                     const std::vector<hlong>& Ai,
+                     const std::vector<hlong>& Aj,
+                     const std::vector<dfloat>& Av,
+                     const occa::memory& o_weight_,
+                     ogs_t *ogs_,
+                     bool nullSpace);
+
     void updateMatrix(dlong nnz, hlong *Ai, hlong *Aj, dfloat *Avals);
 
     void solve(occa::memory &o_rhs, occa::memory &o_x);
     std::function<void(occa::memory &, occa::memory &)> solvePtr = nullptr;
 
     void *boomerAMG = nullptr;
-    AMGX_t *AMGX = nullptr;
+    void *AMGX = nullptr;
+    void *xxt = nullptr;
   };
 
   MPI_Comm comm;

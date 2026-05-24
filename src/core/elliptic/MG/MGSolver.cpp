@@ -129,7 +129,8 @@ void MGSolver_t::runVcycle()
     o_rhsCoarse.copyFrom(levels[baseLevel]->o_rhs);
     o_xCoarse = platform->memoryPool.reserve<pfloat>(levels[baseLevel]->o_x.size());
     auto xCoarsePtr = o_xCoarse.ptr<pfloat>();
-    for (int i = 0; i < o_xCoarse.size(); ++i) {
+    const auto xCoarseSize = o_xCoarse.size();
+    for (int i = 0; i < xCoarseSize; ++i) {
       xCoarsePtr[i] = 0;
     }
   } else {

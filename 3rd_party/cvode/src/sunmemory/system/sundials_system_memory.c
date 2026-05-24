@@ -2,8 +2,11 @@
  * Programmer(s): Cody J. Balos @ LLNL
  * -----------------------------------------------------------------
  * SUNDIALS Copyright Start
- * Copyright (c) 2002-2022, Lawrence Livermore National Security
+ * Copyright (c) 2025-2026, Lawrence Livermore National Security,
+ * University of Maryland Baltimore County, and the SUNDIALS contributors.
+ * Copyright (c) 2013-2025, Lawrence Livermore National Security
  * and Southern Methodist University.
+ * Copyright (c) 2002-2013, Lawrence Livermore National Security.
  * All rights reserved.
  *
  * See the top-level LICENSE and NOTICE files for details.
@@ -17,10 +20,15 @@
 
 #include <stdlib.h>
 #include <string.h>
+
+#include <sundials/priv/sundials_errors_impl.h>
+#include <sundials/sundials_errors.h>
 #include <sundials/sundials_math.h>
+#include <sundials/sundials_memory.h>
 #include <sunmemory/sunmemory_system.h>
 
 #include "sundials_debug.h"
+#include "sundials_macros.h"
 
 struct SUNMemoryHelper_Content_Sys_
 {
@@ -36,13 +44,17 @@ typedef struct SUNMemoryHelper_Content_Sys_ SUNMemoryHelper_Content_Sys;
 
 SUNMemoryHelper SUNMemoryHelper_Sys(SUNContext sunctx)
 {
+  SUNFunctionBegin(sunctx);
+
   SUNMemoryHelper helper;
 
   /* Allocate the helper */
   helper = SUNMemoryHelper_NewEmpty(sunctx);
+  SUNCheckLastErrNull();
 
   /* Set the ops */
   helper->ops->alloc         = SUNMemoryHelper_Alloc_Sys;
+  helper->ops->allocstrided  = SUNMemoryHelper_AllocStrided_Sys;
   helper->ops->dealloc       = SUNMemoryHelper_Dealloc_Sys;
   helper->ops->copy          = SUNMemoryHelper_Copy_Sys;
   helper->ops->getallocstats = SUNMemoryHelper_GetAllocStats_Sys;
@@ -52,6 +64,8 @@ SUNMemoryHelper SUNMemoryHelper_Sys(SUNContext sunctx)
   /* Attach content and ops */
   helper->content =
     (SUNMemoryHelper_Content_Sys*)malloc(sizeof(SUNMemoryHelper_Content_Sys));
+  SUNAssertNull(helper->content, SUN_ERR_MALLOC_FAIL);
+
   SUNHELPER_CONTENT(helper)->num_allocations      = 0;
   SUNHELPER_CONTENT(helper)->num_deallocations    = 0;
   SUNHELPER_CONTENT(helper)->bytes_allocated      = 0;
@@ -60,108 +74,121 @@ SUNMemoryHelper SUNMemoryHelper_Sys(SUNContext sunctx)
   return helper;
 }
 
-int SUNMemoryHelper_Alloc_Sys(SUNMemoryHelper helper, SUNMemory* memptr,
-                              size_t mem_size, SUNMemoryType mem_type,
-                              void* queue)
+SUNErrCode SUNMemoryHelper_Alloc_Sys(SUNMemoryHelper helper, SUNMemory* memptr,
+                                     size_t mem_size, SUNMemoryType mem_type,
+                                     SUNDIALS_MAYBE_UNUSED void* queue)
 {
-  SUNMemory mem = SUNMemoryNewEmpty();
+  SUNFunctionBegin(helper->sunctx);
+
+  SUNAssert(mem_type == SUNMEMTYPE_HOST || mem_type == SUNMEMTYPE_UVM,
+            SUN_ERR_ARG_INCOMPATIBLE);
+
+  SUNMemory mem = SUNMemoryNewEmpty(helper->sunctx);
+  SUNCheckLastErr();
 
   mem->ptr   = NULL;
   mem->own   = SUNTRUE;
   mem->type  = mem_type;
   mem->bytes = mem_size;
 
-  if (mem_type == SUNMEMTYPE_HOST)
+  if (mem_type == SUNMEMTYPE_HOST || mem_type == SUNMEMTYPE_UVM)
   {
     mem->ptr = malloc(mem_size);
-    if (mem->ptr == NULL)
-    {
-      SUNDIALS_DEBUG_PRINT(
-        "ERROR in SUNMemoryHelper_Alloc_Sys: malloc returned NULL\n");
-      free(mem);
-      return (-1);
-    }
+    SUNAssert(mem->ptr, SUN_ERR_MALLOC_FAIL);
     SUNHELPER_CONTENT(helper)->bytes_allocated += mem_size;
     SUNHELPER_CONTENT(helper)->num_allocations++;
     SUNHELPER_CONTENT(helper)->bytes_high_watermark =
       SUNMAX(SUNHELPER_CONTENT(helper)->bytes_allocated,
              SUNHELPER_CONTENT(helper)->bytes_high_watermark);
   }
-  else
-  {
-    SUNDIALS_DEBUG_PRINT(
-      "ERROR in SUNMemoryHelper_Alloc_Sys: unsupported memory type\n");
-    free(mem);
-    return (-1);
-  }
 
   *memptr = mem;
-  return (0);
+  return SUN_SUCCESS;
 }
 
-int SUNMemoryHelper_Dealloc_Sys(SUNMemoryHelper helper, SUNMemory mem, void* queue)
+SUNErrCode SUNMemoryHelper_AllocStrided_Sys(SUNMemoryHelper helper,
+                                            SUNMemory* memptr, size_t mem_size,
+                                            size_t stride,
+                                            SUNMemoryType mem_type, void* queue)
 {
-  if (mem == NULL) return (0);
+  SUNFunctionBegin(helper->sunctx);
+
+  SUNCheckCall(
+    SUNMemoryHelper_Alloc_Sys(helper, memptr, mem_size, mem_type, queue));
+
+  (*memptr)->stride = stride;
+
+  return SUN_SUCCESS;
+}
+
+SUNErrCode SUNMemoryHelper_Dealloc_Sys(SUNMemoryHelper helper, SUNMemory mem,
+                                       SUNDIALS_MAYBE_UNUSED void* queue)
+{
+  SUNFunctionBegin(helper->sunctx);
+
+  if (mem == NULL) { return SUN_SUCCESS; }
+
+  SUNAssert(mem->type == SUNMEMTYPE_HOST || mem->type == SUNMEMTYPE_UVM,
+            SUN_ERR_ARG_INCOMPATIBLE);
 
   if (mem->ptr != NULL && mem->own)
   {
-    if (mem->type == SUNMEMTYPE_HOST)
+    if (mem->type == SUNMEMTYPE_HOST || mem->type == SUNMEMTYPE_UVM)
     {
       SUNHELPER_CONTENT(helper)->num_deallocations++;
       SUNHELPER_CONTENT(helper)->bytes_allocated -= mem->bytes;
       free(mem->ptr);
       mem->ptr = NULL;
     }
-    else
-    {
-      SUNDIALS_DEBUG_PRINT(
-        "ERROR in SUNMemoryHelper_Dealloc_Sys: unsupported memory type\n");
-      return (-1);
-    }
   }
 
   free(mem);
-  return (0);
+  return SUN_SUCCESS;
 }
 
-int SUNMemoryHelper_Copy_Sys(SUNMemoryHelper helper, SUNMemory dst,
-                             SUNMemory src, size_t memory_size, void* queue)
+SUNErrCode SUNMemoryHelper_Copy_Sys(SUNMemoryHelper helper, SUNMemory dst,
+                                    SUNMemory src, size_t memory_size,
+                                    SUNDIALS_MAYBE_UNUSED void* queue)
 {
-  int retval = 0;
+  SUNFunctionBegin(helper->sunctx);
+  SUNAssert(src->type == SUNMEMTYPE_HOST || src->type == SUNMEMTYPE_UVM,
+            SUN_ERR_ARG_INCOMPATIBLE);
+  SUNAssert(dst->type == SUNMEMTYPE_HOST || dst->type == SUNMEMTYPE_UVM,
+            SUN_ERR_ARG_INCOMPATIBLE);
   memcpy(dst->ptr, src->ptr, memory_size);
-  return (retval);
+  return SUN_SUCCESS;
 }
 
-int SUNMemoryHelper_GetAllocStats_Sys(SUNMemoryHelper helper,
-                                      SUNMemoryType mem_type,
-                                      unsigned long* num_allocations,
-                                      unsigned long* num_deallocations,
-                                      size_t* bytes_allocated,
-                                      size_t* bytes_high_watermark)
+SUNErrCode SUNMemoryHelper_GetAllocStats_Sys(
+  SUNMemoryHelper helper, SUNDIALS_MAYBE_UNUSED SUNMemoryType mem_type,
+  unsigned long* num_allocations, unsigned long* num_deallocations,
+  size_t* bytes_allocated, size_t* bytes_high_watermark)
 {
-  if (mem_type == SUNMEMTYPE_HOST)
-  {
-    *num_allocations      = SUNHELPER_CONTENT(helper)->num_allocations;
-    *num_deallocations    = SUNHELPER_CONTENT(helper)->num_deallocations;
-    *bytes_allocated      = SUNHELPER_CONTENT(helper)->bytes_allocated;
-    *bytes_high_watermark = SUNHELPER_CONTENT(helper)->bytes_high_watermark;
-  }
-  else { return -1; }
-  return 0;
+  SUNFunctionBegin(helper->sunctx);
+  SUNAssert(mem_type == SUNMEMTYPE_HOST || mem_type == SUNMEMTYPE_UVM,
+            SUN_ERR_ARG_INCOMPATIBLE);
+  *num_allocations      = SUNHELPER_CONTENT(helper)->num_allocations;
+  *num_deallocations    = SUNHELPER_CONTENT(helper)->num_deallocations;
+  *bytes_allocated      = SUNHELPER_CONTENT(helper)->bytes_allocated;
+  *bytes_high_watermark = SUNHELPER_CONTENT(helper)->bytes_high_watermark;
+  return SUN_SUCCESS;
 }
 
 SUNMemoryHelper SUNMemoryHelper_Clone_Sys(SUNMemoryHelper helper)
 {
+  SUNFunctionBegin(helper->sunctx);
   SUNMemoryHelper hclone = SUNMemoryHelper_Sys(helper->sunctx);
+  SUNCheckLastErrNull();
   return hclone;
 }
 
-int SUNMemoryHelper_Destroy_Sys(SUNMemoryHelper helper)
+SUNErrCode SUNMemoryHelper_Destroy_Sys(SUNMemoryHelper helper)
 {
   if (helper)
   {
-    free(helper->content);
+    if (helper->content) { free(helper->content); }
+    if (helper->ops) { free(helper->ops); }
     free(helper);
   }
-  return 0;
+  return SUN_SUCCESS;
 }

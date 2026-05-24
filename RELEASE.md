@@ -1,3 +1,14 @@
+# Release v26.1
+
+## What is new? 
+* XXT solver
+* Various bug fixes
+
+## Good to know
+
+## Breaking Changes
+
+
 # Release v26.0
 
 ## What is new? 

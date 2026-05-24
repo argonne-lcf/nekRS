@@ -14,13 +14,11 @@ public:
   dlong vFieldOffset;
   dlong vCubatureOffset;
   dlong fieldOffset;
-  occa::memory o_U;
-  occa::memory o_Ue;
-  occa::memory o_relUrst;
+  occa::memory* o_U = nullptr;
+  occa::memory* o_Ue = nullptr;
+  occa::memory* o_relUrst = nullptr;
 
-  bool dpdt = false;
-  dfloat *dp0thdt = nullptr;
-  dfloat *alpha0Ref = nullptr;
+  bool dpdt;
 };
 
 class scalar_t : public solver_t
@@ -39,6 +37,8 @@ public:
   void restoreSolutionState() override;
   void lagSolution() override;
 
+  void allocate() override;
+
   void setTimeIntegrationCoeffs(int tstep) override {};
 
   void extrapolateSolution() override;
@@ -51,8 +51,6 @@ public:
   void applyAVM();
 
   std::function<occa::memory(double, int)> userImplicitLinearTerm = nullptr;
-
-  void computeUrst();
 
   dlong fieldOffset() const
   {
@@ -133,14 +131,15 @@ public:
   int Nsubsteps = 0;
 
   bool dpdt = false;
-  dfloat *dp0thdt = nullptr;
-  dfloat *alpha0Ref = nullptr;
+  dfloat p0th[3] = {0.0, 0.0, 0.0};
+  dfloat dp0thdt = 0;
+  dfloat alpha0Ref = 1;
 
   dlong EToBOffset = -1;
 
-  occa::memory o_U;
-  occa::memory o_Ue;
-  occa::memory o_relUrst;
+  occa::memory *o_U = nullptr;
+  occa::memory *o_Ue = nullptr;
+  occa::memory *o_relUrst = nullptr;
 
   occa::memory o_S;
   occa::memory o_Se;
@@ -152,15 +151,24 @@ public:
 
   std::vector<std::string> name;
 
+  int o_namesOffset = 0;
+  occa::memory o_names;
+
+  occa::memory o_ADV;
+
+  occa::memory h_ADV;
+  occa::memory h_EXT;
+
 private:
   void advectionSubcycling(int nEXT, double time, int scalarIdx);
   std::vector<mesh_t *> _mesh;
 
-  std::vector<occa::memory> o_name;
 
   dlong _fieldOffset = -1; // all scalar fields share the same offset 
 
-  occa::memory o_ADV;
+  occa::memory _o_U;
+  occa::memory _o_Ue;
+  occa::memory _o_relUrst;
 
   occa::memory o_S0;
   occa::memory o_EXT0;

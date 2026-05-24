@@ -153,11 +153,6 @@ public:
     return Nscalar;
   }
 
-  bool mixedPrecisionJtv() const
-  {
-    return mixedPrecisionJtvEnabled;
-  }
-
   dfloat &g0()
   {
     return _g0;
@@ -168,14 +163,14 @@ public:
     return dtCvode[0];
   }
 
-  dfloat *coeffBDF()
+  const std::vector<dfloat> coeffBDF()
   {
-    return _coeffBDF.data();
+    return std::vector<dfloat>(_coeffBDF.begin(), _coeffBDF.end());
   }
 
-  dfloat *coeffEXT()
+  const std::vector<dfloat> coeffEXT()
   {
-    return _coeffEXT.data();
+   return std::vector<dfloat>(_coeffEXT.begin(), _coeffEXT.end());
   }
 
   void updateCounters();
@@ -185,9 +180,12 @@ public:
   long numRHSEvals() const;
   long numNonlinSolveIters() const;
   long numLinIters() const;
-
-  void printTimers();
+ 
+  void printTimers(std::string tag = "");
   void resetTimers();
+
+  occa::memory o_U;
+  occa::memory o_relUrst;
 
   std::string scope() const
   {
@@ -202,6 +200,11 @@ public:
   occa::memory o_pointSource; // scratch field for point source
   occa::memory o_vgeoPfloat;
 
+  oogs_t *gsh;
+
+  userPreSolve_t userPreSolve;
+  userPostSolve_t userPostSolve;
+
 private:
   long int nsteps;
   long int nrhs;
@@ -211,12 +214,10 @@ private:
   std::shared_ptr<LVector_t<dfloat>> YLVec;
   std::shared_ptr<LVector_t<dfloat>> YdotLVec;
 
-  oogs_t *gsh;
-
 #ifdef ENABLE_CVODE
   // CVODE function pointers (required to access private data members)
   int cvodeRHS(double time, N_Vector Y, N_Vector Ydot);
-  int cvodeJtv(N_Vector v, N_Vector Jv, realtype t, N_Vector y, N_Vector fy, N_Vector work);
+  int cvodeJtv(N_Vector v, N_Vector Jv, sunrealtype t, N_Vector y, N_Vector fy, N_Vector work);
   int cvodeErrorWt(N_Vector y, N_Vector ewt);
 #endif
 
@@ -238,10 +239,10 @@ private:
 
   void computeUrst();
 
-  scalar_t *scalar;
+  scalar_t *scalar = nullptr;
 
   std::string timerName = "cvode_t::";
-  std::string timerScope;
+  std::string timerScope = "cvode_t";
   std::string rhsTagName() const;
 
   std::string linearSolverType;
@@ -255,13 +256,9 @@ private:
 
   bool detailedTimersEnabled = false;
 
-  bool mixedPrecisionJtvEnabled = false;
-
   bool verboseCVODE = false;
 
   bool sharedRho = false;
-
-  bool movingMesh = false;
 
   int minCvodeScalarId;
   int maxCvodeScalarId;
@@ -292,8 +289,6 @@ private:
   userPostCvToNrs_t userPostCvToNrs;
   userPostNrsToCv_t userPostNrsToCv;
   userMakeq_t userMakeq;
-  userPreSolve_t userPreSolve;
-  userPostSolve_t userPostSolve;
 
   evaluateProperties_t evaluateProperties;
   evaluateDivergence_t evaluateDivergence;
@@ -314,7 +309,6 @@ private:
   dlong fieldOffset;
 
   occa::memory o_rhoCpAvg;
-  occa::memory o_Urst;
 
   occa::memory o_coeffExt;
 

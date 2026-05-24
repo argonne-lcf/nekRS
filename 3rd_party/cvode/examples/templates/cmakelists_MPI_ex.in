@@ -2,8 +2,11 @@
 # Programmer(s): Cody J. Balos @ LLNL
 # -----------------------------------------------------------------
 # SUNDIALS Copyright Start
-# Copyright (c) 2002-2022, Lawrence Livermore National Security
+# Copyright (c) 2025-2026, Lawrence Livermore National Security,
+# University of Maryland Baltimore County, and the SUNDIALS contributors.
+# Copyright (c) 2013-2025, Lawrence Livermore National Security
 # and Southern Methodist University.
+# Copyright (c) 2002-2013, Lawrence Livermore National Security.
 # All rights reserved.
 #
 # See the top-level LICENSE and NOTICE files for details.
@@ -17,14 +20,14 @@ cmake_minimum_required(VERSION @CMAKE_VERSION@)
 
 # Set cache variables for compilers and flags
 set(CMAKE_Fortran_COMPILER
-  @MPI_Fortran_COMPILER@
+  "@MPI_Fortran_COMPILER@"
   CACHE FILEPATH "Fortran compiler")
 set(CMAKE_Fortran_FLAGS
   "@CMAKE_Fortran_FLAGS@"
   CACHE STRING "Fortran compiler flags")
 
 set(CMAKE_C_COMPILER
-  @MPI_C_COMPILER@
+  "@MPI_C_COMPILER@"
   CACHE FILEPATH "C compiler")
 set(CMAKE_C_FLAGS
   "@CMAKE_C_FLAGS@"
@@ -35,7 +38,7 @@ if("@CMAKE_C_STANDARD@")
 endif()
 
 set(CMAKE_CXX_COMPILER
-  @MPI_CXX_COMPILER@
+  "@MPI_CXX_COMPILER@"
   CACHE FILEPATH "CXX compiler")
 set(CMAKE_CXX_FLAGS
   "@CMAKE_CXX_FLAGS@"

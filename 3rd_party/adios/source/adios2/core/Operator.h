@@ -37,6 +37,8 @@ public:
         COMPRESS_SZ = 6,
         COMPRESS_ZFP = 7,
         COMPRESS_MGARDPLUS = 8,
+        COMPRESS_BIGWHOOP = 9,
+        COMPRESS_MGARDCOMPLEX = 10,
         REFACTOR_MDR = 41,
         CALLBACK_SIGNATURE1 = 51,
         CALLBACK_SIGNATURE2 = 52,
@@ -60,21 +62,13 @@ public:
     void SetAccuracy(const adios2::Accuracy &a) noexcept;
     adios2::Accuracy GetAccuracy() const noexcept;
 
-#define declare_type(T)                                                                            \
-    virtual void RunCallback1(const T *, const std::string &, const std::string &,                 \
-                              const std::string &, const size_t, const Dims &, const Dims &,       \
-                              const Dims &) const;
-    ADIOS2_FOREACH_STDTYPE_1ARG(declare_type)
-#undef declare_type
-
-    virtual void RunCallback2(void *, const std::string &, const std::string &, const std::string &,
-                              const size_t, const Dims &, const Dims &, const Dims &) const;
-
     virtual size_t GetHeaderSize() const;
 
     /** Give an upper bound estimate how big the transformed data could be */
     virtual size_t GetEstimatedSize(const size_t ElemCount, const size_t ElemSize,
                                     const size_t ndims, const size_t *dims) const;
+
+    virtual void AddExtraParameters(const Params &params);
 
     /**
      * @param dataIn
@@ -82,19 +76,22 @@ public:
      * @param blockCount
      * @param type
      * @param bufferOut
-     * @param parameters
      * @return size of compressed buffer
+     * This is the default Operate API and will be used if it exists in the subclass.  It should be
+     * used preferentially if the operator does not require per-invocation parameters.
      */
     virtual size_t Operate(const char *dataIn, const Dims &blockStart, const Dims &blockCount,
-                           const DataType type, char *bufferOut) = 0;
+                           const DataType type, char *bufferOut);
 
     /**
      * @param bufferIn
      * @param sizeIn
      * @param dataOut
      * @return size of decompressed buffer
+     * This is the default InverseOperate API and will be used if it exists in the subclass.  It
+     * should be used preferentially if the operator does not require per-invocation parameters.
      */
-    virtual size_t InverseOperate(const char *bufferIn, const size_t sizeIn, char *dataOut) = 0;
+    virtual size_t InverseOperate(const char *bufferIn, const size_t sizeIn, char *dataOut);
 
     virtual bool IsDataTypeValid(const DataType type) const = 0;
 

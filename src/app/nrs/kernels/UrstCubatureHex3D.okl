@@ -116,7 +116,7 @@
       for (int j = 0; j < p_cubNq; ++j; @inner(1))
         for (int i = 0; i < p_cubNq; ++i; @inner(0)) {
 
-          const dlong gid = element * p_cubNp * p_Nvgeo + k * p_cubNq * p_cubNq + j * p_cubNq + i;
+          const dlong gid = element * p_cubNp * p_Ncubvgeo + k * p_cubNq * p_cubNq + j * p_cubNq + i;
           const dfloat drdx = cubvgeo[gid + p_RXID * p_cubNp];
           const dfloat drdy = cubvgeo[gid + p_RYID * p_cubNp];
           const dfloat drdz = cubvgeo[gid + p_RZID * p_cubNp];

@@ -2,8 +2,11 @@
  * Programmer(s): David J. Gardner @ LLNL
  * -----------------------------------------------------------------------------
  * SUNDIALS Copyright Start
- * Copyright (c) 2002-2022, Lawrence Livermore National Security
+ * Copyright (c) 2025-2026, Lawrence Livermore National Security,
+ * University of Maryland Baltimore County, and the SUNDIALS contributors.
+ * Copyright (c) 2013-2025, Lawrence Livermore National Security
  * and Southern Methodist University.
+ * Copyright (c) 2002-2013, Lawrence Livermore National Security.
  * All rights reserved.
  *
  * See the top-level LICENSE and NOTICE files for details.
@@ -30,15 +33,14 @@
 #error Define USE_CUDA or USE_HIP
 #endif
 
-
 // Compute the exact solution
-__global__ void solution_kernel(const realtype t, realtype *u,
+__global__ void solution_kernel(const sunrealtype t, sunrealtype* u,
                                 const sunindextype is, const sunindextype ie,
                                 const sunindextype js, const sunindextype je,
                                 const sunindextype nx, const sunindextype ny,
                                 const sunindextype nx_loc,
-                                const sunindextype ny_loc,
-                                const realtype dx, const realtype dy)
+                                const sunindextype ny_loc, const sunrealtype dx,
+                                const sunrealtype dy)
 {
   // Thread location in the local grid
   int i = blockIdx.x * blockDim.x + threadIdx.x;
@@ -54,27 +56,26 @@ __global__ void solution_kernel(const realtype t, realtype *u,
     }
     else
     {
-      realtype x = (is + i) * dx;
-      realtype y = (js + j) * dy;
+      sunrealtype x = (is + i) * dx;
+      sunrealtype y = (js + j) * dy;
 
-      realtype cos_sqr_t = cos(PI * t) * cos(PI * t);
-      realtype sin_sqr_x = sin(PI * x) * sin(PI * x);
-      realtype sin_sqr_y = sin(PI * y) * sin(PI * y);
+      sunrealtype cos_sqr_t = cos(PI * t) * cos(PI * t);
+      sunrealtype sin_sqr_x = sin(PI * x) * sin(PI * x);
+      sunrealtype sin_sqr_y = sin(PI * y) * sin(PI * y);
 
       u[i + j * nx_loc] = sin_sqr_x * sin_sqr_y * cos_sqr_t;
     }
   }
 }
 
-
 // Compute the exact solution derivative
-__global__ void solution_p_kernel(const realtype t, realtype *up,
+__global__ void solution_p_kernel(const sunrealtype t, sunrealtype* up,
                                   const sunindextype is, const sunindextype ie,
                                   const sunindextype js, const sunindextype je,
                                   const sunindextype nx, const sunindextype ny,
                                   const sunindextype nx_loc,
                                   const sunindextype ny_loc,
-                                  const realtype dx, const realtype dy)
+                                  const sunrealtype dx, const sunrealtype dy)
 {
   // Thread location in the local grid
   int i = blockIdx.x * blockDim.x + threadIdx.x;
@@ -90,76 +91,74 @@ __global__ void solution_p_kernel(const realtype t, realtype *up,
     }
     else
     {
-      realtype x = (is + i) * dx;
-      realtype y = (js + j) * dy;
+      sunrealtype x = (is + i) * dx;
+      sunrealtype y = (js + j) * dy;
 
-      realtype cos_sin_t = -TWO * PI * cos(PI * t) * sin(PI * t);
-      realtype sin_sqr_x = sin(PI * x) * sin(PI * x);
-      realtype sin_sqr_y = sin(PI * y) * sin(PI * y);
+      sunrealtype cos_sin_t = -TWO * PI * cos(PI * t) * sin(PI * t);
+      sunrealtype sin_sqr_x = sin(PI * x) * sin(PI * x);
+      sunrealtype sin_sqr_y = sin(PI * y) * sin(PI * y);
 
       up[i + j * nx_loc] = sin_sqr_x * sin_sqr_y * cos_sin_t;
     }
   }
 }
 
-
 // Compute the exact solution
-int Solution(realtype t, N_Vector u, UserData *udata)
+int Solution(sunrealtype t, N_Vector u, UserData* udata)
 {
   // Initialize u to zero (handles boundary conditions)
   N_VConst(ZERO, u);
 
   // Extract needed constants from user data
-  const sunindextype is      = udata->is;
-  const sunindextype ie      = udata->ie;
-  const sunindextype js      = udata->js;
-  const sunindextype je      = udata->je;
-  const sunindextype nx      = udata->nx;
-  const sunindextype ny      = udata->ny;
-  const sunindextype nx_loc  = udata->nx_loc;
-  const sunindextype ny_loc  = udata->ny_loc;
-  const realtype     dx      = udata->dx;
-  const realtype     dy      = udata->dy;
+  const sunindextype is     = udata->is;
+  const sunindextype ie     = udata->ie;
+  const sunindextype js     = udata->js;
+  const sunindextype je     = udata->je;
+  const sunindextype nx     = udata->nx;
+  const sunindextype ny     = udata->ny;
+  const sunindextype nx_loc = udata->nx_loc;
+  const sunindextype ny_loc = udata->ny_loc;
+  const sunrealtype dx      = udata->dx;
+  const sunrealtype dy      = udata->dy;
 
-  realtype *uarray = N_VGetDeviceArrayPointer(N_VGetLocalVector_MPIPlusX(u));
-  if (check_flag((void *) uarray, "N_VGetDeviceArrayPointer", 0)) return -1;
+  sunrealtype* uarray = N_VGetDeviceArrayPointer(N_VGetLocalVector_MPIPlusX(u));
+  if (check_flag((void*)uarray, "N_VGetDeviceArrayPointer", 0)) { return -1; }
 
   dim3 block(BLOCK_SIZE_X, BLOCK_SIZE_Y);
   dim3 grid(ICEIL(nx_loc, BLOCK_SIZE_X), ICEIL(ny_loc, BLOCK_SIZE_Y));
 
-  solution_kernel<<<grid,block>>>(t, uarray, is, ie, js, je, nx, ny,
-                                  nx_loc, ny_loc, dx, dy);
+  solution_kernel<<<grid, block>>>(t, uarray, is, ie, js, je, nx, ny, nx_loc,
+                                   ny_loc, dx, dy);
 
   return 0;
 }
 
-
 // Compute the exact solution derivative
-int SolutionDerivative(realtype t, N_Vector up, UserData *udata)
+int SolutionDerivative(sunrealtype t, N_Vector up, UserData* udata)
 {
   // Initialize u to zero (handles boundary conditions)
   N_VConst(ZERO, up);
 
   // Extract needed constants from user data
-  const sunindextype is      = udata->is;
-  const sunindextype ie      = udata->ie;
-  const sunindextype js      = udata->js;
-  const sunindextype je      = udata->je;
-  const sunindextype nx      = udata->nx;
-  const sunindextype ny      = udata->ny;
-  const sunindextype nx_loc  = udata->nx_loc;
-  const sunindextype ny_loc  = udata->ny_loc;
-  const realtype     dx      = udata->dx;
-  const realtype     dy      = udata->dy;
+  const sunindextype is     = udata->is;
+  const sunindextype ie     = udata->ie;
+  const sunindextype js     = udata->js;
+  const sunindextype je     = udata->je;
+  const sunindextype nx     = udata->nx;
+  const sunindextype ny     = udata->ny;
+  const sunindextype nx_loc = udata->nx_loc;
+  const sunindextype ny_loc = udata->ny_loc;
+  const sunrealtype dx      = udata->dx;
+  const sunrealtype dy      = udata->dy;
 
-  realtype *uparray = N_VGetDeviceArrayPointer(N_VGetLocalVector_MPIPlusX(up));
-  if (check_flag((void *) uparray, "N_VGetDeviceArrayPointer", 0)) return -1;
+  sunrealtype* uparray = N_VGetDeviceArrayPointer(N_VGetLocalVector_MPIPlusX(up));
+  if (check_flag((void*)uparray, "N_VGetDeviceArrayPointer", 0)) { return -1; }
 
   dim3 block(BLOCK_SIZE_X, BLOCK_SIZE_Y);
   dim3 grid(ICEIL(nx_loc, BLOCK_SIZE_X), ICEIL(ny_loc, BLOCK_SIZE_Y));
 
-  solution_p_kernel<<<grid,block>>>(t, uparray, is, ie, js, je, nx, ny,
-                                    nx_loc, ny_loc, dx, dy);
+  solution_p_kernel<<<grid, block>>>(t, uparray, is, ie, js, je, nx, ny, nx_loc,
+                                     ny_loc, dx, dy);
 
   return 0;
 }

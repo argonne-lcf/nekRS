@@ -6,6 +6,7 @@
 #include <cstring>
 
 #include <chrono>
+#include <iomanip>
 #include <iostream>
 #include <stdexcept>
 #include <thread>
@@ -143,7 +144,7 @@ TEST_F(CommonReadTest, ADIOS2CommonRead1D8)
             ASSERT_EQ(var_i16.Shape()[0], writerSize * Nx);
         }
 
-        auto var_i32 = io.InquireVariable<int32_t>("i32");
+        auto var_i32 = io.InquireVariable<int32_t>("i32(testparen)");
         if (NoData)
         {
             EXPECT_FALSE(var_time);

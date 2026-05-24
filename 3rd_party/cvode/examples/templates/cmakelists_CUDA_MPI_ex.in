@@ -2,8 +2,11 @@
 # Programmer(s): Cody J. Balos and David J. Gardner @ LLNL
 # -----------------------------------------------------------------
 # SUNDIALS Copyright Start
-# Copyright (c) 2002-2022, Lawrence Livermore National Security
+# Copyright (c) 2025-2026, Lawrence Livermore National Security,
+# University of Maryland Baltimore County, and the SUNDIALS contributors.
+# Copyright (c) 2013-2025, Lawrence Livermore National Security
 # and Southern Methodist University.
+# Copyright (c) 2002-2013, Lawrence Livermore National Security.
 # All rights reserved.
 #
 # See the top-level LICENSE and NOTICE files for details.
@@ -17,7 +20,7 @@ cmake_minimum_required(VERSION @CMAKE_VERSION@)
 
 # Set cache variables for C compilers and flags
 set(CMAKE_C_COMPILER
-  @CMAKE_C_COMPILER@
+  "@CMAKE_C_COMPILER@"
   CACHE FILEPATH "C compiler")
 
 set(CMAKE_C_FLAGS
@@ -31,7 +34,7 @@ endif()
 
 # Set cache variables for C++ compilers and flags
 set(CMAKE_CXX_COMPILER
-  @CMAKE_CXX_COMPILER@
+  "@CMAKE_CXX_COMPILER@"
   CACHE FILEPATH "CXX compiler")
 
 set(CMAKE_CXX_FLAGS
@@ -39,12 +42,12 @@ set(CMAKE_CXX_FLAGS
   CACHE STRING "CXX compiler flags")
 
 set(CMAKE_CXX_STANDARD
-  @CMAKE_CXX_STANDARD@
+  "@CMAKE_CXX_STANDARD@"
   CACHE STRING "C++ standard")
 
 # Set cache variables for CUDA compilers and flags
 set(CMAKE_CUDA_COMPILER
-  @CMAKE_CUDA_COMPILER@
+  "@CMAKE_CUDA_COMPILER@"
   CACHE FILEPATH "CUDA compiler")
 
 set(CMAKE_CUDA_FLAGS
@@ -60,15 +63,15 @@ set(CMAKE_CUDA_HOST_COMPILER
 
 # Set cache variables for MPI compiler and executable
 set(MPI_C_COMPILER
-  @MPI_C_COMPILER@
+  "@MPI_C_COMPILER@"
   CACHE FILEPATH "MPI C compiler")
 
 set(MPI_CXX_COMPILER
-  @MPI_CXX_COMPILER@
+  "@MPI_CXX_COMPILER@"
   CACHE FILEPATH "MPI C++ compiler")
 
 set(MPIEXEC_EXECUTABLE
-  @MPIEXEC_EXECUTABLE@
+  "@MPIEXEC_EXECUTABLE@"
   CACHE FILEPATH "MPI executable")
 
 # Specify project name and languages

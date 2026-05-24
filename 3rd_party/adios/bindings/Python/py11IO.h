@@ -12,6 +12,8 @@
 #define ADIOS2_BINDINGS_PYTHON_IO_H_
 
 #include <pybind11/numpy.h>
+#include <pybind11/pytypes.h>
+#include <pybind11/stl.h>
 
 #include <complex>
 #include <string>
@@ -19,6 +21,7 @@
 #include "py11Attribute.h"
 #include "py11Engine.h"
 #include "py11Variable.h"
+#include "py11VariableDerived.h"
 #include "py11types.h"
 
 namespace adios2
@@ -62,6 +65,9 @@ public:
                             const Dims &shape, const Dims &start, const Dims &count,
                             const bool isConstantDims);
 
+    VariableDerived DefineDerivedVariable(const std::string &name, const std::string &expression,
+                                          const DerivedVarType varType = DerivedVarType::StatsOnly);
+
     Variable InquireVariable(const std::string &name);
 
     Attribute DefineAttribute(const std::string &name, const pybind11::array &array,
@@ -104,6 +110,8 @@ public:
     void RemoveAllAttributes();
 
     Engine Open(const std::string &name, const int openMode);
+
+    Engine Open(const std::string &name, const pybind11::bytes &metadata);
 
 #if ADIOS2_USE_MPI
     Engine Open(const std::string &name, const int openMode, MPI4PY_Comm comm);

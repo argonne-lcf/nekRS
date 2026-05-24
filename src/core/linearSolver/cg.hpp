@@ -186,7 +186,8 @@ private:
     } else {
       o_tmpReductions.copyTo(h_tmpReductions);
       auto tmp = h_tmpReductions.ptr<T>();
-      for (int n = 0; n < h_tmpReductions.size(); ++n) {
+      const auto tmpReductionsSize = h_tmpReductions.size();
+      for (int n = 0; n < tmpReductionsSize; ++n) {
         rdotr1 += tmp[n];
       }
     }
@@ -258,8 +259,16 @@ private:
 
     int iter = 0;
     do {
+      double tStart = 0; 
+      if (platform->verbose()) {
+        platform->device.finish();
+        MPI_Barrier(platform->comm.mpiComm());
+        tStart = MPI_Wtime(); 
+      }
+
       iter++;
       const dfloat rdotz2 = rdotz1;
+
       if (preco) {
         preco(o_r, o_z);
 
@@ -350,9 +359,12 @@ private:
                    this->_name.c_str());
       }
 
-      if (platform->verbose() && (platform->comm.mpiRank() == 0)) {
-        printf("it %d r norm %.15e\n", iter, this->rNorm);
+      if (platform->verbose()) {
+        if (platform->comm.mpiRank() == 0) {
+          printf("it %d r norm %.15e elapsed %gs\n", iter, this->rNorm, MPI_Wtime() - tStart);
+        }
       }
+
     } while (this->rNorm > tol && iter < MAXIT);
 
     return iter;
@@ -372,6 +384,13 @@ private:
 
     int iter = 0;
     do {
+      double tStart = 0; 
+      if (platform->verbose()) {
+        platform->device.finish();
+        MPI_Barrier(platform->comm.mpiComm());
+        tStart = MPI_Wtime(); 
+      }
+
       iter++;
       const auto updateX = iter > 1 && iter % 2 == 1;
 
@@ -443,8 +462,10 @@ private:
                    "%s invalid resiual norm while running linear solver!",
                    this->_name.c_str());
       }
-      if (platform->verbose() && (platform->comm.mpiRank() == 0)) {
-        printf("it %d r norm %.15e\n", iter, this->rNorm);
+      if (platform->verbose()) {
+        if (platform->comm.mpiRank() == 0) {
+          printf("it %d r norm %.15e elapsed %gs\n", iter, this->rNorm, MPI_Wtime() - tStart);
+        }
       }
 
       // converged, update solution prior to exit

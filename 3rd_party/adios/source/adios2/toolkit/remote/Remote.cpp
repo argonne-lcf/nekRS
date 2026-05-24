@@ -4,203 +4,210 @@
  *
  */
 #include "Remote.h"
+#include "EVPathRemote.h"
 #include "adios2/core/ADIOS.h"
 #include "adios2/helper/adiosLog.h"
+#include "adios2/helper/adiosNetwork.h"
 #include "adios2/helper/adiosString.h"
 #include "adios2/helper/adiosSystem.h"
+#ifdef _MSC_VER
+#define strdup(x) _strdup(x)
+#define strtok_r(str, delim, saveptr) strtok_s(str, delim, saveptr)
+#endif
+
+#define ThrowUp(x)                                                                                 \
+    helper::Throw<std::invalid_argument>("Core", "Engine", "ThrowUp",                              \
+                                         "Non-overridden function " + std::string(x) +             \
+                                             " called in Remote")
 
 namespace adios2
 {
 
-Remote::Remote() {}
-
-#ifdef ADIOS2_HAVE_SST
-Remote::~Remote()
-{
-    if (m_conn)
-        CMConnection_close(m_conn);
-}
-
-void OpenResponseHandler(CManager cm, CMConnection conn, void *vevent, void *client_data,
-                         attr_list attrs)
-{
-    RemoteCommon::OpenResponseMsg open_response_msg =
-        static_cast<RemoteCommon::OpenResponseMsg>(vevent);
-
-    void *obj = CMCondition_get_client_data(cm, open_response_msg->OpenResponseCondition);
-    static_cast<Remote *>(obj)->m_ID = open_response_msg->FileHandle;
-    CMCondition_signal(cm, open_response_msg->OpenResponseCondition);
-    return;
-};
-
-void OpenSimpleResponseHandler(CManager cm, CMConnection conn, void *vevent, void *client_data,
-                               attr_list attrs)
-{
-    RemoteCommon::OpenSimpleResponseMsg open_response_msg =
-        static_cast<RemoteCommon::OpenSimpleResponseMsg>(vevent);
-
-    void *obj = CMCondition_get_client_data(cm, open_response_msg->OpenResponseCondition);
-    static_cast<Remote *>(obj)->m_ID = open_response_msg->FileHandle;
-    static_cast<Remote *>(obj)->m_Size = open_response_msg->FileSize;
-    CMCondition_signal(cm, open_response_msg->OpenResponseCondition);
-    return;
-};
-
-void ReadResponseHandler(CManager cm, CMConnection conn, void *vevent, void *client_data,
-                         attr_list attrs)
-{
-    RemoteCommon::ReadResponseMsg read_response_msg =
-        static_cast<RemoteCommon::ReadResponseMsg>(vevent);
-    memcpy(read_response_msg->Dest, read_response_msg->ReadData, read_response_msg->Size);
-    CMCondition_signal(cm, read_response_msg->ReadResponseCondition);
-    return;
-};
-
-CManagerSingleton &CManagerSingleton::Instance(RemoteCommon::Remote_evpath_state &ev_state)
-{
-    std::mutex mtx;
-    const std::lock_guard<std::mutex> lock(mtx);
-    static CManagerSingleton instance;
-    ev_state = instance.internalEvState;
-    return instance;
-}
-
-void Remote::InitCMData()
-{
-    (void)CManagerSingleton::Instance(ev_state);
-    static std::once_flag flag;
-    std::call_once(flag, [&]() {
-        CMregister_handler(ev_state.OpenResponseFormat, (CMHandlerFunc)OpenResponseHandler,
-                           &ev_state);
-        CMregister_handler(ev_state.ReadResponseFormat, (CMHandlerFunc)ReadResponseHandler,
-                           &ev_state);
-        CMregister_handler(ev_state.OpenSimpleResponseFormat,
-                           (CMHandlerFunc)OpenSimpleResponseHandler, &ev_state);
-        CMregister_handler(ev_state.ReadResponseFormat, (CMHandlerFunc)ReadResponseHandler,
-                           &ev_state);
-    });
-}
-
 void Remote::Open(const std::string hostname, const int32_t port, const std::string filename,
                   const Mode mode, bool RowMajorOrdering)
 {
-
-    RemoteCommon::_OpenFileMsg open_msg;
-    InitCMData();
-    attr_list contact_list = create_attr_list();
-    atom_t CM_IP_PORT = -1;
-    atom_t CM_IP_HOSTNAME = -1;
-    CM_IP_HOSTNAME = attr_atom_from_string("IP_HOST");
-    CM_IP_PORT = attr_atom_from_string("IP_PORT");
-    add_attr(contact_list, CM_IP_HOSTNAME, Attr_String, (attr_value)strdup(hostname.c_str()));
-    add_attr(contact_list, CM_IP_PORT, Attr_Int4, (attr_value)port);
-    m_conn = CMinitiate_conn(ev_state.cm, contact_list);
-    free_attr_list(contact_list);
-    if (!m_conn)
-        return;
-
-    memset(&open_msg, 0, sizeof(open_msg));
-    open_msg.FileName = (char *)filename.c_str();
-    switch (mode)
-    {
-    case Mode::Read:
-        open_msg.Mode = RemoteCommon::RemoteFileMode::RemoteOpen;
-        break;
-    case Mode::ReadRandomAccess:
-        open_msg.Mode = RemoteCommon::RemoteFileMode::RemoteOpenRandomAccess;
-        break;
-    default:
-        break;
-    }
-    open_msg.OpenResponseCondition = CMCondition_get(ev_state.cm, m_conn);
-    open_msg.RowMajorOrder = RowMajorOrdering;
-    CMCondition_set_client_data(ev_state.cm, open_msg.OpenResponseCondition, (void *)this);
-    CMwrite(m_conn, ev_state.OpenFileFormat, &open_msg);
-    CMCondition_wait(ev_state.cm, open_msg.OpenResponseCondition);
-    m_Active = true;
-}
+    ThrowUp(("RemoteOpen"));
+};
 
 void Remote::OpenSimpleFile(const std::string hostname, const int32_t port,
                             const std::string filename)
 {
+    ThrowUp("RemoteSimpleOpen");
+};
 
-    RemoteCommon::_OpenSimpleFileMsg open_msg;
-    InitCMData();
-    attr_list contact_list = create_attr_list();
-    atom_t CM_IP_PORT = -1;
-    atom_t CM_IP_HOSTNAME = -1;
-    CM_IP_HOSTNAME = attr_atom_from_string("IP_HOST");
-    CM_IP_PORT = attr_atom_from_string("IP_PORT");
-    add_attr(contact_list, CM_IP_HOSTNAME, Attr_String, (attr_value)strdup(hostname.c_str()));
-    add_attr(contact_list, CM_IP_PORT, Attr_Int4, (attr_value)port);
-    m_conn = CMinitiate_conn(ev_state.cm, contact_list);
-    free_attr_list(contact_list);
-    if (!m_conn)
-        return;
-
-    memset(&open_msg, 0, sizeof(open_msg));
-    open_msg.FileName = (char *)filename.c_str();
-    open_msg.OpenResponseCondition = CMCondition_get(ev_state.cm, m_conn);
-    CMCondition_set_client_data(ev_state.cm, open_msg.OpenResponseCondition, (void *)this);
-    CMwrite(m_conn, ev_state.OpenSimpleFileFormat, &open_msg);
-    CMCondition_wait(ev_state.cm, open_msg.OpenResponseCondition);
-    m_Active = true;
-}
-
-Remote::GetHandle Remote::Get(char *VarName, size_t Step, size_t BlockID, Dims &Count, Dims &Start,
-                              void *dest)
+void Remote::OpenReadSimpleFile(const std::string hostname, const int32_t port,
+                                const std::string filename, std::vector<char> &contents)
 {
-    RemoteCommon::_GetRequestMsg GetMsg;
-    memset(&GetMsg, 0, sizeof(GetMsg));
-    GetMsg.GetResponseCondition = CMCondition_get(ev_state.cm, m_conn);
-    GetMsg.FileHandle = m_ID;
-    GetMsg.VarName = VarName;
-    GetMsg.Step = Step;
-    GetMsg.BlockID = BlockID;
-    GetMsg.DimCount = Count.size();
-    GetMsg.Count = Count.data();
-    GetMsg.Start = Start.data();
-    GetMsg.Dest = dest;
-    CMwrite(m_conn, ev_state.GetRequestFormat, &GetMsg);
-    CMCondition_wait(ev_state.cm, GetMsg.GetResponseCondition);
-    return GetMsg.GetResponseCondition;
+    ThrowUp("RemoteSimpleOpenRead");
+};
+
+Remote::GetHandle Remote::Get(const char *VarName, size_t Step, size_t StepCount, size_t BlockID,
+                              Dims &Count, Dims &Start, Accuracy &accuracy, void *dest)
+{
+    ThrowUp("RemoteGet");
+    return (Remote::GetHandle)(intptr_t)0;
+};
+
+bool Remote::WaitForGet(GetHandle handle)
+{
+    ThrowUp("RemoteWaitForGet");
+    return false;
 }
 
 Remote::GetHandle Remote::Read(size_t Start, size_t Size, void *Dest)
 {
-    RemoteCommon::_ReadRequestMsg ReadMsg;
-    memset(&ReadMsg, 0, sizeof(ReadMsg));
-    ReadMsg.ReadResponseCondition = CMCondition_get(ev_state.cm, m_conn);
-    ReadMsg.FileHandle = m_ID;
-    ReadMsg.Offset = Start;
-    ReadMsg.Size = Size;
-    ReadMsg.Dest = Dest;
-    CMwrite(m_conn, ev_state.ReadRequestFormat, &ReadMsg);
-    CMCondition_wait(ev_state.cm, ReadMsg.ReadResponseCondition);
-    return ReadMsg.ReadResponseCondition;
-}
-
-bool Remote::WaitForGet(GetHandle handle) { return CMCondition_wait(ev_state.cm, (int)handle); }
-#else
-
-void Remote::Open(const std::string hostname, const int32_t port, const std::string filename,
-                  const Mode mode, bool RowMajorOrdering){};
-
-void Remote::OpenSimpleFile(const std::string hostname, const int32_t port,
-                            const std::string filename){};
-
-Remote::GetHandle Remote::Get(char *VarName, size_t Step, size_t BlockID, Dims &Count, Dims &Start,
-                              void *dest)
-{
-    return static_cast<GetHandle>(0);
+    ThrowUp("RemoteRead");
+    return (Remote::GetHandle)0;
 };
 
-bool Remote::WaitForGet(GetHandle handle) { return false; }
+void Remote::Close() { ThrowUp("RemoteClose"); };
 
-Remote::GetHandle Remote::Read(size_t Start, size_t Size, void *Dest)
-{
-    return static_cast<GetHandle>(0);
-};
 Remote::~Remote() {}
-#endif
+Remote::Remote(const adios2::HostOptions &hostOptions)
+: m_HostOptions(std::make_shared<adios2::HostOptions>(hostOptions))
+{
+}
+
+int Remote::LaunchRemoteServerViaConnectionManager(const std::string remoteHost)
+{
+    if (remoteHost.empty() || remoteHost == "localhost")
+    {
+        // std::cout << "Remote::LaunchRemoteServerViaConnectionManager: Assume server is already "
+        //              "running at on localhost at port = "
+        //           << 26200 << std::endl;
+        return 26200;
+    }
+
+    helper::NetworkSocket socket;
+    socket.Connect("localhost", 30000);
+
+    struct adios2::HostConfig *hostconf = nullptr;
+
+    auto it = m_HostOptions->find(remoteHost);
+    if (it != m_HostOptions->end())
+    {
+        for (auto &ho : it->second)
+        {
+            if (ho.protocol == HostAccessProtocol::SSH)
+            {
+                hostconf = &ho;
+            }
+        }
+    }
+    if (!hostconf)
+    {
+        helper::Throw<std::invalid_argument>(
+            "Toolkit", "Remote", "EstablishConnection",
+            "No ssh configuration found for host " + remoteHost +
+                ". Add config in ~/.config/hpc-campaign/hosts.yaml");
+    }
+
+    std::string request = "/run_service?group=" + remoteHost + "&service=" + hostconf->name;
+
+    char response[2048];
+    socket.RequestResponse(request, response, 2048);
+
+    // responses:
+    //   port:-1,msg:incomplete_service_definition
+    //   port:-1,msg:missing_service_in_request
+    //   port:26200,cookie:0xd93d91e3643c9869,msg:no_error
+
+    char *token;
+    char *rest = response;
+
+    int serverPort = -1;
+    std::string cookie;
+
+    // std::cout << "Response = \"" << response << "\"" << std::endl;
+    while ((token = strtok_r(rest, ",", &rest)))
+    {
+        char *key;
+        char *value = token;
+        key = strtok_r(value, ":", &value);
+        if (!strncmp(key, "port", 4))
+        {
+            serverPort = atoi(value);
+        }
+        else if (!strncmp(key, "cookie", 6))
+        {
+            cookie = std::string(value);
+        }
+        else if (!strncmp(key, "msg", 3))
+        {
+            if (strcmp(value, "no_error"))
+            {
+                helper::Throw<std::invalid_argument>("Toolkit", "Remote", "EstablishConnection",
+                                                     "Error response from connection manager: " +
+                                                         std::string(value));
+            }
+        }
+        else
+        {
+            helper::Throw<std::invalid_argument>(
+                "Toolkit", "Remote", "EstablishConnection",
+                "Invalid response from connection manager. Do not understand key " +
+                    std::string(key));
+        }
+    }
+
+    socket.Close();
+    return serverPort;
+}
+
+std::string Remote::GetKeyFromConnectionManager(const std::string keyID)
+{
+    helper::NetworkSocket socket;
+    socket.Connect("localhost", 30000);
+    std::string request = "/get_key?id=" + keyID;
+
+    char response[2048];
+    socket.RequestResponse(request, response, 2048);
+
+    // responses:
+    //   "port:-1,msg:incomplete_service_definition
+    //   "key:0,msg:missing_key_id_in_request"
+    //   "key:0,msg:cannot_find_key_id"
+    //   "key:5980a49cb5e0c4a6042f73f7ce0277d3a577e1af9cfc530e4f5683a615815d6a,msg:no_error"
+
+    char *token;
+    char *rest = response;
+
+    std::string keyhex;
+
+    // std::cout << "Response from Connection manager = \"" << response << "\"" << std::endl;
+    while ((token = strtok_r(rest, ",", &rest)))
+    {
+        char *key;
+        char *value = token;
+        key = strtok_r(value, ":", &value);
+        if (!strncmp(key, "port", 4))
+        {
+            ; // we don't care about port, msg will throw the error message
+        }
+        else if (!strncmp(key, "key", 3))
+        {
+            keyhex = std::string(value);
+        }
+        else if (!strncmp(key, "msg", 3))
+        {
+            if (strcmp(value, "no_error") && strcmp(value, "cannot_find_key_id"))
+            {
+                helper::Throw<std::invalid_argument>("Toolkit", "Remote", "GetKey",
+                                                     "Error response from connection manager: " +
+                                                         std::string(value));
+            }
+        }
+        else
+        {
+            helper::Throw<std::invalid_argument>(
+                "Toolkit", "Remote", "EstablishConnection",
+                "Invalid response from connection manager. Do not understand key " +
+                    std::string(key));
+        }
+    }
+
+    socket.Close();
+    return keyhex;
+}
+
 } // end namespace adios2

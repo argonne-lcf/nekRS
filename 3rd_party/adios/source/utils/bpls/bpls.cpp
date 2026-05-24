@@ -20,6 +20,7 @@
 #include "bpls.h"
 #include "verinfo.h"
 
+#include <algorithm>
 #include <chrono>
 #include <cinttypes>
 #include <cstdio>
@@ -31,6 +32,7 @@
 #include <errno.h>
 
 #include "adios2/helper/adiosLog.h"
+#include "adios2/operator/plugin/PluginOperator.h"
 
 #if defined(__GNUC__) && !(defined(__ICC) || defined(__INTEL_COMPILER))
 #if (__GNUC__ * 10000 + __GNUC_MINOR__ * 100 + __GNUC_PATCHLEVEL__) < 40900
@@ -96,6 +98,7 @@ bool attrsonly;          // do list attributes only
 bool longopt;            // -l is turned on
 bool timestep;           // read step by step
 bool ignore_flatten;     // dont flatten steps to one
+bool list_operators;     // list all operators used in the file
 bool filestream = false; // are we using an engine through FileStream?
 bool noindex;            // do no print array indices with data
 bool printByteAsChar;    // print 8 bit integer arrays as string
@@ -104,6 +107,7 @@ bool hidden_attrs;       // show hidden attrs in BP file
 int hidden_attrs_flag;   // to be passed on in option struct
 bool show_decomp;        // show decomposition of arrays
 bool show_version;       // print binary version info of file before work
+bool show_derived_expr;  // show the expression string for derived vars
 adios2::Accuracy accuracy;
 bool accuracyWasSet = false;
 
@@ -147,6 +151,7 @@ void display_help()
            "reading)\n"
            "  --ignore_flatten           Display steps as written (don't flatten, even if writer "
            "said to)\n"
+           "  --list_operators           List all operators used in the file\n"
            "  --dump      | -d           Dump matched variables/attributes\n"
            "                               To match attributes too, add option "
            "-a\n"
@@ -179,6 +184,7 @@ void display_help()
            "                             e.g. error=\"0.0,0.0,abs\"\n"
            "                             L2 norm = 0.0, Linf = inf\n"
 
+           "  --show-derived             Show the expression string for derived vars\n"
            "  --transport-parameters | -T         Specify File transport "
            "parameters\n"
            "                                      e.g. \"Library=stdio\"\n"
@@ -597,6 +603,8 @@ int bplsMain(int argc, char *argv[])
     arg.AddCallback("--help", argT::NO_ARGUMENT, optioncb_help, &arg, "Help");
     arg.AddCallback("-h", argT::NO_ARGUMENT, optioncb_help, &arg, "");
     arg.AddBooleanArgument("--dump", &dump, "Dump matched variables/attributes");
+    arg.AddBooleanArgument("--list_operators", &list_operators,
+                           "List the operators used in the file");
     arg.AddBooleanArgument("-d", &dump, "");
     arg.AddBooleanArgument("--long", &longopt,
                            "Print values of all scalars and attributes and min/max "
@@ -660,6 +668,8 @@ int bplsMain(int argc, char *argv[])
     arg.AddArgument("--engine-params", argT::SPACE_ARGUMENT, &engine_params,
                     "| -P string    Specify ADIOS Engine Parameters manually");
     arg.AddArgument("-P", argT::SPACE_ARGUMENT, &engine_params, "");
+    arg.AddBooleanArgument("--show-derived", &show_derived_expr,
+                           "Show the expression string for derived variables");
 
     if (!arg.Parse())
     {
@@ -776,6 +786,7 @@ void init_globals()
     listmeshes = false;
     attrsonly = false;
     longopt = false;
+    list_operators = false;
     // timefrom             = 1;
     // timeto               = -1;
     use_regexp = false;
@@ -785,6 +796,7 @@ void init_globals()
     printByteAsChar = false;
     show_decomp = false;
     show_version = false;
+    show_derived_expr = false;
     for (i = 0; i < MAX_DIMS; i++)
     {
         istart[i] = 0LL;
@@ -971,6 +983,70 @@ int printAttributeValue(core::Engine *fp, core::IO *io, core::Attribute<std::str
 }
 
 int nEntriesMatched = 0;
+
+int doList_operators(core::Engine *fp, core::IO *io)
+{
+    const core::VarMap &variables = io->GetVariables();
+    std::set<std::string> OpStrings;
+
+    for (const auto &vpair : variables)
+    {
+        Entry e(vpair.second->m_Type, vpair.second.get());
+        if (e.var->m_Operations.size() > 0)
+        {
+            auto op = e.var->m_Operations[0];
+            if (op->m_TypeString == "null")
+            {
+                try
+                {
+                    if (e.typeName == DataType::Struct)
+                    {
+                        // not supported
+                    }
+#define declare_template_instantiation(T)                                                          \
+    else if (e.typeName == helper::GetDataType<T>())                                               \
+    {                                                                                              \
+        core::Variable<T> *variable = static_cast<core::Variable<T> *>(e.var);                     \
+        variable->SetBlockSelection(0);                                                            \
+        std::vector<T> dataV;                                                                      \
+        dataV.resize(variable->SelectionSize());                                                   \
+        fp->m_OperatorNameQuery = true;                                                            \
+        fp->Get(*variable, dataV, adios2::Mode::Sync);                                             \
+        fp->m_OperatorNameQuery = false;                                                           \
+    }
+                    ADIOS2_FOREACH_STDTYPE_1ARG(declare_template_instantiation)
+#undef declare_template_instantiation
+                    op = e.var->m_Operations[0];
+                    auto plugin = dynamic_cast<plugin::PluginOperator *>(op.get());
+                    if (plugin)
+                    {
+                        OpStrings.insert(plugin->m_PluginLibrary + "(" + plugin->m_PluginName +
+                                         ")");
+                    }
+                    else
+                    {
+                        OpStrings.insert(op->m_TypeString);
+                    }
+                }
+                catch (MissingOperatorFailure const &ex)
+                {
+                    // we didn't compile with the operator used
+                    OpStrings.insert(ex.m_Operator);
+                }
+                catch (PluginLoadFailure const &ex)
+                {
+                    // plugin operator we didn't find
+                    OpStrings.insert(ex.m_PluginLibrary + "(" + ex.m_PluginName + ")");
+                }
+            }
+        }
+    }
+    std::cout << "Operators used in this file:" << std::endl;
+    for (const auto &opname : OpStrings)
+        std::cout << " * " << opname << std::endl;
+
+    return 0;
+}
 
 int doList_vars(core::Engine *fp, core::IO *io)
 {
@@ -1299,6 +1375,15 @@ int printVariableInfo(core::Engine *fp, core::IO *io, core::Variable<T> *variabl
         }
     }
 
+    if (show_derived_expr)
+    {
+        std::string ExprStr = fp->VariableExprStr(*variable);
+        if (ExprStr.size() > 0)
+        {
+            fprintf(outf, "    Derived variable with expression: %s\n", ExprStr.c_str());
+        }
+    }
+
     if (dump && !show_decomp)
     {
         variable->SetAccuracy(accuracy);
@@ -1580,12 +1665,19 @@ int doList(std::string path)
     if (hidden_attrs)
         strcat(init_params, ";show_hidden_attrs");
 
+    if (list_operators && timestep)
+    {
+        fprintf(stderr,
+                "--list_operators incompatible with --timestep, turning off timestep mode\n");
+        timestep = false;
+    }
     core::ADIOS adios("C++");
     const adios2::UserOptions userOptions = adios.GetUserOptions();
 
     std::string tpl = helper::LowerCase(transport_params);
-    bool remoteFile =
-        (tpl.find("awssdk") != std::string::npos) || (tpl.find("daos") != std::string::npos);
+    bool remoteFile = (tpl.find("awssdk") != std::string::npos) ||
+                      (tpl.find("daos") != std::string::npos) ||
+                      (tpl.find("http") != std::string::npos);
     if (remoteFile)
     {
         if (engine_name.empty())
@@ -1756,15 +1848,19 @@ int doList(std::string path)
         else
         {
             doList_vars(fp, &io);
+            if (list_operators)
+            {
+                doList_operators(fp, &io);
+            }
         }
 
+        fp->Close();
         if (nmasks > 0 && nEntriesMatched == 0)
         {
             fprintf(stderr, "\nError: None of the variables/attributes matched any "
                             "name/regexp you provided\n");
             return 4;
         }
-        fp->Close();
     }
     return 0;
 }
@@ -2649,6 +2745,7 @@ int print_data_as_string(const void *data, int maxlen, DataType adiosvartype)
     {
     case DataType::UInt8:
     case DataType::Int8:
+    case DataType::Char:
     case DataType::String:
         while (str[len - 1] == 0)
         {
@@ -3045,7 +3142,8 @@ int print_dataset(const void *data, const DataType vartype, uint64_t *s, uint64_
 
         // print item
         fprintf(outf, "%s", idxstr);
-        if (printByteAsChar && (adiosvartype == DataType::Int8 || adiosvartype == DataType::UInt8))
+        if (printByteAsChar && (adiosvartype == DataType::Int8 || adiosvartype == DataType::UInt8 ||
+                                adiosvartype == DataType::Char))
         {
             /* special case: k-D byte array printed as (k-1)D array of
              * strings
@@ -3691,7 +3789,7 @@ void print_decomp_singlestep(core::Engine *fp, core::IO *io, core::Variable<T> *
 {
     /* Print block info */
     DataType adiosvartype = variable->m_Type;
-    const auto minBlocks = fp->MinBlocksInfo(*variable, fp->CurrentStep());
+    const adios2::MinVarInfo *minBlocks = fp->MinBlocksInfo(*variable, fp->CurrentStep());
 
     std::vector<typename core::Variable<T>::BPInfo> coreBlocks;
 
@@ -3867,14 +3965,16 @@ void print_decomp_singlestep(core::Engine *fp, core::IO *io, core::Variable<T> *
             fprintf(outf, "\n");
             if (dump)
             {
-                if (!minBlocks)
+                if (minBlocks)
                 {
-                    readVarBlock(fp, io, variable, stepRelative, j, coreBlocks[j].Count,
-                                 coreBlocks[j].Start);
+                    Dims s(minBlocks->BlocksInfo[j].Start, minBlocks->BlocksInfo[j].Start + ndim);
+                    Dims c(minBlocks->BlocksInfo[j].Count, minBlocks->BlocksInfo[j].Count + ndim);
+                    readVarBlock(fp, io, variable, stepRelative, j, c, s);
                 }
                 else
                 {
-                    // GSE todo
+                    readVarBlock(fp, io, variable, stepRelative, j, coreBlocks[j].Count,
+                                 coreBlocks[j].Start);
                 }
             }
         }

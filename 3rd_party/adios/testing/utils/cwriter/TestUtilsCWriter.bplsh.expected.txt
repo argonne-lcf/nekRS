@@ -12,6 +12,7 @@ The time dimension is the first dimension then.
   --meshes    | -m           List meshes
   --timestep  | -t           Read content step by step (stream reading)
   --ignore_flatten           Display steps as written (don't flatten, even if writer said to)
+  --list_operators           List all operators used in the file
   --dump      | -d           Dump matched variables/attributes
                                To match attributes too, add option -a
   --regexp    | -e           Treat masks as extended regular expressions
@@ -32,6 +33,7 @@ The time dimension is the first dimension then.
   --error     | -X string    Specify read accuracy (error,norm,rel|abs)
                              e.g. error="0.0,0.0,abs"
                              L2 norm = 0.0, Linf = inf
+  --show-derived             Show the expression string for derived vars
   --transport-parameters | -T         Specify File transport parameters
                                       e.g. "Library=stdio"
   --engine               | -E <name>  Specify ADIOS Engine

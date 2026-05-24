@@ -59,7 +59,9 @@ fortran_add_test_helper(BPWriteReadHeatMap6D MPI_ONLY)
 fortran_add_test_helper(BPReadGlobalsByName MPI_ONLY)
 fortran_add_test_helper(BPWriteMemorySelectionRead2D MPI_ONLY)
 fortran_add_test_helper(BPWriteMemorySelectionRead3D MPI_ONLY)
+fortran_add_test_helper(BPWriteReadMemorySelection2D MPI_ONLY)
 fortran_add_test_helper(NullEngine MPI_ONLY)
+fortran_add_test_helper(BPWriteStatsOnly MPI_NONE)
 fortran_add_test_helper(BPMemorySpace MPI_NONE)
 if(ADIOS2_HAVE_GPU_Support)
   fortran_add_test_helper(BPMemorySpaceGPU MPI_NONE)
@@ -73,7 +75,7 @@ if(ADIOS2_HAVE_MPI)
     TestF2C_BPReadFBlocks.cpp
   )
   target_link_libraries(Test.Bindings.Fortran.F2C.BPReadFBlocks
-    adios2 adios2::thirdparty::gtest MPI::MPI_C
+    adios2 adios2::thirdparty::gtest MPI::MPI_CXX
   )
   add_test(NAME Bindings.Fortran.F2C.BPReadFBlocks
     COMMAND

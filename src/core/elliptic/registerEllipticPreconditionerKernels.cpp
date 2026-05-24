@@ -172,12 +172,8 @@ void registerSchwarzKernels(const std::string &section, int N)
     occa::properties properties = platform->kernelInfo;
     properties["defines/p_Nq"] = Nq;
     properties["defines/p_Nq_e"] = Nq_e;
-    properties["defines/p_restrict"] = 0;
     bool useRAS = platform->options.compareArgs(optionsPrefix + "MULTIGRID SMOOTHER", "RAS");
     const std::string suffix = std::string("_") + std::to_string(Nq_e - 1) + std::string("pfloat");
-    if (useRAS) {
-      properties["defines/p_restrict"] = 1;
-    }
 
     fileName = oklpath + "MG/fdm/preFDM" + extension;
     platform->kernelRequests.add("preFDM" + suffix, fileName, properties, suffix);
@@ -197,7 +193,7 @@ void registerSchwarzKernels(const std::string &section, int N)
                                   targetTimeBenchmark,
                                   platform->options.compareArgs("KERNEL AUTOTUNING", "FALSE") ? false : true,
                                   suffix);
-    platform->kernelRequests.add("fusedFDM" + suffix, fdmKernel);
+    platform->kernelRequests.add("fusedFDM" + ((useRAS) ? std::string("RAS") : std::string("")) + suffix, fdmKernel);
 
     fileName = oklpath + "MG/fdm/postFDM" + extension;
     platform->kernelRequests.add("postFDM" + suffix, fileName, properties, suffix);
@@ -320,7 +316,8 @@ void registerMultiGridKernels(const std::string &section, int poissonEquation)
     registerSEMFEMKernels(section, coarseLevelN, poissonEquation);
   }
 
-  if (platform->options.compareArgs(optionsPrefix + "MULTIGRID COARSE SOLVER", "BOOMERAMG")) {
+  if (platform->options.compareArgs(optionsPrefix + "MULTIGRID COARSE SOLVER", "BOOMERAMG") ||
+      platform->options.compareArgs(optionsPrefix + "MULTIGRID COARSE SOLVER", "XXT")) {
     const std::string oklpath = getenv("NEKRS_KERNEL_DIR");
 
     std::string fileName = oklpath + "/core/elliptic/vectorDotStar.okl";
@@ -334,8 +331,8 @@ void registerSEMFEMKernels(const std::string &section, int N, int poissonEquatio
   const int Nq = N + 1;
   const int Np = Nq * Nq * Nq;
   const std::string optionsPrefix = createOptionsPrefix(section);
-  const int useFP32 =
-      platform->options.compareArgs(optionsPrefix + "MULTIGRID COARSE SOLVER PRECISION", "FP32");
+  const int useFP32 = std::is_same_v<pfloat, float>;
+
   occa::properties SEMFEMKernelProps = platform->kernelInfo;
   if (useFP32) {
     SEMFEMKernelProps["defines/pfloat"] = "float";

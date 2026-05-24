@@ -124,7 +124,7 @@ void FileStdio::OpenChain(const std::string &name, Mode openMode, const helper::
     switch (m_OpenMode)
     {
     case Mode::Write:
-        if (async)
+        if (async && chainComm.Size() == 1)
         {
             m_IsOpening = true;
             m_OpenFuture = std::async(std::launch::async, lf_AsyncOpenWrite, name);
@@ -423,6 +423,8 @@ void FileStdio::Seek(const size_t start)
         SeekToEnd();
     }
 }
+
+size_t FileStdio::CurrentPos() { return static_cast<size_t>(std::ftell(m_File)); }
 
 #ifdef _WIN32
 void FileStdio::Truncate(const size_t length)

@@ -4,7 +4,7 @@
 ██ ██  ██ █████   █████   ██████  ███████
 ██  ██ ██ ██      ██  ██  ██   ██      ██
 ██   ████ ███████ ██   ██ ██   ██ ███████ 
-(c) 2019-2025 UCHICAGO ARGONNE, LLC
+(c) 2019-2026 UCHICAGO ARGONNE, LLC
 ```
 
 [![Build Status](https://travis-ci.com/Nek5000/nekRS.svg?branch=master)](https://travis-ci.com/Nek5000/nekRS)
@@ -38,7 +38,7 @@ Requirements:
 Download the latest [release](https://github.com/Nek5000/nekRS/releases) available under
 
 ```sh
-https://github.com/Nek5000/nekRS/archive/refs/tags/v26.0.tar.gz 
+https://github.com/Nek5000/nekRS/archive/refs/tags/v26.1.tar.gz 
 ```
 
 or clone our GitHub repository:

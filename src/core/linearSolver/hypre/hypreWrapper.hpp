@@ -8,21 +8,27 @@ namespace hypreWrapper {
 constexpr int NPARAM = 12;
 
 #ifndef HYPRE_HEADER
-// has to match HYPRE config
+
+// internal types (has to match HYPRE config)
 typedef int Int;
 typedef long long int BigInt;
-typedef float Real;
-
 typedef void IJMatrix;
 typedef void IJVector;
 typedef void Solver;
+#ifdef NEKRS_HYPRE_USE_FLOAT
+typedef float Real;
+#else
+typedef double Real;
+#endif
 
+// map to HYPRE types
 typedef Int HYPRE_Int;
 typedef BigInt HYPRE_BigInt;
 typedef IJMatrix HYPRE_IJMatrix;
 typedef IJVector HYPRE_IJVector;
 typedef Solver HYPRE_Solver;
 typedef Real HYPRE_Real;
+
 #endif
 
 void finalize();

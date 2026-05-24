@@ -106,8 +106,8 @@ public:
      * function)
      * @return transport base names
      */
-    std::vector<std::string> GetFilesBaseNames(const std::string &baseName,
-                                               const std::vector<Params> &parametersVector) const;
+    static std::vector<std::string> GetFilesBaseNames(const std::string &baseName,
+                                                      const std::vector<Params> &parametersVector);
 
     /**
      * m_Type from m_Transports based on derived classes of Transport
@@ -197,6 +197,8 @@ public:
     void SeekToFileBegin(const int transportIndex = -1);
 
     void SeekTo(const size_t start, const int transportIndex = -1);
+
+    size_t CurrentPos(const int transportIndex);
 
     void Truncate(const size_t length, const int transportIndex = -1);
 

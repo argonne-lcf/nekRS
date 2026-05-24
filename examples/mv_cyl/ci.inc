@@ -18,7 +18,7 @@ void ciSetup(MPI_Comm comm, setupAide &options)
   options.setArgs("FLUID PRESSURE INITIAL GUESS", "PREVIOUS");
 
   options.setArgs("BDF ORDER", "3");
-  options.setArgs("ADVECTION TYPE", "CONVECTIVE+CUBATURE");
+  options.setArgs("ADVECTION TYPE", "CONVECTIVE+OVERINTEGRATION");
   options.setArgs("FLUID VELOCITY SOLVER TOLERANCE", std::string("1e-09"));
   options.setArgs("FLUID PRESSURE SOLVER TOLERANCE", std::string("1e-10"));
   options.setArgs("SCALAR00 SOLVER TOLERANCE", std::string("1e-12"));
@@ -95,7 +95,7 @@ void ciTestErrors(nrs_t *nrs, double time, int tstep)
   expectedErr[5] = 0.4929804E-06;
 
   int expectedSIter = 4;
-  int expectedPIter = 5;
+  int expectedPIter = 6;
   int expectedVIter = 2;
 
   if (ciMode == 1) {

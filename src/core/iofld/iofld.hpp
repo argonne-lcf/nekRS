@@ -37,6 +37,18 @@ public:
 
     engineMode = mode_;
 
+    folderName = "";
+    platform->options.getArgs("CHECKPOINT DIRECTORY", folderName);
+    if (!folderName.empty()) {
+      folderName += "/";
+      if (!fs::is_directory(folderName)) {
+        if (platform->comm.mpiRank() == 0) {
+          std::cout << " directory: " << folderName << " does not exist, reset to ./" << std::endl << std::flush;
+        }
+        folderName = "";
+      }
+    }
+
     fileNameBase = fileNameBase_;
     step = step_;
 
@@ -313,6 +325,7 @@ public:
 
   mode engineMode;
 
+  std::string folderName;
   std::string fileNameBase;
 
   int step = 0;

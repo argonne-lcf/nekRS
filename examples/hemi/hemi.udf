@@ -95,10 +95,10 @@ void userRHS(lpm_t *lpm, double time, const deviceMemory<dfloat>& o_y, void *use
   // evaluate fluid fields at particle positions
   lpm->interpolate();
 
-  auto o_Uinterp = lpm->getInterpField("fluid_velocity");
+  auto o_Uinterp = lpm->interpField("fluid_velocity");
 
   if (lpm->numParticles()) {
-    auto o_prop = particles->getProp("stokes_number"); 
+    auto o_prop = particles->prop("stokes_number"); 
     particleRHS(lpm->numParticles(), offset, o_y, o_prop, o_Uinterp, o_ydot);
   }
 }
@@ -216,7 +216,8 @@ void UDF_Setup()
   // set Stokes number
   deviceMemory<dfloat> o_tmp(nParticles);
   platform->linAlg->fill(nParticles, Stk, o_tmp);
-  particles->setProp("stokes_number", o_tmp); 
+  auto o_prop = particles->prop("stokes_number");
+  o_prop.copyFrom(o_tmp);
 }
 
 void addNewParticles(nrs_t *nrs, double time, int tstep)
@@ -300,6 +301,7 @@ void UDF_ExecuteStep(double time, int tstep)
 
   if ((maxFractions[0] > migrationFraction) || (maxFractions[1] > migrationFraction)) {
     particles->migrate();
+    platform->device.printMemoryUsage(platform->comm.mpiComm());
   }
 
   if (nrs->checkpointStep) {

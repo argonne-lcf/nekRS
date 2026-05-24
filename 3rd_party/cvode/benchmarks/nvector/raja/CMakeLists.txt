@@ -2,8 +2,11 @@
 # Programmer(s): Cody J. Balos @ LLNL
 # ---------------------------------------------------------------
 # SUNDIALS Copyright Start
-# Copyright (c) 2002-2022, Lawrence Livermore National Security
+# Copyright (c) 2025-2026, Lawrence Livermore National Security,
+# University of Maryland Baltimore County, and the SUNDIALS contributors.
+# Copyright (c) 2013-2025, Lawrence Livermore National Security
 # and Southern Methodist University.
+# Copyright (c) 2002-2013, Lawrence Livermore National Security.
 # All rights reserved.
 #
 # See the top-level LICENSE and NOTICE files for details.
@@ -37,13 +40,12 @@ foreach(backend ${SUNDIALS_RAJA_BACKENDS})
     continue()
   endif()
 
-  sundials_add_nvector_benchmark(${example_target}
+  sundials_add_nvector_benchmark(
+    ${example_target}
     SOURCES test_nvector_performance_raja.cpp
-    SUNDIALS_TARGETS sundials_nvecraja
-    )
+    SUNDIALS_TARGETS sundials_nvecraja)
 
-  target_compile_definitions(${example_target}
-    PRIVATE ${_defines})
+  target_compile_definitions(${example_target} PRIVATE ${_defines})
 
   if(backend MATCHES "CUDA")
     set_target_properties(${example_target} PROPERTIES LINKER_LANGUAGE CXX)
@@ -53,7 +55,8 @@ foreach(backend ${SUNDIALS_RAJA_BACKENDS})
     target_link_libraries(${example_target} PRIVATE OpenMP::OpenMP_CXX)
   endif()
 
-  install(TARGETS ${example_target}
-    DESTINATION "${CMAKE_INSTALL_BINDIR}/benchmarks/nvector/raja")
+  install(
+    TARGETS ${example_target}
+    DESTINATION "${SUNDIALS_BENCHMARKS_INSTALL_PATH}/benchmarks/nvector/raja")
 
 endforeach()

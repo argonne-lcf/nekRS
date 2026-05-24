@@ -43,6 +43,7 @@ namespace core
  * Close */
 class Engine
 {
+
 public:
     using AdvanceAsyncCallback = std::function<void(std::shared_ptr<core::Engine>)>;
 
@@ -70,6 +71,18 @@ public:
     Engine(const std::string engineType, IO &io, const std::string &name, const Mode mode,
            helper::Comm comm);
 
+    /**
+     * Unique Base class constructor
+     * @param engineType derived class identifier
+     * @param io object that generates this Engine
+     * @param name unique engine name within IO class object
+     * @param mode  open mode from ADIOSTypes.h Mode
+     * @param comm  communicator passed at Open or from ADIOS class
+     * @param md Metadata already in memory
+     */
+    Engine(const std::string engineType, IO &io, const std::string &name, const Mode mode,
+           helper::Comm comm, const char *md, const size_t mdsize);
+
     virtual ~Engine();
 
     explicit operator bool() const noexcept;
@@ -85,6 +98,14 @@ public:
      * @return
      */
     Mode OpenMode() const noexcept;
+
+    /** Serialize all metadata right after engine is created, which can be
+     * delivered to other processes to open the same file for reading without
+     * opening and reading in metadata again.
+     * @return metadata (pointer to allocated memory) and size of metadata
+     * the pointer must be deallocated by user using free()
+     */
+    virtual void GetMetadata(char **md, size_t *size);
 
     StepStatus BeginStep();
 
@@ -472,6 +493,13 @@ public:
     }
 
     //  in this call, Step is RELATIVE, not absolute
+    virtual MinVarInfo *MinBlocksInfo(const VariableBase &, const size_t Step,
+                                      const size_t WriterID, const size_t BlockID) const
+    {
+        return nullptr;
+    }
+
+    //  in this call, Step is RELATIVE, not absolute
     virtual bool VarShape(const VariableBase &, const size_t Step, Dims &Shape) const
     {
         return false;
@@ -481,6 +509,8 @@ public:
     {
         return false;
     }
+
+    virtual std::string VariableExprStr(const VariableBase &) { return ""; }
 
     /** Notify the engine when a new attribute is defined. Called from IO.tcc
      */
@@ -500,6 +530,10 @@ public:
     void RegisterCreatedVariable(const VariableBase *var);
     void RemoveCreatedVars();
 
+    /** true: We only need the name of an operator used in Get, not actual operation
+     */
+    bool m_OperatorNameQuery = false;
+
 protected:
     /** from ADIOS class passed to Engine created with Open
      *  if no communicator is passed */
@@ -507,6 +541,9 @@ protected:
 
     /** User options parsed by the ADIOS object, here just for easy reference */
     const UserOptions &m_UserOptions;
+
+    /** Host options parsed by the ADIOS object, here just for easy reference */
+    const HostOptions &m_HostOptions;
 
     /** keeps track of current advance status */
     StepStatus m_AdvanceStatus = StepStatus::OK;
@@ -535,7 +572,8 @@ protected:
 
 #define declare_type(T)                                                                            \
     virtual void DoPutSync(Variable<T> &, const T *);                                              \
-    virtual void DoPutDeferred(Variable<T> &, const T *);
+    virtual void DoPutDeferred(Variable<T> &, const T *);                                          \
+    virtual size_t PutCount(Variable<T> &);
     ADIOS2_FOREACH_STDTYPE_1ARG(declare_type)
 #undef declare_type
 

@@ -49,6 +49,7 @@ void lowMach::buildKernel(occa::properties kernelInfo)
   p0thHelperKernel = buildKernel("p0thHelper");
 
   platform->options.setArgs("LOWMACH", "TRUE");
+  platform->options.setArgs("FLUID PRESSURE RHO SPLITTING", "TRUE");
 }
 
 void lowMach::setup(dfloat alpha_, const occa::memory &o_beta_, const occa::memory &o_kappa_)
@@ -63,7 +64,7 @@ void lowMach::setup(dfloat alpha_, const occa::memory &o_beta_, const occa::memo
   ;
 
   alpha0 = alpha_;
-  _nrs->alpha0Ref = alpha0;
+  _nrs->scalar->alpha0Ref = alpha0;
   o_beta = o_beta_;
   o_kappa = o_kappa_;
 
@@ -72,6 +73,15 @@ void lowMach::setup(dfloat alpha_, const occa::memory &o_beta_, const occa::memo
              EXIT_FAILURE,
              "%s\n",
              "requires solving for temperature!");
+
+  {
+    auto it = _nrs->scalar->nameToIndex.find("temperature");
+    nekrsCheck(it == _nrs->scalar->nameToIndex.end() || it->second != 0,
+              platform->comm.mpiComm(),
+              EXIT_FAILURE,
+              "%s\n",
+              "requires solving for temperature as first scalar!");
+  }
 
   std::vector<int> bID;
   for (auto &[key, bcID] : platform->app->bc->bIdToTypeId()) {
@@ -180,7 +190,7 @@ void lowMach::qThermalSingleComponent(double time)
     auto o_tmp2 = platform->deviceMemoryPool.reserve<dfloat>(nrs->fluid->fieldOffset);
     p0thHelperKernel(mesh->Nlocal,
                      alpha0,
-                     nrs->p0th[0],
+                     scalar->p0th[0],
                      o_beta,
                      o_kappa,
                      scalar->o_rho,
@@ -206,7 +216,7 @@ void lowMach::qThermalSingleComponent(double time)
     nrs->o_coeffBDF.copyTo(coeff.data());
     dfloat Saqpq = 0.0;
     for (int i = 0; i < nrs->o_coeffBDF.size(); ++i) {
-      Saqpq += coeff[i] * nrs->p0th[i];
+      Saqpq += coeff[i] * scalar->p0th[i];
     }
 
     const auto g0 = nrs->g0;
@@ -215,11 +225,11 @@ void lowMach::qThermalSingleComponent(double time)
     const auto pcoef = (g0 - dt * prhs);
     const auto p0thn = Saqpq / pcoef;
 
-    nrs->p0th[2] = nrs->p0th[1];
-    nrs->p0th[1] = nrs->p0th[0];
-    nrs->p0th[0] = p0thn;
+    scalar->p0th[2] = scalar->p0th[1];
+    scalar->p0th[1] = scalar->p0th[0];
+    scalar->p0th[0] = p0thn;
 
-    nrs->dp0thdt = prhs * p0thn;
+    scalar->dp0thdt = prhs * p0thn;
 
     surfaceFlops += surfaceFluxFlops + p0thHelperFlops;
   }
@@ -246,6 +256,6 @@ void lowMach::dpdt(occa::memory &o_FU)
   }
 
   if (!qThermal) {
-    platform->linAlg->add(mesh->Nlocal, nrs->dp0thdt * alpha0, o_FU);
+    platform->linAlg->add(mesh->Nlocal, _nrs->scalar->dp0thdt * alpha0, o_FU);
   }
 }

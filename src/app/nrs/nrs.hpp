@@ -14,6 +14,7 @@
 #include "fluidSolver.hpp"
 #include "geomSolver.hpp"
 #include "tavg.hpp"
+#include "constantFlowRate.hpp"
 
 class nrs_t : public app_t
 {
@@ -34,6 +35,7 @@ public:
   void setDefaultSettings(setupAide &options) override;
 
   void printSolutionMinMax() override;
+  void printPropertiesMinMax() override;
 
   void initStep(double time, dfloat dt, int tstep) override;
   dfloat adjustDt(int tstep) override;
@@ -127,10 +129,6 @@ public:
 
   occa::memory o_coeffEXT, o_coeffBDF;
 
-  dfloat p0th[3] = {0.0, 0.0, 0.0};
-  dfloat dp0thdt = 0;
-  dfloat alpha0Ref = 1;
-
   int outerCorrector = 1;
   int outputForceStep = 0;
 
@@ -141,8 +139,6 @@ public:
   std::unique_ptr<fluidSolver_t> fluid = nullptr;
   std::unique_ptr<geomSolver_t> geom = nullptr;
   std::unique_ptr<scalar_t> scalar = nullptr;
-
-  dfloat flowRateScaleFactor();
 
   std::unique_ptr<iofld> checkpointWriter = nullptr;
 
@@ -173,14 +169,18 @@ public:
   void copyToNek(double time, int tstep, bool updateMesh = false);
   void copyToNek(double time, bool updateMesh = false);
 
-  void copyFromNek(double &time);
-  void copyFromNek();
+  void copyFromNek(double &time, bool updateMesh = false);
+  void copyFromNek(bool updateMesh = false);
   void getICFromNek();
 
-  class tavgLegacy_t 
+  dfloat computeCFL();
+  dfloat computeCFL(dfloat dt);
+  dfloat computeCFL(mesh_t *mesh, const occa::memory &o_U, dfloat dt);
+
+  class tavg 
   {
   public:
-    tavgLegacy_t();
+    tavg();
 
     void writeToFile(mesh_t *mesh);
     void reset();
@@ -191,12 +191,11 @@ public:
     const deviceMemory<double> o_rm2();
 
   private:
-    std::unique_ptr<tavg> _avg;
-    std::unique_ptr<tavg> _rms;
-    std::unique_ptr<tavg> _rm2;
+    std::unique_ptr<::tavg> _avg;
+    std::unique_ptr<::tavg> _rms;
+    std::unique_ptr<::tavg> _rm2;
   };
-  friend class nrs_t::tavgLegacy_t; 
-  std::unique_ptr<nrs_t::tavgLegacy_t> tavgLegacy = nullptr;
+  friend class nrs_t::tavg; 
 
   class bdry : public bdryBase
   {
@@ -227,11 +226,8 @@ private:
 
   int tStepOuterStart;
   double timeOuterStart;
-
-  void flowRatePrintInfo(int tstep, bool verboseInfo);
-  void adjustFlowRate(int tstep, double time);
-  void computeHomogenousStokesSolution(double time);
-  void computeBaseFlowRate(double time, int tstep);
+  
+  std::unique_ptr<flowRate_t> flowRate = nullptr;
 
   int numberActiveFields();
 
@@ -241,12 +237,8 @@ private:
 
   double timePrevious;
 
-  dfloat computeCFL();
-  dfloat computeCFL(dfloat dt);
-  dfloat computeCFL(mesh_t *mesh, const occa::memory &o_U, dfloat dt);
-
   void setupNeknek();
-
+ 
   std::vector<std::pair<std::string, std::vector<occa::memory>>> userCheckpointFields;
 
   std::vector<int> createEllipticEToB(std::string field, mesh_t *mesh, std::string fieldComponent = "");

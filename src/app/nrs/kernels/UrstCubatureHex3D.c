@@ -99,7 +99,7 @@ extern "C" void FUNC(UrstCubatureHex3D)(const dlong &Nelements,
     for (dlong k = 0; k < p_cubNq; ++k) {
       for (dlong j = 0; j < p_cubNq; ++j) {
         for (dlong i = 0; i < p_cubNq; ++i) {
-          const dlong gid = element * p_cubNp * p_Nvgeo + k * p_cubNq * p_cubNq + j * p_cubNq + i;
+          const dlong gid = element * p_cubNp * p_Ncubvgeo + k * p_cubNq * p_cubNq + j * p_cubNq + i;
 
           const dfloat drdx = cubvgeo[gid + p_RXID * p_cubNp];
           const dfloat drdy = cubvgeo[gid + p_RYID * p_cubNp];

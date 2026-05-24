@@ -1,7 +1,9 @@
 #include <assert.h>
+#include <ctype.h>
 #include <errno.h>
 #include <inttypes.h>
 #include <pthread.h>
+#include <sched.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -12,6 +14,8 @@
 #include <evpath.h>
 
 #include <SSTConfig.h>
+
+#include <pthread.h>
 
 #include <rdma/fabric.h>
 #include <rdma/fi_cm.h>
@@ -61,6 +65,14 @@ pthread_mutex_t wsr_mutex = PTHREAD_MUTEX_INITIALIZER;
 pthread_mutex_t ts_mutex = PTHREAD_MUTEX_INITIALIZER;
 
 /*
+ * Internal version of deprecated APIs.
+ * These are used internally to avoid compiler warnings.
+ */
+
+#define ADIOS_FI_MR_BASIC (1 << 0)
+#define ADIOS_FI_LOCAL_MR (1ULL << 55)
+
+/*
  * Wrapper for fi_mr_reg() with additional parameters endpoint and mr_mode.
  * If mr_mode includes FI_MR_ENDPOINT, the memory region must be bound to the
  * endpoint and enabled before use.
@@ -74,16 +86,19 @@ int sst_fi_mr_reg(
     /* additional parameters for binding the mr to the endpoint*/
     struct fid_ep *endpoint, int mr_mode)
 {
+    *mr = NULL;
     int res = fi_mr_reg(domain, buf, len, acs, offset, requested_key, flags, mr, context);
     int is_mr_endpoint = (mr_mode & FI_MR_ENDPOINT) != 0;
-    if (!is_mr_endpoint)
+    if (res != FI_SUCCESS || !*mr)
     {
+        Svcs->verbose(CP_Stream, DPCriticalVerbose,
+                      "fi_mr_reg failed with %il (%s). A possible cause is that some providers do "
+                      "not support automated key provisioning, but ADIOS2 currently requires it.\n",
+                      res, fi_strerror(res));
         return res;
     }
-    if (res != FI_SUCCESS)
+    if (!is_mr_endpoint)
     {
-        Svcs->verbose(CP_Stream, DPCriticalVerbose, "fi_mr_reg failed with %ul (%s)\n", res,
-                      fi_strerror(res));
         return res;
     }
 
@@ -120,6 +135,147 @@ int guard_fi_return(int code, CP_Services Svcs, CManager cm, char const *msg)
     return code;
 }
 
+// Linked list of events that were retrieved by the progress thread
+// and that can be requested by the main thread
+struct cq_event_list
+{
+    struct fi_cq_data_entry *value;
+    // possibly null
+    // if not a single item is emplaced, then cq_manual_progress.cq_event_list is null
+    struct cq_event_list *next;
+};
+
+// Parameters for make_progress(), launched either as a separate thread
+// to make manual progress in fabrics that require it, or used to make manual
+// progress synchronously on the main thread in readers.
+struct cq_manual_progress
+{
+    struct fid_cq *cq_signal;
+
+    struct cq_event_list *cq_event_list;
+    // for thread-safe concurrent access (1 writer 1 reader)
+    pthread_mutex_t cq_event_list_mutex;
+    // are there any events currently in the list?
+    char cq_event_list_filled;
+    // signal is sent when an item is enplaced
+    pthread_cond_t cq_even_list_signal;
+
+    CP_Services Svcs;
+    void *Stream;
+    // main thread sets this to 0 for telling the thread to come home again
+    int do_continue;
+};
+
+// called by progress thread
+void cq_manual_progress_push(struct cq_manual_progress *self, struct cq_event_list *item)
+{
+    pthread_mutex_lock(&self->cq_event_list_mutex);
+    if (!self->cq_event_list)
+    {
+        self->cq_event_list = item;
+    }
+    else
+    {
+        struct cq_event_list *head = self->cq_event_list;
+        while (head->next)
+        {
+            head = head->next;
+        }
+        head->next = item;
+    }
+    self->cq_event_list_filled = 1;
+    pthread_mutex_unlock(&self->cq_event_list_mutex);
+    pthread_cond_signal(&self->cq_even_list_signal);
+}
+
+// called by main thread
+// will block until data becomes available
+struct fi_cq_data_entry *cq_manual_progress_pop(struct cq_manual_progress *self)
+{
+    struct fi_cq_data_entry *res;
+    pthread_mutex_lock(&self->cq_event_list_mutex);
+    while (!self->cq_event_list_filled)
+    {
+        pthread_cond_wait(&self->cq_even_list_signal, &self->cq_event_list_mutex);
+    }
+    assert(self->cq_event_list);
+    struct cq_event_list *head = self->cq_event_list;
+    res = head->value;
+    self->cq_event_list = head->next;
+    self->cq_event_list_filled = self->cq_event_list ? 1 : 0;
+    pthread_mutex_unlock(&self->cq_event_list_mutex);
+    free(head);
+    return res;
+}
+
+static void make_some_progress(struct cq_manual_progress *params, int timeout,
+                               struct fi_cq_data_entry *CQEntries, size_t batch_size)
+{
+    struct fi_cq_data_entry data_entry;
+    params->Svcs->verbose(params->Stream, DPTraceVerbose, "in make_some_progress\n");
+    if (!CQEntries || batch_size == 0)
+    {
+        // use stack-allocated "buffer"
+        CQEntries = &data_entry;
+        batch_size = 1;
+    }
+    params->Svcs->verbose(params->Stream, DPTraceVerbose, "blocking on CQ read, batch size %d\n",
+                          batch_size);
+    ssize_t rc = fi_cq_sread(params->cq_signal, (void *)CQEntries, batch_size, NULL, timeout);
+    params->Svcs->verbose(params->Stream, DPTraceVerbose,
+                          "Done with fi_cq_sread(), do_continue is %d\n", params->do_continue);
+    if (rc < 1)
+    {
+        params->Svcs->verbose(params->Stream, DPTraceVerbose, "Trying fi_cq_readerr\n");
+        struct fi_cq_err_entry error = {.err = 0};
+        fi_cq_readerr(params->cq_signal, &error, 0);
+        if (error.err != -FI_SUCCESS)
+        {
+            params->Svcs->verbose(
+                params->Stream, DPCriticalVerbose,
+                "[PullSelection] no completion event (%d (%s - %s)).\n", rc, fi_strerror(error.err),
+                fi_cq_strerror(params->cq_signal, error.err, error.err_data, NULL, error.len));
+        }
+    }
+    else
+    {
+        params->Svcs->verbose(params->Stream, DPTraceVerbose, "Got %d cq entries\n", rc);
+        for (size_t i = 0; i < rc; ++i)
+        {
+            struct cq_event_list *next_item = malloc(sizeof(struct cq_event_list));
+            struct fi_cq_data_entry *value = malloc(sizeof(struct fi_cq_data_entry));
+            memcpy(value, &CQEntries[i], sizeof(struct fi_cq_data_entry));
+            next_item->value = value;
+            next_item->next = NULL;
+            params->Svcs->verbose(params->Stream, DPTraceVerbose, "manual progress push %d\n", i);
+            cq_manual_progress_push(params, next_item);
+        }
+    }
+    params->Svcs->verbose(params->Stream, DPCriticalVerbose, "falling out of make_some_progress\n");
+}
+
+static void *make_progress(void *params_)
+{
+    struct cq_manual_progress *params = (struct cq_manual_progress *)params_;
+    size_t const batch_size = 100;
+    struct fi_cq_data_entry CQEntries[batch_size];
+
+    params->Svcs->verbose(params->Stream, DPTraceVerbose, "make_progress thread started\n");
+    while (params->do_continue)
+    {
+        /*
+         * The main purpose of this worker thread is to make repeated blocking calls to the blocking
+         * fi_cq_sread(). Some providers don't make progress in a timely fashion otherwise (e.g.
+         * shm).
+         */
+        make_some_progress(params, -1, CQEntries, batch_size);
+    }
+    return NULL;
+}
+
+static int global_fabric_refcount = 0;
+static struct fid_fabric *global_fabric = NULL;
+
 struct fabric_state
 {
     struct fi_context *ctx;
@@ -145,7 +301,55 @@ struct fabric_state
     uint32_t credential;
     struct fi_gni_auth_key *auth_key;
 #endif /* SST_HAVE_CRAY_DRC */
+    struct cq_manual_progress *cq_manual_progress;
+    pthread_t pthread_id;
 };
+
+// Wrapper for fi_cq_sread to be called in its stead from the main thread.
+// If a progress thread is running, then we wait for data to become available there.
+// Otherwise fi_cq_sread() is called synchronously.
+void cq_read(struct fabric_state *fabric, struct fi_cq_data_entry *CQEntry, CP_Services Svcs,
+             void *Stream)
+{
+    if (fabric->cq_manual_progress)
+    {
+        if (fabric->pthread_id == 0)
+        {
+            // We're on the reader side. No progress thread was launched, but
+            // the fabric demands manual progress.
+            // We cannot directly call fi_cq_sread() now since it might have
+            // been called before at other places. There might be results
+            // in the queue.
+            if (!fabric->cq_manual_progress->cq_event_list_filled)
+            {
+                make_some_progress(fabric->cq_manual_progress, -1, NULL, 0);
+                if (!fabric->cq_manual_progress->cq_event_list_filled)
+                {
+                    Svcs->verbose(Stream, DPCriticalVerbose, "[cq_read] no completion event.");
+                }
+            }
+        }
+        struct fi_cq_data_entry *res = cq_manual_progress_pop(fabric->cq_manual_progress);
+        memcpy(CQEntry, res, sizeof(struct fi_cq_data_entry));
+        free(res);
+    }
+    else
+    {
+        ssize_t rc = fi_cq_sread(fabric->cq_signal, (void *)CQEntry, 1, NULL, -1);
+        if (rc < 1)
+        {
+            struct fi_cq_err_entry error = {.err = 0};
+            fi_cq_readerr(fabric->cq_signal, &error, 0);
+            if (error.err != -FI_SUCCESS)
+            {
+                Svcs->verbose(
+                    Stream, DPCriticalVerbose, "[cq_read] no completion event (%d (%s - %s)).\n",
+                    rc, fi_strerror(error.err),
+                    fi_cq_strerror(fabric->cq_signal, error.err, error.err_data, NULL, error.len));
+            }
+        }
+    }
+}
 
 /*
  *  Some conventions:
@@ -207,8 +411,9 @@ static void init_fabric(struct fabric_state *fabric, struct _SstParams *Params, 
     hints->caps =
         FI_MSG | FI_SEND | FI_RECV | FI_REMOTE_READ | FI_REMOTE_WRITE | FI_RMA | FI_READ | FI_WRITE;
     hints->mode =
-        FI_CONTEXT | FI_LOCAL_MR | FI_CONTEXT2 | FI_MSG_PREFIX | FI_ASYNC_IOV | FI_RX_CQ_DATA;
+        FI_CONTEXT | ADIOS_FI_LOCAL_MR | FI_CONTEXT2 | FI_MSG_PREFIX | FI_ASYNC_IOV | FI_RX_CQ_DATA;
     hints->ep_attr->type = FI_EP_RDM;
+    hints->domain_attr->threading = FI_THREAD_SAFE;
 
     uint32_t fi_version;
 #ifdef SST_HAVE_CRAY_CXI
@@ -218,7 +423,8 @@ static void init_fabric(struct fabric_state *fabric, struct _SstParams *Params, 
 
         hints->domain_attr->mr_mode = FI_MR_ENDPOINT;
         hints->domain_attr->control_progress = FI_PROGRESS_MANUAL;
-        hints->domain_attr->data_progress = FI_PROGRESS_MANUAL;
+        // data progress unspecified, both are fine
+        // hints->domain_attr->data_progress = FI_PROGRESS_MANUAL;
 
         // Authentication is needed
         // TODO: the first ID in SLINGSHOT_SVC_IDS is chosen, but we should
@@ -241,24 +447,26 @@ static void init_fabric(struct fabric_state *fabric, struct _SstParams *Params, 
     {
         fi_version = FI_VERSION(1, 5);
 
-        hints->domain_attr->mr_mode = FI_MR_BASIC;
+        hints->domain_attr->mr_mode =
+            FI_MR_VIRT_ADDR | FI_MR_ALLOCATED | FI_MR_PROV_KEY | FI_MR_LOCAL;
         hints->domain_attr->control_progress = FI_PROGRESS_AUTO;
-        hints->domain_attr->data_progress = FI_PROGRESS_AUTO;
+        // data progress unspecified, both are fine
+        // hints->domain_attr->data_progress = FI_PROGRESS_AUTO;
     }
 #else
     fi_version = FI_VERSION(1, 5);
 
-    // Alternatively, one could set mr_mode to
-    // FI_MR_VIRT_ADDR | FI_MR_ALLOCATED | FI_MR_PROV_KEY | FI_MR_LOCAL
-    // here. These flags are equivalent to FI_MR_BASIC, but unlike basic
+    // These flags are the same as required by FI_MR_BASIC, but unlike basic
     // registration, providers are not forced to keep those flags when they
     // think that not using the flags is better.
     // The RDMA DP is able to deal with this appropriately, and does so right
     // before calling fi_fabric() further below in this function.
-    // The main reason for keeping FI_MR_BASIC here is backward compatibility.
-    hints->domain_attr->mr_mode = FI_MR_BASIC;
+    // So, we specify these flags instead of FI_MR_BASIC in order to leave the
+    // decision up to the providers.
+    hints->domain_attr->mr_mode = FI_MR_VIRT_ADDR | FI_MR_ALLOCATED | FI_MR_PROV_KEY | FI_MR_LOCAL;
     hints->domain_attr->control_progress = FI_PROGRESS_AUTO;
-    hints->domain_attr->data_progress = FI_PROGRESS_AUTO;
+    // data progress unspecified, both are fine
+    // hints->domain_attr->data_progress = FI_PROGRESS_AUTO;
 #endif
 
     /*
@@ -276,8 +484,21 @@ static void init_fabric(struct fabric_state *fabric, struct _SstParams *Params, 
 
     fabric->info = NULL;
 
+    char const *provider_name = NULL;
+    if ((provider_name = getenv("FABRIC_PROVIDER")))
+    {
+        size_t len = strlen(provider_name);
+        hints->fabric_attr->prov_name = malloc(len + 1);
+        memcpy(hints->fabric_attr->prov_name, provider_name, len + 1);
+    }
+
     pthread_mutex_lock(&fabric_mutex);
-    fi_getinfo(fi_version, NULL, NULL, 0, hints, &info);
+    result = fi_getinfo(fi_version, NULL, NULL, 0, hints, &info);
+    if (result != FI_SUCCESS)
+    {
+        Svcs->verbose(CP_Stream, DPCriticalVerbose, "opening fi_getinfo() failed with %d (%s).\n",
+                      result, fi_strerror(result));
+    }
     pthread_mutex_unlock(&fabric_mutex);
     if (!info)
     {
@@ -359,7 +580,7 @@ static void init_fabric(struct fabric_state *fabric, struct _SstParams *Params, 
         fabric->ctx = NULL;
     }
 
-    if (info->mode & FI_LOCAL_MR)
+    if (info->mode & ADIOS_FI_LOCAL_MR)
     {
         fabric->local_mr_req = 1;
     }
@@ -400,7 +621,7 @@ static void init_fabric(struct fabric_state *fabric, struct _SstParams *Params, 
      * So we propagate the bit value currently contained in the mr_mode
      * for these flags.
      */
-    if (info->domain_attr->mr_mode != FI_MR_BASIC)
+    if (info->domain_attr->mr_mode != ADIOS_FI_MR_BASIC)
     {
         info->domain_attr->mr_mode = FI_MR_ALLOCATED | FI_MR_PROV_KEY | FI_MR_LOCAL |
                                      (FI_MR_ENDPOINT & info->domain_attr->mr_mode) |
@@ -425,19 +646,35 @@ static void init_fabric(struct fabric_state *fabric, struct _SstParams *Params, 
         Svcs->verbose(CP_Stream, DPCriticalVerbose, "copying the fabric info failed.\n");
         return;
     }
-
     Svcs->verbose(CP_Stream, DPTraceVerbose,
                   "Fabric parameters to use at fabric initialization: %s\n",
                   fi_tostr(fabric->info, FI_TYPE_INFO));
 
-    result = fi_fabric(info->fabric_attr, &fabric->fabric, fabric->ctx);
-    if (result != FI_SUCCESS)
+    pthread_mutex_lock(&fabric_mutex);
+    if (global_fabric_refcount == 0)
     {
-        Svcs->verbose(CP_Stream, DPCriticalVerbose,
-                      "opening fabric access failed with %d (%s). This is fatal.\n", result,
-                      fi_strerror(result));
-        return;
+        Svcs->verbose(CP_Stream, DPCriticalVerbose, "opening fabric with provider %s\n",
+                      info->fabric_attr->prov_name);
+        result = fi_fabric(info->fabric_attr, &fabric->fabric, fabric->ctx);
+        if (result != FI_SUCCESS)
+        {
+            Svcs->verbose(CP_Stream, DPCriticalVerbose,
+                          "opening fabric access failed with %d (%s). This is fatal.\n", result,
+                          fi_strerror(result));
+            return;
+        }
+        global_fabric_refcount = 1;
+        global_fabric = fabric->fabric;
     }
+    else
+    {
+        Svcs->verbose(CP_Stream, DPSummaryVerbose, "Reusing open fabric with provider %s\n",
+                      info->fabric_attr->prov_name);
+        fabric->fabric = global_fabric;
+        global_fabric_refcount++;
+    }
+    pthread_mutex_unlock(&fabric_mutex);
+
     result = fi_domain(fabric->fabric, info, &fabric->domain, fabric->ctx);
     if (result != FI_SUCCESS)
     {
@@ -460,7 +697,13 @@ static void init_fabric(struct fabric_state *fabric, struct _SstParams *Params, 
     }
 
     av_attr.type = FI_AV_MAP;
-    av_attr.count = DP_AV_DEF_SIZE;
+    // The shm provider crashes in fi_cq_read() if specifying
+    // a count larger than 256 here.
+    // As this an optimization flag only, it seems safer to skip it here.
+    if (strncmp(fabric->info->fabric_attr->prov_name, "shm", 4) != 0)
+    {
+        av_attr.count = DP_AV_DEF_SIZE;
+    }
     av_attr.ep_per_node = 0;
     result = fi_av_open(fabric->domain, &av_attr, &fabric->av, fabric->ctx);
     if (result != FI_SUCCESS)
@@ -519,6 +762,58 @@ static void init_fabric(struct fabric_state *fabric, struct _SstParams *Params, 
 static void fini_fabric(struct fabric_state *fabric, CP_Services Svcs, void *CP_Stream)
 {
 
+    if (fabric->cq_manual_progress)
+    {
+        int result;
+
+        fabric->cq_manual_progress->do_continue = 0;
+        // make_progress() is still cluelessly waiting for anything to happen
+        // before it gets the chance to check the do_continue flag.
+        // so we give it some event.
+        Svcs->verbose(CP_Stream, DPTraceVerbose, "FI_CQ_SIGNAL to waiting thread Waiting.\n");
+
+        result = fi_cq_signal(fabric->cq_signal);
+        if (result != FI_SUCCESS)
+        {
+            Svcs->verbose(CP_Stream, DPCriticalVerbose, "fi_cq_signal failed with %d (%s).\n",
+                          result, fi_strerror(result));
+            if (fabric->pthread_id)
+            {
+                result = pthread_cancel(fabric->pthread_id);
+                if (result != 0)
+                {
+                    Svcs->verbose(CP_Stream, DPCriticalVerbose,
+                                  "pthread_cancel failed with result %d\n", result);
+                }
+                fabric->pthread_id = 0;
+            }
+        }
+
+        if (fabric->pthread_id != 0)
+        {
+            Svcs->verbose(CP_Stream, DPTraceVerbose, "Waiting on Join thread. %p\n",
+                          (void *)fabric->pthread_id);
+            if (pthread_join(fabric->pthread_id, NULL) != 0)
+            {
+                Svcs->verbose(CP_Stream, DPCriticalVerbose, "Could not join thread.\n");
+                return;
+            }
+            fabric->pthread_id = 0;
+        }
+
+        pthread_mutex_destroy(&fabric->cq_manual_progress->cq_event_list_mutex);
+
+        Svcs->verbose(CP_Stream, DPTraceVerbose, "working through manual progress list\n");
+        struct cq_event_list *head = fabric->cq_manual_progress->cq_event_list;
+        while (head)
+        {
+            struct cq_event_list *next = head->next;
+            free(head);
+            head = next;
+        }
+        free(fabric->cq_manual_progress);
+    }
+
     int res;
 
     do
@@ -554,13 +849,29 @@ static void fini_fabric(struct fabric_state *fabric, CP_Services Svcs, void *CP_
         return;
     }
 
-    res = fi_close((struct fid *)fabric->fabric);
-    if (res != FI_SUCCESS)
+    pthread_mutex_lock(&fabric_mutex);
+    global_fabric_refcount--;
+    if (global_fabric_refcount == 0)
     {
-        Svcs->verbose(CP_Stream, DPCriticalVerbose,
-                      "could not close fabric, failed with %d (%s).\n", res, fi_strerror(res));
-        return;
+        Svcs->verbose(CP_Stream, DPSummaryVerbose,
+                      "Calling fi_close() on fabric with zero reference count.\n");
+        res = fi_close((struct fid *)global_fabric);
+        Svcs->verbose(CP_Stream, DPSummaryVerbose, "Return fi_close() is %d\n", res);
+        if (res != FI_SUCCESS)
+        {
+            Svcs->verbose(CP_Stream, DPCriticalVerbose,
+                          "could not close fabric, failed with %d (%s).\n", res, fi_strerror(res));
+            return;
+        }
+        global_fabric = NULL;
     }
+    else
+    {
+        Svcs->verbose(CP_Stream, DPSummaryVerbose,
+                      "Skipping fi_close() on fabric because reference count is still %d.\n",
+                      global_fabric_refcount);
+    }
+    pthread_mutex_unlock(&fabric_mutex);
 
     fi_freeinfo(fabric->info);
 
@@ -581,6 +892,7 @@ static void fini_fabric(struct fabric_state *fabric, CP_Services Svcs, void *CP_
         free(Fabric->auth_key);
     }
 #endif /* SST_HAVE_CRAY_DRC */
+    Svcs->verbose(CP_Stream, DPSummaryVerbose, "Returning from fini_fabric()\n");
 }
 
 typedef struct fabric_state *FabricState;
@@ -798,6 +1110,11 @@ static int get_cxi_auth_key_from_env(CP_Services Svcs, void *CP_Stream, struct _
     char const *slingshot_devices = getenv("SLINGSHOT_DEVICES");
     char const *preferred_device = get_preferred_domain(Params);
 
+    if ((preferred_device && strncmp("cxi", preferred_device, 3) != 0) || !slingshot_devices)
+    {
+        return EXIT_FAILURE;
+    }
+
     /*
      * In the following loop, find out if the preferred_device is found within
      * the slingshot_devices.
@@ -948,6 +1265,139 @@ static int get_cxi_auth_key_from_writer(struct cxi_auth_key *key, attr_list Writ
 }
 #endif
 
+typedef enum
+{
+    ProgressThreadUnspecified,
+    ProgressThreadYes,
+    ProgressThreadNo
+} ProgressThread;
+
+static ProgressThread use_progress_thread()
+{
+    size_t const max_len = 4;
+    char const *use_progress_thread_envvar = getenv("FABRIC_PROGRESS_THREAD");
+    char use_progress_thread[max_len];
+
+    if (!use_progress_thread_envvar)
+    {
+        return ProgressThreadUnspecified;
+    }
+
+    strncpy(use_progress_thread, use_progress_thread_envvar, max_len);
+    for (size_t i = 0; i < max_len; ++i)
+    {
+        use_progress_thread[i] = (char)tolower((int)use_progress_thread[i]);
+    }
+
+    if (use_progress_thread_envvar && ((strncmp(use_progress_thread, "1", max_len) == 0) ||
+                                       (strncmp(use_progress_thread, "yes", max_len) == 0) ||
+                                       (strncmp(use_progress_thread, "on", max_len) == 0)))
+    {
+        return ProgressThreadYes;
+    }
+    else
+    {
+        return ProgressThreadNo;
+    }
+}
+
+// Called by writer as well as by the reader.
+// For the writer, a separate progress thread is not needed as the reader will
+// make explicit synchronous progress upon requesting data.
+// In consequence, a progress thread is by default only launched on the writer
+// side under the condition that the fabric indicates manual data progress.
+// This behavior can be overridden using the environment variable `FABRIC_PROGRESS_THREAD`.
+// Use cases for this:
+//
+// 1. Turn on a progress thread on the reader side as well for making progress
+//    asynchronously in the background.
+// 2. The tcp provider claims that it supports automatic progress, but seems to hang up
+//    if a progress thread is not launched on the writer side.
+//    The env. var. can be used when the fabric behavior does not match its promises.
+// 3. If for any reason the use of progress threads causes trouble, they can be turned
+//    off this way.
+static int init_progress_thread(FabricState fabric, CP_Services Svcs, void *CP_Stream,
+                                int is_reader)
+{
+    int do_init_thread = 1;
+    switch (use_progress_thread())
+    {
+    case ProgressThreadUnspecified:
+        if (is_reader)
+        {
+            // Reader does not need to launch a thread for making progress as it
+            // will naturally arrive at points where it can make progress
+            // synchronously.
+            // In this case, just initiate the progress queue (struct cq_manual_progress)
+            // so the reader knows to make progress at those points.
+            do_init_thread = 0;
+        }
+
+        if (fabric->info->domain_attr->data_progress != FI_PROGRESS_MANUAL)
+        {
+            Svcs->verbose(CP_Stream, DPTraceVerbose,
+                          "Using the fabric's automatic progress capability.\n");
+            return EXIT_SUCCESS;
+        }
+        else if (is_reader)
+        {
+            Svcs->verbose(
+                CP_Stream, DPTraceVerbose,
+                "Fabric requires manual progress, will make progress synchronously (reader). "
+                "Specify environment variable FABRIC_PROGRESS_THREAD=1 to make progress in the "
+                "background.\n");
+        }
+        else
+        {
+            Svcs->verbose(CP_Stream, DPTraceVerbose,
+                          "Using a separate thread to comply with the fabric's manual progress "
+                          "preference (writer).\n");
+        }
+        break;
+    case ProgressThreadYes:
+        Svcs->verbose(CP_Stream, DPTraceVerbose,
+                      "Using a separate thread for manual progress upon user request.\n");
+        break;
+    case ProgressThreadNo:
+        Svcs->verbose(CP_Stream, DPTraceVerbose,
+                      "Not using a separate thread for manual progress upon user request.\n");
+        return EXIT_SUCCESS;
+    }
+
+    struct cq_manual_progress *manual_progress = malloc(sizeof(struct cq_manual_progress));
+
+    manual_progress->cq_signal = fabric->cq_signal;
+    if (pthread_mutex_init(&manual_progress->cq_event_list_mutex, NULL) != 0)
+    {
+        Svcs->verbose(CP_Stream, DPCriticalVerbose, "Could not init mutex.\n");
+        return EXIT_FAILURE;
+    }
+    manual_progress->cq_event_list = NULL;
+    manual_progress->cq_event_list_filled = 0;
+    manual_progress->Svcs = Svcs;
+    manual_progress->Stream = CP_Stream;
+    manual_progress->do_continue = 1;
+    pthread_cond_init(&manual_progress->cq_even_list_signal, NULL);
+
+    fabric->cq_manual_progress = manual_progress;
+
+    if (do_init_thread)
+    {
+        if (pthread_create(&fabric->pthread_id, NULL, &make_progress, fabric->cq_manual_progress) !=
+            0)
+        {
+            Svcs->verbose(CP_Stream, DPCriticalVerbose, "Could not start thread.\n");
+            return EXIT_FAILURE;
+        }
+    }
+    else
+    {
+        fabric->pthread_id = 0;
+    }
+
+    return EXIT_SUCCESS;
+}
+
 static DP_RS_Stream RdmaInitReader(CP_Services Svcs, void *CP_Stream, void **ReaderContactInfoPtr,
                                    struct _SstParams *Params, attr_list WriterContact,
                                    SstStats Stats)
@@ -1067,13 +1517,29 @@ static DP_RS_Stream RdmaInitReader(CP_Services Svcs, void *CP_Stream, void **Rea
         return NULL;
     }
 
-    ContactInfo->Length = Fabric->info->src_addrlen;
-    ContactInfo->Address = malloc(ContactInfo->Length);
-    if (guard_fi_return(
-            fi_getname((fid_t)Fabric->signal, ContactInfo->Address, &ContactInfo->Length), Svcs,
-            CP_Stream, "[RdmaInitReader] fi_getname() failed with:") != FI_SUCCESS)
+    if (init_progress_thread(Fabric, Svcs, CP_Stream, /* is_reader = */ 1) == EXIT_FAILURE)
     {
         return NULL;
+    }
+
+    ContactInfo->Length = Fabric->info->src_addrlen;
+    ContactInfo->Address = malloc(ContactInfo->Length);
+    int error_code = fi_getname((fid_t)Fabric->signal, ContactInfo->Address, &ContactInfo->Length);
+    if (error_code == -FI_ETOOSMALL)
+    {
+        // Try again, fabric info might have under-reported the address length
+        ContactInfo->Address = realloc(ContactInfo->Address, ContactInfo->Length);
+        error_code = fi_getname((fid_t)Fabric->signal, ContactInfo->Address, &ContactInfo->Length);
+    }
+    if (guard_fi_return(error_code, Svcs, CP_Stream,
+                        "[RdmaInitWriterPerReader] fi_getname() failed with") != FI_SUCCESS)
+    {
+        return NULL;
+    }
+    if (Stream->Fabric->info->addr_format == FI_ADDR_STR)
+    {
+        Svcs->verbose(Stream, DPSummaryVerbose, "Reader address: %s\n",
+                      (char const *)ContactInfo->Address);
     }
 
     Stream->PreloadStep = -1;
@@ -1214,7 +1680,7 @@ static DP_WS_Stream RdmaInitWriter(CP_Services Svcs, void *CP_Stream, struct _Ss
         }
         else
         {
-            Svcs->verbose(CP_Stream, DPTraceVerbose, "DRC acquired credential id %d.\n",
+            Svcs->verbose(CP_Stream, DPTraceDupVerbose, "DRC acquired credential id %d.\n",
                           Fabric->credential);
         }
     }
@@ -1238,7 +1704,7 @@ static DP_WS_Stream RdmaInitWriter(CP_Services Svcs, void *CP_Stream, struct _Ss
     Fabric->auth_key = malloc(sizeof(*Fabric->auth_key));
     Fabric->auth_key->type = GNIX_AKT_RAW;
     Fabric->auth_key->raw.protection_key = drc_get_first_cookie(Fabric->drc_info);
-    Svcs->verbose(CP_Stream, DPTraceVerbose, "Using protection key %08x.\n",
+    Svcs->verbose(CP_Stream, DPTraceDupVerbose, "Using protection key %08x.\n",
                   Fabric->auth_key->raw.protection_key);
     long attr_cred = Fabric->credential;
     set_long_attr(DPAttrs, attr_atom_from_string("RDMA_DRC_CRED"), attr_cred);
@@ -1252,12 +1718,17 @@ static DP_WS_Stream RdmaInitWriter(CP_Services Svcs, void *CP_Stream, struct _Ss
     Fabric = Stream->Fabric;
     if (!Fabric->info)
     {
-        Svcs->verbose(CP_Stream, DPTraceVerbose, "Could not find a valid transport fabric.\n");
+        Svcs->verbose(CP_Stream, DPTraceDupVerbose, "Could not find a valid transport fabric.\n");
         goto err_out;
     }
 
-    Svcs->verbose(CP_Stream, DPTraceVerbose, "Fabric Parameters:\n%s\n",
+    Svcs->verbose(CP_Stream, DPTraceDupVerbose, "Fabric Parameters:\n%s\n",
                   fi_tostr(Fabric->info, FI_TYPE_INFO));
+
+    if (init_progress_thread(Fabric, Svcs, CP_Stream, /* is_reader = */ 0) == EXIT_FAILURE)
+    {
+        goto err_out;
+    }
 
     /*
      * save the CP_stream value of later use
@@ -1311,7 +1782,7 @@ static DP_WSR_Stream RdmaInitWriterPerReader(CP_Services Svcs, DP_WS_Stream WS_S
                           "into vector\n");
             return NULL;
         }
-        Svcs->verbose(WS_Stream->CP_Stream, DPTraceVerbose,
+        Svcs->verbose(WS_Stream->CP_Stream, DPTraceDupVerbose,
                       "Received contact info for RS_Stream %p, WSR Rank %d\n",
                       providedReaderInfo[i]->RS_Stream, i);
     }
@@ -1332,12 +1803,22 @@ static DP_WSR_Stream RdmaInitWriterPerReader(CP_Services Svcs, DP_WS_Stream WS_S
 
     ContactInfo->Length = Fabric->info->src_addrlen;
     ContactInfo->Address = malloc(ContactInfo->Length);
-    if (guard_fi_return(
-            fi_getname((fid_t)Fabric->signal, ContactInfo->Address, &ContactInfo->Length), Svcs,
-            WS_Stream->CP_Stream,
-            "[RdmaInitWriterPerReader] fi_getname() failed with") != FI_SUCCESS)
+    int error_code = fi_getname((fid_t)Fabric->signal, ContactInfo->Address, &ContactInfo->Length);
+    if (error_code == -FI_ETOOSMALL)
+    {
+        // Try again, fabric info might have under-reported the address length
+        ContactInfo->Address = realloc(ContactInfo->Address, ContactInfo->Length);
+        error_code = fi_getname((fid_t)Fabric->signal, ContactInfo->Address, &ContactInfo->Length);
+    }
+    if (guard_fi_return(error_code, Svcs, WS_Stream->CP_Stream,
+                        "[RdmaInitWriterPerReader] fi_getname() failed with") != FI_SUCCESS)
     {
         return NULL;
+    }
+    if (Fabric->info->addr_format == FI_ADDR_STR)
+    {
+        Svcs->verbose(WS_Stream->CP_Stream, DPSummaryVerbose, "Writer address: %s\n",
+                      (char const *)ContactInfo->Address);
     }
 
     ReaderRollHandle = &ContactInfo->ReaderRollHandle;
@@ -1397,7 +1878,7 @@ static void RdmaProvideWriterDataToReader(CP_Services Svcs, DP_RS_Stream RS_Stre
             return;
         }
         RS_Stream->WriterRoll[i] = providedWriterInfo[i]->ReaderRollHandle;
-        Svcs->verbose(RS_Stream->CP_Stream, DPTraceVerbose,
+        Svcs->verbose(RS_Stream->CP_Stream, DPTraceDupVerbose,
                       "Received contact info for WS_stream %p, WSR Rank %d\n",
                       RS_Stream->WriterContactInfo[i].WS_Stream, i);
     }
@@ -1507,6 +1988,16 @@ static ssize_t PostRead(CP_Services Svcs, Rdma_RS_Stream RS_Stream, int Rank, lo
     {
         rc = fi_read(Fabric->signal, Buffer, Length, LocalDesc, SrcAddress, (uint64_t)Addr,
                      Info->Key, ret);
+        if (Fabric->cq_manual_progress && Fabric->pthread_id == 0)
+        {
+            /*
+             * Cannot make a blocking call here since maybe the fi_read() task
+             * above did not register, so there is nothing to wait for.
+             * Need to specify either a timeout or call this non-blockingly
+             * (i.e. timeout=0) to ensure that this returns.
+             */
+            make_some_progress(Fabric->cq_manual_progress, 0, NULL, 0);
+        }
     } while (rc == -EAGAIN);
 
     if (rc != 0)
@@ -1660,21 +2151,8 @@ static int DoPushWait(CP_Services Svcs, Rdma_RS_Stream Stream, RdmaCompletionHan
 
     while (Handle->Pending > 0)
     {
-        ssize_t rc;
-        rc = fi_cq_sread(Fabric->cq_signal, (void *)(&CQEntry), 1, NULL, -1);
-        if (rc < 1)
-        {
-            struct fi_cq_err_entry error;
-            fi_cq_readerr(Fabric->cq_signal, &error, 0);
-            Svcs->verbose(
-                Stream->CP_Stream, DPCriticalVerbose,
-                "failure while waiting for completions inside "
-                "DoPushWait() (%d (%s - %s)).\n",
-                rc, fi_strerror(error.err),
-                fi_cq_strerror(Fabric->cq_signal, error.err, error.err_data, NULL, error.len));
-            return 0;
-        }
-        else if (CQEntry.flags & FI_REMOTE_CQ_DATA)
+        cq_read(Fabric, &CQEntry, Svcs, Stream);
+        if (CQEntry.flags & FI_REMOTE_CQ_DATA)
         {
             BufferSlot = CQEntry.data >> 31;
             WRidx = (CQEntry.data >> 20) & 0x3FF;
@@ -1739,21 +2217,7 @@ static int WaitForAnyPull(CP_Services Svcs, Rdma_RS_Stream Stream)
     RdmaCompletionHandle Handle_t;
     struct fi_cq_data_entry CQEntry = {0};
 
-    ssize_t rc;
-    rc = fi_cq_sread(Fabric->cq_signal, (void *)(&CQEntry), 1, NULL, -1);
-    if (rc < 1)
-    {
-        struct fi_cq_err_entry error;
-        fi_cq_readerr(Fabric->cq_signal, &error, 0);
-        Svcs->verbose(
-            Stream->CP_Stream, DPCriticalVerbose,
-            "failure while waiting for completions inside "
-            "WaitForAnyPull() (%d (%s - %s)).\n",
-            rc, fi_strerror(error.err),
-            fi_cq_strerror(Fabric->cq_signal, error.err, error.err_data, NULL, error.len));
-        return 0;
-    }
-    else
+    cq_read(Fabric, &CQEntry, Svcs, Stream);
     {
         Svcs->verbose(Stream->CP_Stream, DPTraceVerbose,
                       "got completion for request with handle %p (flags %li).\n",
@@ -1910,6 +2374,7 @@ static void RdmaDestroyReader(CP_Services Svcs, DP_RS_Stream RS_Stream_v)
     RdmaStepLogEntry StepLog = RS_Stream->StepLog;
     RdmaStepLogEntry tStepLog;
 
+    Svcs->verbose(RS_Stream->CP_Stream, DPTraceVerbose, "RDMADestroyReader.\n");
     if (RS_Stream->PreloadStep > -1)
     {
         Svcs->verbose(RS_Stream->CP_Stream, DPSummaryVerbose,
@@ -1924,14 +2389,18 @@ static void RdmaDestroyReader(CP_Services Svcs, DP_RS_Stream RS_Stream_v)
         fini_fabric(RS_Stream->Fabric, Svcs, RS_Stream->CP_Stream);
     }
 
+    Svcs->verbose(RS_Stream->CP_Stream, DPTraceVerbose, "Working through Step Log\n");
     while (StepLog)
     {
+        Svcs->verbose(RS_Stream->CP_Stream, DPTraceVerbose, "Destroy Step \n");
         RdmaDestroyRankReqLog(RS_Stream, StepLog->RankLog);
         tStepLog = StepLog;
         StepLog = StepLog->Next;
         free(tStepLog);
     }
 
+    Svcs->verbose(RS_Stream->CP_Stream, DPTraceVerbose,
+                  "Done with Destroy Step in RDMA destroy reader\n");
     free(RS_Stream->WriterContactInfo);
     free(RS_Stream->WriterAddr);
     free(RS_Stream->WriterRoll);
@@ -2035,7 +2504,7 @@ static void RdmaDestroyWriter(CP_Services Svcs, DP_WS_Stream WS_Stream_v)
     }
     pthread_mutex_unlock(&ts_mutex);
 
-    Svcs->verbose(WS_Stream->CP_Stream, DPTraceVerbose, "Tearing down RDMA state on writer.\n");
+    Svcs->verbose(WS_Stream->CP_Stream, DPTraceDupVerbose, "Tearing down RDMA state on writer.\n");
     if (WS_Stream->Fabric)
     {
         fini_fabric(WS_Stream->Fabric, Svcs, WS_Stream->CP_Stream);
@@ -2090,7 +2559,7 @@ static int RdmaGetPriority(CP_Services Svcs, void *CP_Stream, struct _SstParams 
     hints->caps =
         FI_MSG | FI_SEND | FI_RECV | FI_REMOTE_READ | FI_REMOTE_WRITE | FI_RMA | FI_READ | FI_WRITE;
     hints->mode =
-        FI_CONTEXT | FI_LOCAL_MR | FI_CONTEXT2 | FI_MSG_PREFIX | FI_ASYNC_IOV | FI_RX_CQ_DATA;
+        FI_CONTEXT | ADIOS_FI_LOCAL_MR | FI_CONTEXT2 | FI_MSG_PREFIX | FI_ASYNC_IOV | FI_RX_CQ_DATA;
     hints->ep_attr->type = FI_EP_RDM;
 
     char const *vni_env_str = getenv("SLINGSHOT_VNIS");
@@ -2099,7 +2568,7 @@ static int RdmaGetPriority(CP_Services Svcs, void *CP_Stream, struct _SstParams 
     if (vni_env_str)
     {
         // try fishing for the CXI provider
-        Svcs->verbose(CP_Stream, DPSummaryVerbose,
+        Svcs->verbose(CP_Stream, DPTraceDupVerbose,
                       "RDMA Dataplane trying to check for an available CXI "
                       "provider since environment variable SLINGSHOT_VNIS is "
                       "defined (value: '%s').\n",
@@ -2108,23 +2577,50 @@ static int RdmaGetPriority(CP_Services Svcs, void *CP_Stream, struct _SstParams 
 
         hints->domain_attr->mr_mode = FI_MR_ENDPOINT;
         hints->domain_attr->control_progress = FI_PROGRESS_MANUAL;
-        hints->domain_attr->data_progress = FI_PROGRESS_MANUAL;
+        // data progress unspecified, both are fine
+        // hints->domain_attr->data_progress = FI_PROGRESS_MANUAL;
     }
     else
     {
-        Svcs->verbose(CP_Stream, DPSummaryVerbose,
+        /*
+         * Oct 23, 2025 - eisen@cc.gatech.edu
+         *
+         * For non-CXI providers, we are currently relying upon
+         * libfabric version 1.5 behavior, which includes using macros
+         * like FI_MR_BASIC and FI_LOCAL_MR that are deprecated in
+         * libfabric 2.x.  However, at the time of this writing, those
+         * bitpositions are still examined in some libfabric
+         * providers, so we use our own macros (without the deprecated
+         * spec) to avoid compiler warnings.  At some point when these
+         * macros are no longer used in any supported provider this
+         * can be removed and cleaned up. Of the supported providers
+         * "gni" has disappeared from libfabric 2.x.  "cxi" support is
+         * newly written and shouldn't require these macros.  "psm2"
+         * still references those bit positions, but those machines
+         * may be disappearing.
+         */
+        Svcs->verbose(CP_Stream, DPTraceDupVerbose,
                       "RDMA Dataplane trying to check for an available non-CXI "
                       "provider since environment variable SLINGSHOT_VNIS is "
                       "not defined.\n");
 
         fi_version = FI_VERSION(1, 5);
 
-        hints->domain_attr->mr_mode = FI_MR_BASIC;
+        hints->domain_attr->mr_mode = ADIOS_FI_MR_BASIC;
         hints->domain_attr->control_progress = FI_PROGRESS_AUTO;
-        hints->domain_attr->data_progress = FI_PROGRESS_AUTO;
+        // data progress unspecified, both are fine
+        // hints->domain_attr->data_progress = FI_PROGRESS_AUTO;
     }
 
     ifname = get_preferred_domain(Params);
+
+    char const *provider_name = NULL;
+    if ((provider_name = getenv("FABRIC_PROVIDER")))
+    {
+        size_t len = strlen(provider_name);
+        hints->fabric_attr->prov_name = malloc(len + 1);
+        memcpy(hints->fabric_attr->prov_name, provider_name, len + 1);
+    }
 
     forkunsafe = getenv("FI_FORK_UNSAFE");
     if (!forkunsafe)
@@ -2139,7 +2635,7 @@ static int RdmaGetPriority(CP_Services Svcs, void *CP_Stream, struct _SstParams 
 
     if (!info)
     {
-        Svcs->verbose(CP_Stream, DPTraceVerbose,
+        Svcs->verbose(CP_Stream, DPTraceDupVerbose,
                       "RDMA Dataplane could not find any viable fabrics.\n");
     }
 
@@ -2151,13 +2647,13 @@ static int RdmaGetPriority(CP_Services Svcs, void *CP_Stream, struct _SstParams 
 
         prov_name = info->fabric_attr->prov_name;
         domain_name = info->domain_attr->name;
-        Svcs->verbose(CP_Stream, DPPerStepVerbose,
+        Svcs->verbose(CP_Stream, DPTraceDupVerbose,
                       "[RdmaGetPriority] Seeing and evaluating fabric with "
                       "provider: '%s', domain: '%s'\n",
                       prov_name, domain_name);
         if (ifname && strcmp(ifname, domain_name) == 0)
         {
-            Svcs->verbose(CP_Stream, DPPerStepVerbose,
+            Svcs->verbose(CP_Stream, DPTraceDupVerbose,
                           "RDMA Dataplane found the requested "
                           "interface %s, provider type %s.\n",
                           ifname, prov_name);
@@ -2168,7 +2664,7 @@ static int RdmaGetPriority(CP_Services Svcs, void *CP_Stream, struct _SstParams 
             strstr(prov_name, "psm2") || strstr(prov_name, "cxi"))
         {
 
-            Svcs->verbose(CP_Stream, DPPerStepVerbose,
+            Svcs->verbose(CP_Stream, DPTraceDupVerbose,
                           "RDMA Dataplane sees interface %s, "
                           "provider type %s, which should work.\n",
                           domain_name, prov_name);
@@ -2179,7 +2675,7 @@ static int RdmaGetPriority(CP_Services Svcs, void *CP_Stream, struct _SstParams 
 
     if (Ret == -1)
     {
-        Svcs->verbose(CP_Stream, DPPerStepVerbose,
+        Svcs->verbose(CP_Stream, DPTraceDupVerbose,
                       "RDMA Dataplane could not find an RDMA-compatible fabric.\n");
     }
 
@@ -2188,7 +2684,7 @@ static int RdmaGetPriority(CP_Services Svcs, void *CP_Stream, struct _SstParams 
         fi_freeinfo(originfo);
     }
 
-    Svcs->verbose(CP_Stream, DPPerStepVerbose,
+    Svcs->verbose(CP_Stream, DPTraceDupVerbose,
                   "RDMA Dataplane evaluating viability, returning priority %d\n", Ret);
     return Ret;
 }
@@ -2199,7 +2695,7 @@ static int RdmaGetPriority(CP_Services Svcs, void *CP_Stream, struct _SstParams 
  */
 static void RdmaUnGetPriority(CP_Services Svcs, void *CP_Stream)
 {
-    Svcs->verbose(CP_Stream, DPPerStepVerbose, "RDMA Dataplane unloading\n");
+    Svcs->verbose(CP_Stream, DPTraceDupVerbose, "RDMA Dataplane unloading\n");
 }
 
 static void PushData(CP_Services Svcs, Rdma_WSR_Stream Stream, TimestepList Step, int BufferSlot)
@@ -2413,19 +2909,7 @@ static void PostPreload(CP_Services Svcs, Rdma_RS_Stream Stream, long Timestep)
 
     while (WRidx > 0)
     {
-        ssize_t rc = fi_cq_sread(Fabric->cq_signal, (void *)(&CQEntry), 1, NULL, -1);
-        if (rc < 1)
-        {
-            struct fi_cq_err_entry error;
-            fi_cq_readerr(Fabric->cq_signal, &error, 0);
-            Svcs->verbose(
-                Stream->CP_Stream, DPCriticalVerbose,
-                "[PostPreload] failure while waiting for completions "
-                "(%d (%s - %s)).\n",
-                rc, fi_strerror(error.err),
-                fi_cq_strerror(Fabric->cq_signal, error.err, error.err_data, NULL, error.len));
-            return;
-        }
+        cq_read(Fabric, &CQEntry, Svcs, Stream);
         CQBuffer = CQEntry.op_context;
         if (CQBuffer >= SendBuffer && CQBuffer < (SendBuffer + StepLog->WRanks))
         {
@@ -2552,19 +3036,7 @@ static void PullSelection(CP_Services Svcs, Rdma_WSR_Stream Stream)
     RankReq = Stream->PreloadReq;
     while (RankReq)
     {
-        ssize_t rc = fi_cq_sread(Fabric->cq_signal, (void *)(&CQEntry), 1, NULL, -1);
-        if (rc < 1)
-        {
-            struct fi_cq_err_entry error;
-            fi_cq_readerr(Fabric->cq_signal, &error, 0);
-            Svcs->verbose(
-                WS_Stream->CP_Stream, DPCriticalVerbose,
-                "[PullSelection] failure while waiting for completions "
-                "(%d (%s - %s)).\n",
-                rc, fi_strerror(error.err),
-                fi_cq_strerror(Fabric->cq_signal, error.err, error.err_data, NULL, error.len));
-            return;
-        }
+        cq_read(Fabric, &CQEntry, Svcs, Stream);
         CQRankReq = CQEntry.op_context;
         if (CQEntry.flags & FI_READ)
         {
@@ -2596,19 +3068,7 @@ static void CompletePush(CP_Services Svcs, Rdma_WSR_Stream Stream, TimestepList 
 
     while (Step->OutstandingWrites > 0)
     {
-        ssize_t rc = fi_cq_sread(Fabric->cq_signal, (void *)(&CQEntry), 1, NULL, -1);
-        if (rc < 1)
-        {
-            struct fi_cq_err_entry error;
-            fi_cq_readerr(Fabric->cq_signal, &error, 0);
-            Svcs->verbose(
-                WS_Stream->CP_Stream, DPCriticalVerbose,
-                "[CompletePush] failure while waiting for completions "
-                "(%d (%s - %s)).\n",
-                rc, fi_strerror(error.err),
-                fi_cq_strerror(Fabric->cq_signal, error.err, error.err_data, NULL, error.len));
-            return;
-        }
+        cq_read(Fabric, &CQEntry, Svcs, Stream);
         if (CQEntry.flags & FI_WRITE)
         {
             CQTimestep = (long)CQEntry.op_context;
@@ -2716,20 +3176,22 @@ extern NO_SANITIZE_THREAD CP_DP_Interface LoadRdmaDP()
     RdmaDPInterface.initWriter = RdmaInitWriter;
     RdmaDPInterface.initWriterPerReader = RdmaInitWriterPerReader;
     RdmaDPInterface.provideWriterDataToReader = RdmaProvideWriterDataToReader;
-    RdmaDPInterface.readRemoteMemory = RdmaReadRemoteMemory;
+    RdmaDPInterface.readRemoteMemory = (CP_DP_ReadRemoteMemoryFunc)RdmaReadRemoteMemory;
     RdmaDPInterface.waitForCompletion = RdmaWaitForCompletion;
     RdmaDPInterface.notifyConnFailure = RdmaNotifyConnFailure;
-    RdmaDPInterface.provideTimestep = RdmaProvideTimestep;
-    RdmaDPInterface.readerRegisterTimestep = RdmaReaderRegisterTimestep;
-    RdmaDPInterface.releaseTimestep = RdmaReleaseTimestep;
-    RdmaDPInterface.readerReleaseTimestep = RdmaReleaseTimestepPerReader;
-    RdmaDPInterface.WSRreadPatternLocked = RdmaReadPatternLocked;
-    RdmaDPInterface.RSreadPatternLocked = RdmaWritePatternLocked;
-    RdmaDPInterface.RSReleaseTimestep = RdmaReaderReleaseTimestep;
-    RdmaDPInterface.timestepArrived = RdmaTimestepArrived;
+    RdmaDPInterface.provideTimestep = (CP_DP_ProvideTimestepFunc)RdmaProvideTimestep;
+    RdmaDPInterface.readerRegisterTimestep =
+        (CP_DP_PerReaderTimestepRegFunc)RdmaReaderRegisterTimestep;
+    RdmaDPInterface.releaseTimestep = (CP_DP_ReleaseTimestepFunc)RdmaReleaseTimestep;
+    RdmaDPInterface.readerReleaseTimestep =
+        (CP_DP_PerReaderReleaseTimestepFunc)RdmaReleaseTimestepPerReader;
+    RdmaDPInterface.WSRreadPatternLocked = (CP_DP_WSR_ReadPatternLockedFunc)RdmaReadPatternLocked;
+    RdmaDPInterface.RSreadPatternLocked = (CP_DP_WSR_ReadPatternLockedFunc)RdmaWritePatternLocked;
+    RdmaDPInterface.RSReleaseTimestep = (CP_DP_RSReleaseTimestepFunc)RdmaReaderReleaseTimestep;
+    RdmaDPInterface.timestepArrived = (CP_DP_ReaderTimestepArrivalFunc)RdmaTimestepArrived;
     RdmaDPInterface.destroyReader = RdmaDestroyReader;
     RdmaDPInterface.destroyWriter = RdmaDestroyWriter;
-    RdmaDPInterface.destroyWriterPerReader = RdmaDestroyWriterPerReader;
+    RdmaDPInterface.destroyWriterPerReader = NULL; // unused at CP level RdmaDestroyWriterPerReader;
     RdmaDPInterface.getPriority = RdmaGetPriority;
     RdmaDPInterface.unGetPriority = RdmaUnGetPriority;
     return &RdmaDPInterface;

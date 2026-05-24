@@ -34,7 +34,7 @@ By default both backends are ``OFF`` even if CUDA or Kokkos are installed and av
 Building with CUDA enabled
 --------------------------
 
-The ADIOS2 default behavior is to turn ``OFF`` the CUDA backend. Building with the CUDA backend requires ``-DADIOS2_USE_Kokkos=ON`` and an available CUDA toolkit on the system.
+The ADIOS2 default behavior is to turn ``OFF`` the CUDA backend. Building with the CUDA backend requires ``-DADIOS2_USE_CUDA=ON`` and an available CUDA toolkit on the system.
 
 When building ADIOS2 with CUDA enabled, the user is responsible with setting the correct ``CMAKE_CUDA_ARCHITECTURES`` (e.g. for Summit the ``CMAKE_CUDA_ARCHITECTURES`` needs to be set to 70 to match the NVIDIA Volta V100).
 
@@ -111,7 +111,7 @@ ADIOS2 supports GPU buffers provided in the form of ``Kokkos::View`` directly in
    Kokkos::View<float *, Kokkos::CudaSpace> gpuSimData("data", N);
    bpWriter.Put(data, gpuSimData);
 
-If the CUDA backend is being used (and not Kokkos) to enable GPU support in ADIOS2, Kokkos applications can still directly pass ``Kokkos::View`` as long as the correct external header is included: ``#include <adios2/cxx11/KokkosView.h>``.
+If the CUDA backend is being used (and not Kokkos) to enable GPU support in ADIOS2, Kokkos applications can still directly pass ``Kokkos::View`` as long as the correct external header is included: ``#include <adios2/cxx/KokkosView.h>``.
 
 *******************
 Reading GPU buffers

@@ -2,8 +2,11 @@
  * Programmer(s): David J. Gardner @ LLNL
  * -----------------------------------------------------------------------------
  * SUNDIALS Copyright Start
- * Copyright (c) 2002-2022, Lawrence Livermore National Security
+ * Copyright (c) 2025-2026, Lawrence Livermore National Security,
+ * University of Maryland Baltimore County, and the SUNDIALS contributors.
+ * Copyright (c) 2013-2025, Lawrence Livermore National Security
  * and Southern Methodist University.
+ * Copyright (c) 2002-2013, Lawrence Livermore National Security.
  * All rights reserved.
  *
  * See the top-level LICENSE and NOTICE files for details.
@@ -25,18 +28,18 @@
 #include <vector>
 
 // SUNDIALS types
-#include <sundials/sundials_types.h>
 #include <sundials/sundials_nvector.h>
+#include <sundials/sundials_types.h>
 
 // Common utility functions
 #include <example_utilities.hpp>
 
 // Macros for problem constants
-#define ZERO    RCONST(0.0)
-#define HALF    RCONST(0.5)
-#define ONE     RCONST(1.0)
-#define TWO     RCONST(2.0)
-#define TWENTY  RCONST(20.0)
+#define ZERO   SUN_RCONST(0.0)
+#define HALF   SUN_RCONST(0.5)
+#define ONE    SUN_RCONST(1.0)
+#define TWO    SUN_RCONST(2.0)
+#define TWENTY SUN_RCONST(20.0)
 
 // -----------------------------------------------------------------------------
 // Problem options
@@ -45,12 +48,12 @@
 struct Options
 {
   // Relative and absolute tolerances
-  sunrealtype rtol = RCONST(1.0e-6);
-  sunrealtype atol = RCONST(1.0e-10);
+  sunrealtype rtol = SUN_RCONST(1.0e-6);
+  sunrealtype atol = SUN_RCONST(1.0e-10);
 
   // Output options
   sunrealtype dtout = ONE; // output interval
-  int         nout  = 10;  // number of outputs
+  int nout          = 10;  // number of outputs
 };
 
 // -----------------------------------------------------------------------------
@@ -58,28 +61,16 @@ struct Options
 // -----------------------------------------------------------------------------
 
 // Compute r(t)
-inline sunrealtype r(sunrealtype t)
-{
-  return HALF * cos(t);
-}
+inline sunrealtype r(sunrealtype t) { return HALF * cos(t); }
 
 // Compute the derivative of r(t)
-inline sunrealtype rdot(sunrealtype t)
-{
-  return -HALF * sin(t);
-}
+inline sunrealtype rdot(sunrealtype t) { return -HALF * sin(t); }
 
 // Compute s(t)
-inline sunrealtype s(sunrealtype t)
-{
-  return cos(TWENTY * t);
-}
+inline sunrealtype s(sunrealtype t) { return cos(TWENTY * t); }
 
 // Compute the derivative of s(t)
-inline sunrealtype sdot(sunrealtype t)
-{
-  return -TWENTY * sin(TWENTY * t);
-}
+inline sunrealtype sdot(sunrealtype t) { return -TWENTY * sin(TWENTY * t); }
 
 // Compute the true solution
 inline int true_sol(sunrealtype t, sunrealtype* u, sunrealtype* v)
@@ -95,7 +86,7 @@ inline int true_sol(sunrealtype t, sunrealtype* u, sunrealtype* v)
 // -----------------------------------------------------------------------------
 
 // Print command line options
-void InputHelp()
+static void InputHelp()
 {
   std::cout << std::endl;
   std::cout << "Command line options:" << std::endl;
@@ -106,7 +97,7 @@ void InputHelp()
   std::cout << "  --nout         : number of outputs\n";
 }
 
-int ReadInputs(std::vector<std::string> &args, Options &opts)
+static int ReadInputs(std::vector<std::string>& args, Options& opts)
 {
   if (find(args.begin(), args.end(), "--help") != args.end())
   {

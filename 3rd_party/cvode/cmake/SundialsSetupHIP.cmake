@@ -2,8 +2,11 @@
 # Programmer(s): Cody J. Balos @ LLNL
 # ---------------------------------------------------------------
 # SUNDIALS Copyright Start
-# Copyright (c) 2002-2022, Lawrence Livermore National Security
+# Copyright (c) 2025-2026, Lawrence Livermore National Security,
+# University of Maryland Baltimore County, and the SUNDIALS contributors.
+# Copyright (c) 2013-2025, Lawrence Livermore National Security
 # and Southern Methodist University.
+# Copyright (c) 2002-2013, Lawrence Livermore National Security.
 # All rights reserved.
 #
 # See the top-level LICENSE and NOTICE files for details.
@@ -16,25 +19,37 @@
 
 if(NOT DEFINED ROCM_PATH)
   if(NOT DEFINED ENV{ROCM_PATH})
-    set(ROCM_PATH "/opt/rocm/" CACHE PATH "Path to which ROCm has been installed")
+    set(ROCM_PATH
+        "/opt/rocm/"
+        CACHE PATH "Path to which ROCm has been installed")
   else()
-    set(ROCM_PATH "$ENV{ROCM_PATH}" CACHE PATH "Path to which ROCm has been installed")
+    set(ROCM_PATH
+        "$ENV{ROCM_PATH}"
+        CACHE PATH "Path to which ROCm has been installed")
   endif()
 endif()
 
 if(NOT DEFINED HIP_PATH)
   if(NOT DEFINED ENV{HIP_PATH})
-    set(HIP_PATH "/opt/rocm/hip" CACHE PATH "Path to which HIP has been installed")
+    set(HIP_PATH
+        "/opt/rocm/hip"
+        CACHE PATH "Path to which HIP has been installed")
   else()
-    set(HIP_PATH "$ENV{HIP_PATH}" CACHE PATH "Path to which HIP has been installed")
+    set(HIP_PATH
+        "$ENV{HIP_PATH}"
+        CACHE PATH "Path to which HIP has been installed")
   endif()
 endif()
 
 if(NOT DEFINED HIP_PLATFORM)
   if(NOT DEFINED ENV{HIP_PLATFORM})
-    set(HIP_PLATFORM "hcc" CACHE STRING "HIP platform (hcc, nvcc)")
+    set(HIP_PLATFORM
+        "amd"
+        CACHE STRING "HIP platform (amd, nvidia)")
   else()
-    set(HIP_PLATFORM "$ENV{HIP_PLATFORM}" CACHE STRING "HIP platform (hcc, nvcc)")
+    set(HIP_PLATFORM
+        "$ENV{HIP_PLATFORM}"
+        CACHE STRING "HIP platform (amd, nvidia)")
   endif()
 endif()
 
@@ -46,7 +61,8 @@ set(CMAKE_PREFIX_PATH "${ROCM_PATH};${HIP_PATH}")
 find_package(HIP REQUIRED)
 
 if("${HIP_COMPILER}" STREQUAL "hcc")
-  print_error("Deprecated HCC compiler is not supported" "Please update ROCm")
+  message(FATAL_ERROR "Deprecated HCC compiler is not supported"
+                      "Please update ROCm")
 endif()
 
 message(STATUS "HIP version:      ${HIP_VERSION}")

@@ -12,7 +12,11 @@
 #ifndef ADIOS2_HELPER_ADIOSNETWORK_H_
 #define ADIOS2_HELPER_ADIOSNETWORK_H_
 
+#include "adios2/common/ADIOSConfig.h"
+
 /// \cond EXCLUDE_FROM_DOXYGEN
+#include <cstdint>
+#include <memory>
 #include <string>
 #include <vector>
 /// \endcond
@@ -59,6 +63,47 @@ void HandshakeReader(Comm const &comm, size_t &appID, std::vector<std::string> &
 
 #endif // ADIOS2_HAVE_DATAMAN || ADIOS2_HAVE_TABLE
 #endif // _WIN32
+
+struct NetworkSocketData;
+
+class NetworkSocket
+{
+public:
+    NetworkSocket();
+    ~NetworkSocket();
+
+    bool valid() const;
+
+    void Connect(const std::string &hostname, uint16_t port, std::string protocol = "tcp");
+    void RequestResponse(const std::string &request, char *response, size_t maxResponseSize);
+    void Close();
+    int GetSocket();
+
+private:
+    NetworkSocketData *m_Data;
+};
+
+#ifdef ADIOS2_HAVE_OPENSSL
+struct SSLData;
+
+class SSLSocket
+{
+public:
+    SSLSocket();
+    ~SSLSocket();
+
+    bool valid() const;
+
+    void Connect(const std::string &hostname, uint16_t port, std::string protocol = "tcp");
+    int Write(const char *buffer, int size);
+    int Read(char *buffer, int size);
+    void Close();
+    int GetSocket();
+
+private:
+    SSLData *m_Data;
+};
+#endif // ADIOS2_HAVE_OPENSSL
 
 } // end namespace helper
 } // end namespace adios2

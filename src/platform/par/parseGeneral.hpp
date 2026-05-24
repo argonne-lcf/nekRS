@@ -239,6 +239,11 @@ void parseGeneralSection(const int rank, setupAide &options, inipp::Ini *ini)
     }
   }
 
+  std::string checkpointDirectory;
+  if (ini->extract("general", "checkpointdirectory", checkpointDirectory)) {
+    options.setArgs("CHECKPOINT DIRECTORY", checkpointDirectory);
+  }
+
   int checkpointPrecision = 0;
   if (ini->extract("general", "checkpointprecision", checkpointPrecision)) {
     if (checkpointPrecision == 64) {
@@ -273,6 +278,11 @@ void parseGeneralSection(const int rank, setupAide &options, inipp::Ini *ini)
       error << "could not parse general::checkpointControl = " << writeControl;
       append_error(error.str());
     }
+  } else {
+    options.setArgs("CHECKPOINT CONTROL", "STEPS");
+    if (options.getArgs("NUMBER TIMESTEPS").empty()) {
+      options.setArgs("CHECKPOINT CONTROL", "SIMULATIONTIME");
+    } 
   }
 
   bool dealiasing = true;
@@ -289,11 +299,12 @@ void parseGeneralSection(const int rank, setupAide &options, inipp::Ini *ini)
   if (!dealiasing) {
     cubN = 0;
   }
-  ini->extract("general", "cubaturepolynomialorder", cubN);
-  options.setArgs("CUBATURE POLYNOMIAL DEGREE", std::to_string(cubN));
+  if (!ini->extract("general", "overintegrationpolynomialorder", cubN)) {
+    ini->extract("general", "cubaturepolynomialorder", cubN);
+  };
+  options.setArgs("OVERINTEGRATION POLYNOMIAL DEGREE ", std::to_string(cubN));
 
   {
     parseRegularization(rank, options, ini, "general");
   }
 }
-

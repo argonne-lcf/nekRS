@@ -35,9 +35,8 @@ class BP5Deserializer : virtual public BP5Base
 {
 
 public:
-    BP5Deserializer(bool WriterIsRowMajor, bool ReaderIsRowMajor, bool RandomAccessMode = false);
-    BP5Deserializer(bool WriterIsRowMajor, bool ReaderIsRowMajor, bool RandomAccessMode,
-                    bool FlattenSteps);
+    BP5Deserializer(bool WriterIsRowMajor, bool ReaderIsRowMajor, bool RandomAccessMode = false,
+                    bool FlattenSteps = false);
 
     ~BP5Deserializer();
 
@@ -59,12 +58,19 @@ public:
     void InstallAttributeData(void *AttributeBlock, size_t BlockLen, size_t Step = SIZE_MAX);
     void InstallAttributesV1(FFSTypeHandle FFSformat, void *BaseData, size_t Step);
     void InstallAttributesV2(FFSTypeHandle FFSformat, void *BaseData, size_t Step);
+    FFSTypeHandle BufferMetaMetaPrep(void *MetadataBlock);
+    void *MetadataBufferPrep(void *MetadataBlock, const size_t BlockLen, const size_t WriterRank,
+                             FFSTypeHandle FFSformat) const;
+    void InstallMetadataBuffer(void *MetadataBuffer, size_t WriterRank, size_t Step,
+                               FFSTypeHandle FFSFormat);
 
     void SetupForStep(size_t Step, size_t WriterCount);
     // return from QueueGet is true if a sync is needed to fill the data
-    bool QueueGet(core::VariableBase &variable, void *DestData);
+    bool QueueGet(core::VariableBase &variable, void *DestData, bool dataIsRemote = false);
     bool QueueGetSingle(core::VariableBase &variable, void *DestData, size_t AbsStep,
                         size_t RelStep);
+    bool QueueGetSingleRemote(core::VariableBase &variable, void *DestData, size_t RelStep,
+                              size_t StepCount);
 
     /* generate read requests. return vector of requests AND the size of
      * the largest allocation block necessary for reading.
@@ -78,12 +84,17 @@ public:
                                                   size_t *maxReadSize);
     void FinalizeGet(const ReadRequest &, const bool freeAddr);
     void FinalizeGets(std::vector<ReadRequest> &);
+    void FinalizeDerivedGets(std::vector<ReadRequest> &);
+    void ClearGetState();
 
     MinVarInfo *AllRelativeStepsMinBlocksInfo(const VariableBase &var);
     MinVarInfo *AllStepsMinBlocksInfo(const VariableBase &var);
     MinVarInfo *MinBlocksInfo(const VariableBase &Var, const size_t Step);
+    MinVarInfo *MinBlocksInfo(const VariableBase &Var, const size_t Step, const size_t WriterID,
+                              const size_t BlockID);
     bool VarShape(const VariableBase &, const size_t Step, Dims &Shape) const;
     bool VariableMinMax(const VariableBase &var, const size_t Step, MinMaxStruct &MinMax);
+    char *VariableExprStr(const VariableBase &var);
     void GetAbsoluteSteps(const VariableBase &variable, std::vector<size_t> &keys) const;
 
     const bool m_WriterIsRowMajor;
@@ -101,12 +112,14 @@ public:
         void *VarRec = NULL;
         char *VarName;
         enum RequestTypeEnum RequestType;
-        size_t Step;    // local operations use absolute steps
-        size_t RelStep; // preserve Relative Step for remote
+        size_t Step;      // local operations use absolute steps
+        size_t RelStep;   // preserve Relative Step for remote
+        size_t StepCount; // =1 for local, can be >1 for remote
         size_t BlockID;
         Dims Start;
         Dims Count;
         MemorySpace MemSpace;
+        std::map<std::string, std::unique_ptr<MinVarInfo>> *DerivedInputMap;
         void *Data;
     };
     std::vector<BP5ArrayRequest> PendingGetRequests;
@@ -117,6 +130,7 @@ private:
     {
         size_t VarNum;
         void *Variable = NULL;
+        void *DerivedVariable = NULL;
         char *VarName = NULL;
         size_t DimCount = 0;
         size_t JoinedDimen = SIZE_MAX;
@@ -137,7 +151,6 @@ private:
         size_t LastStepAdded = SIZE_MAX;
         std::vector<size_t> AbsStepFromRel; // per relative step vector
         std::vector<size_t> PerWriterMetaFieldOffset;
-        std::vector<size_t> PerWriterBlockStart;
     };
 
     struct ControlStruct
@@ -234,12 +247,19 @@ private:
 
     void *GetMetadataBase(BP5VarRec *VarRec, size_t Step, size_t WriterRank) const;
     bool IsContiguousTransfer(BP5ArrayRequest *Req, size_t *offsets, size_t *count);
+    char *FillBlock(std::map<BP5VarRec *, MinVarInfo *> &map);
 
     size_t CurTimestep = 0;
 
     /* We assume operators are not thread-safe, call Decompress() one at a time
      */
     std::mutex mutexDecompress;
+
+public:
+    VariableBase *GetVariableBaseFromBP5VarRec(void *VarRec)
+    {
+        return static_cast<VariableBase *>(static_cast<BP5VarRec *>(VarRec)->Variable);
+    };
 };
 
 } // end namespace format

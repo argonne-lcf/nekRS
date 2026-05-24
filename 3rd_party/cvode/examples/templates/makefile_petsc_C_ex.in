@@ -1,11 +1,14 @@
 # -*- mode: makefile -*-
 # -----------------------------------------------------------------
 # Programmer(s): Radu Serban, Cody Balos @ LLNL
-#                Daniel R. Reynolds @ SMU
+#                Daniel R. Reynolds @ UMBC
 # -----------------------------------------------------------------
 # SUNDIALS Copyright Start
-# Copyright (c) 2002-2022, Lawrence Livermore National Security
+# Copyright (c) 2025-2026, Lawrence Livermore National Security,
+# University of Maryland Baltimore County, and the SUNDIALS contributors.
+# Copyright (c) 2013-2025, Lawrence Livermore National Security
 # and Southern Methodist University.
+# Copyright (c) 2002-2013, Lawrence Livermore National Security.
 # All rights reserved.
 #
 # See the top-level LICENSE and NOTICE files for details.
@@ -51,7 +54,7 @@ LINKFLAGS_PETSC = ${LINKFLAGS}
 
 TMP_INCS = ${includedir} ${MPI_INC_DIR} ${INCLUDES_PETSC}
 INCLUDES = $(addprefix -I, ${TMP_INCS})
-LIBRARIES = -l@SOLVER_LIB@ -lsundials_nvecpetsc -lsundials_sunnonlinsolpetscsnes ${LIBS} ${LIBRARIES_PETSC}
+LIBRARIES = -l@SOLVER_LIB@ -lsundials_nvecpetsc -lsundials_sunnonlinsolpetscsnes -lsundials_core ${LIBS} ${LIBRARIES_PETSC}
 
 # -----------------------------------------------------------------------------------------
 

@@ -37,6 +37,9 @@
 #ifndef _WIN32
 #include "adios2/toolkit/transport/file/FileHTTP.h"
 #endif
+#ifdef ADIOS2_HAVE_OPENSSL
+#include "adios2/toolkit/transport/file/FileHTTPS.h"
+#endif
 #include "adios2/toolkit/transport/file/FileStdio.h"
 #include "adios2/toolkit/transport/null/NullTransport.h"
 
@@ -82,6 +85,9 @@ void TransportMan::MkDirsBarrier(const std::vector<std::string> &fileNames,
                 }
                 else
                 {
+#ifdef CreateDirectory
+#undef CreateDirectory
+#endif
                     helper::CreateDirectory(path);
                 }
             }
@@ -149,7 +155,7 @@ void TransportMan::OpenFileID(const std::string &name, const size_t id, const Mo
 
 std::vector<std::string>
 TransportMan::GetFilesBaseNames(const std::string &baseName,
-                                const std::vector<Params> &parametersVector) const
+                                const std::vector<Params> &parametersVector)
 {
     if (parametersVector.size() <= 1)
     {
@@ -367,6 +373,13 @@ void TransportMan::SeekTo(const size_t start, const int transportIndex)
         CheckFile(itTransport, ", in call to SeekTo with index " + std::to_string(transportIndex));
         itTransport->second->Seek(start);
     }
+}
+
+size_t TransportMan::CurrentPos(const int transportIndex)
+{
+    auto itTransport = m_Transports.find(transportIndex);
+    CheckFile(itTransport, ", in call to CurrentPos with index " + std::to_string(transportIndex));
+    return itTransport->second->CurrentPos();
 }
 
 void TransportMan::Truncate(const size_t length, const int transportIndex)
@@ -622,6 +635,18 @@ std::shared_ptr<Transport> TransportMan::OpenFileTransport(const std::string &fi
         else if (library == "http")
         {
             transport = std::make_shared<transport::FileHTTP>(m_Comm);
+            if (lf_GetBuffered("false"))
+            {
+                helper::Throw<std::invalid_argument>(
+                    "Toolkit", "TransportMan", "OpenFileTransport",
+                    library + " transport does not support buffered I/O.");
+            }
+        }
+#endif
+#ifdef ADIOS2_HAVE_OPENSSL
+        else if (library == "https")
+        {
+            transport = std::make_shared<transport::FileHTTPS>(m_Comm);
             if (lf_GetBuffered("false"))
             {
                 helper::Throw<std::invalid_argument>(

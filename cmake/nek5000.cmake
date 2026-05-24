@@ -1,4 +1,4 @@
-set(NEK5000_PPLIST "PARRSB DPROCMAP" CACHE STRING "Preprocessor macros for Nek5000")
+set(NEK5000_PPLIST "PARRSB" CACHE STRING "Preprocessor macros for Nek5000")
 
 function(add_nek5000)
 

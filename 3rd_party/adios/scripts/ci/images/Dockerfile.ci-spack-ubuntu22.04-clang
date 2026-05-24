@@ -1,0 +1,8 @@
+ARG BASE_IMAGE=ghcr.io/ornladios/adios2:ci-spack-ubuntu22.04-base
+FROM $BASE_IMAGE
+ARG CLANG_VERSION=11
+
+RUN apt-get update && apt-get install -y \
+    clang-${CLANG_VERSION} \
+    libomp-dev && \
+    rm -rf /var/lib/apt/lists/*

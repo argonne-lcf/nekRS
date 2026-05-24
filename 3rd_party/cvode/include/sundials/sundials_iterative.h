@@ -3,8 +3,11 @@
  *                Shelby Lockhart @ LLNL
  * -----------------------------------------------------------------
  * SUNDIALS Copyright Start
- * Copyright (c) 2002-2022, Lawrence Livermore National Security
+ * Copyright (c) 2025-2026, Lawrence Livermore National Security,
+ * University of Maryland Baltimore County, and the SUNDIALS contributors.
+ * Copyright (c) 2013-2025, Lawrence Livermore National Security
  * and Southern Methodist University.
+ * Copyright (c) 2002-2013, Lawrence Livermore National Security.
  * All rights reserved.
  *
  * See the top-level LICENSE and NOTICE files for details.
@@ -26,12 +29,14 @@
 #ifndef _SUNDIALS_ITERATIVE_H
 #define _SUNDIALS_ITERATIVE_H
 
+#include <sundials/sundials_config.h>
+#include <sundials/sundials_errors.h>
 #include <sundials/sundials_nvector.h>
+#include <sundials/sundials_types.h>
 
-#ifdef __cplusplus  /* wrapper to enable C++ usage */
+#ifdef __cplusplus /* wrapper to enable C++ usage */
 extern "C" {
 #endif
-
 
 /*
  * -----------------------------------------------------------------
@@ -51,12 +56,17 @@ extern "C" {
  * -----------------------------------------------------------------
  */
 
-/* DEPRECATED PREC_NONE: use SUN_PREC_NONE */
-/* DEPRECATED PREC_LEFT: use SUN_PREC_LEFT */
-/* DEPRECATED PREC_RIGHT: use SUN_PREC_RIGHT */
-/* DEPRECATED PREC_BOTH: use SUN_PREC_BOTH */
-enum { PREC_NONE, PREC_LEFT, PREC_RIGHT, PREC_BOTH };
-enum { SUN_PREC_NONE, SUN_PREC_LEFT, SUN_PREC_RIGHT, SUN_PREC_BOTH };
+enum SUNPrecType
+{
+  SUN_PREC_NONE,
+  SUN_PREC_LEFT,
+  SUN_PREC_RIGHT,
+  SUN_PREC_BOTH
+};
+
+#ifndef SWIG
+typedef enum SUNPrecType SUNPrecType;
+#endif
 
 /*
  * -----------------------------------------------------------------
@@ -72,10 +82,15 @@ enum { SUN_PREC_NONE, SUN_PREC_LEFT, SUN_PREC_RIGHT, SUN_PREC_BOTH };
  * -----------------------------------------------------------------
  */
 
-/* DEPRECATED MODIFIED_GS: use SUN_MODIFIED_GS */
-/* DEPRECATED CLASSICAL_GS: use SUN_CLASSICAL_GS */
-enum { MODIFIED_GS = 1, CLASSICAL_GS = 2 };
-enum { SUN_MODIFIED_GS = 1, SUN_CLASSICAL_GS = 2 };
+enum SUNGramSchmidtType
+{
+  SUN_MODIFIED_GS  = 1,
+  SUN_CLASSICAL_GS = 2
+};
+
+#ifndef SWIG
+typedef enum SUNGramSchmidtType SUNGramSchmidtType;
+#endif
 
 /*
  * -----------------------------------------------------------------
@@ -90,9 +105,7 @@ enum { SUN_MODIFIED_GS = 1, SUN_CLASSICAL_GS = 2 };
  * -----------------------------------------------------------------
  */
 
-/* DEPRECATED ATimesFn: use SUNATimesFn */
-typedef int (*ATimesFn)(void *A_data, N_Vector v, N_Vector z);
-typedef int (*SUNATimesFn)(void *A_data, N_Vector v, N_Vector z);
+typedef int (*SUNATimesFn)(void* A_data, N_Vector v, N_Vector z);
 
 /*
  * -----------------------------------------------------------------
@@ -104,9 +117,7 @@ typedef int (*SUNATimesFn)(void *A_data, N_Vector v, N_Vector z);
  * -----------------------------------------------------------------
  */
 
-/* DEPRECATED PSetupFn: use SUNPSetupFn */
-typedef int (*PSetupFn)(void *P_data);
-typedef int (*SUNPSetupFn)(void *P_data);
+typedef int (*SUNPSetupFn)(void* P_data);
 
 /*
  * -----------------------------------------------------------------
@@ -134,11 +145,8 @@ typedef int (*SUNPSetupFn)(void *P_data);
  * -----------------------------------------------------------------
  */
 
-/* DEPRECATED PSolveFn: use SUNPSolveFn */
-typedef int (*PSolveFn)(void *P_data, N_Vector r, N_Vector z,
-                        realtype tol, int lr);
-typedef int (*SUNPSolveFn)(void *P_data, N_Vector r, N_Vector z,
-                           realtype tol, int lr);
+typedef int (*SUNPSolveFn)(void* P_data, N_Vector r, N_Vector z,
+                           sunrealtype tol, int lr);
 
 /*
  * -----------------------------------------------------------------
@@ -147,7 +155,7 @@ typedef int (*SUNPSolveFn)(void *P_data, N_Vector r, N_Vector z,
  * A QRAddFn updates a given QR factorization defined by the input
  * parameters:
  *   Q : N_Vector *
- *   R : realtype *
+ *   R : sunrealtype *
  * with the input vector
  *   f : N_Vector
  *
@@ -162,10 +170,10 @@ typedef int (*SUNPSolveFn)(void *P_data, N_Vector r, N_Vector z,
  *              required for the execution of QRAddFn
  *
  * -----------------------------------------------------------------
-*/
+ */
 
-typedef int (*SUNQRAddFn)(N_Vector *Q, realtype *R, N_Vector f,
-                          int m, int mMax, void *QR_data);
+typedef int (*SUNQRAddFn)(N_Vector* Q_1d, sunrealtype* R_1d, N_Vector f, int m,
+                          int mMax, void* QR_data);
 
 /*
  * -----------------------------------------------------------------
@@ -204,12 +212,8 @@ typedef int (*SUNQRAddFn)(N_Vector *Q, realtype *R, N_Vector f,
  */
 
 SUNDIALS_EXPORT
-int SUNModifiedGS(N_Vector* v, realtype **h, int k, int p,
-                  realtype *new_vk_norm);
-
-SUNDIALS_DEPRECATED_EXPORT_MSG("use SUNModifiedGS instead")
-int ModifiedGS(N_Vector* v, realtype **h, int k, int p,
-               realtype *new_vk_norm);
+SUNErrCode SUNModifiedGS(N_Vector* v_1d, sunrealtype** h_2d, int k, int p,
+                         sunrealtype* new_vk_norm);
 
 /*
  * -----------------------------------------------------------------
@@ -221,7 +225,7 @@ int ModifiedGS(N_Vector* v, realtype **h, int k, int p,
  * k, p, and new_vk_norm are as described in the documentation
  * for SUNModifiedGS.
  *
- * stemp is a length k+1 array of realtype which can be used as
+ * stemp is a length k+1 array of sunrealtype which can be used as
  * workspace by the SUNClassicalGS routine.
  *
  * vtemp is an N_Vector array of k+1 vectors which can be used as
@@ -232,14 +236,9 @@ int ModifiedGS(N_Vector* v, realtype **h, int k, int p,
  */
 
 SUNDIALS_EXPORT
-int SUNClassicalGS(N_Vector* v, realtype **h, int k, int p,
-                   realtype *new_vk_norm, realtype *stemp,
-                   N_Vector* vtemp);
-
-SUNDIALS_DEPRECATED_EXPORT_MSG("use SUNClassicalGS instead")
-int ClassicalGS(N_Vector* v, realtype **h, int k, int p,
-                realtype *new_vk_norm, realtype *stemp,
-                N_Vector* vtemp);
+SUNErrCode SUNClassicalGS(N_Vector* v_1d, sunrealtype** h_2d, int k, int p,
+                          sunrealtype* new_vk_norm, sunrealtype* stemp_1d,
+                          N_Vector* vtemp_1d);
 
 /*
  * -----------------------------------------------------------------
@@ -274,10 +273,7 @@ int ClassicalGS(N_Vector* v, realtype **h, int k, int p,
  */
 
 SUNDIALS_EXPORT
-int SUNQRfact(int n, realtype **h, realtype *q, int job);
-
-SUNDIALS_DEPRECATED_EXPORT_MSG("use SUNQRFact instead")
-int QRfact(int n, realtype **h, realtype *q, int job);
+int SUNQRfact(int n, sunrealtype** h_2d, sunrealtype* q_1d, int job);
 
 /*
  * -----------------------------------------------------------------
@@ -312,10 +308,7 @@ int QRfact(int n, realtype **h, realtype *q, int job);
  */
 
 SUNDIALS_EXPORT
-int SUNQRsol(int n, realtype **h, realtype *q, realtype *b);
-
-SUNDIALS_DEPRECATED_EXPORT_MSG("use SUNQRsol instead")
-int QRsol(int n, realtype **h, realtype *q, realtype *b);
+int SUNQRsol(int n, sunrealtype** h_2d, sunrealtype* q_1d, sunrealtype* b_1d);
 
 /*
  * -----------------------------------------------------------------
@@ -324,7 +317,7 @@ int QRsol(int n, realtype **h, realtype *q, realtype *b);
  * SUNQRAdd_MGS uses Modified Gram Schmidt to update the QR factorization
  * stored in user inputs
  *   - N_Vector *Q
- *   - realtype *R
+ *   - sunrealtype *R
  * to include the orthonormalized vector input by
  *   - N_Vector df.
  *
@@ -346,8 +339,8 @@ int QRsol(int n, realtype **h, realtype *q, realtype *b);
  */
 
 SUNDIALS_EXPORT
-int SUNQRAdd_MGS(N_Vector *Q, realtype *R, N_Vector df,
-                 int m, int mMax, void *QRdata);
+SUNErrCode SUNQRAdd_MGS(N_Vector* Q_1d, sunrealtype* R_1d, N_Vector df, int m,
+                        int mMax, void* QRdata);
 
 /*
  * -----------------------------------------------------------------
@@ -356,8 +349,8 @@ int SUNQRAdd_MGS(N_Vector *Q, realtype *R, N_Vector df,
  * SUNQRAdd_ICWY uses the Inverse Compact WY Modified Gram Schmidt
  * method to update the QR factorization stored in user inputs
  *   - N_Vector *Q
- *   - realtype *R
- *   - realtype *T (held within (void *) QRdata)
+ *   - sunrealtype *R
+ *   - sunrealtype *T (held within (void *) QRdata)
  * to include the orthonormalized vector input by
  *   - N_Vector df.
  * where the factorization to be updated is of the form
@@ -374,7 +367,7 @@ int SUNQRAdd_MGS(N_Vector *Q, realtype *R, N_Vector df,
  *          vectors or arrays required for the QRAdd routine
  *
  * QRdata should contain :
- *        N_Vector vtemp, realtype *temp_array (this will be used for T)
+ *        N_Vector vtemp, sunrealtype *temp_array (this will be used for T)
  *
  * On return, Q, R, and T contain the updated Q T R factors, if
  * SUNQRAdd_ICWY was successful.
@@ -384,8 +377,8 @@ int SUNQRAdd_MGS(N_Vector *Q, realtype *R, N_Vector df,
  */
 
 SUNDIALS_EXPORT
-int SUNQRAdd_ICWY(N_Vector *Q, realtype *R, N_Vector df,
-                  int m, int mMax, void *QRdata);
+SUNErrCode SUNQRAdd_ICWY(N_Vector* Q_1d, sunrealtype* R_1d, N_Vector df, int m,
+                         int mMax, void* QRdata);
 
 /*
  * -----------------------------------------------------------------
@@ -397,8 +390,8 @@ int SUNQRAdd_ICWY(N_Vector *Q, realtype *R, N_Vector df,
  */
 
 SUNDIALS_EXPORT
-int SUNQRAdd_ICWY_SB(N_Vector *Q, realtype *R, N_Vector df,
-                     int m, int mMax, void *QRdata);
+SUNErrCode SUNQRAdd_ICWY_SB(N_Vector* Q_1d, sunrealtype* R_1d, N_Vector df,
+                            int m, int mMax, void* QRdata);
 
 /*
  * -----------------------------------------------------------------
@@ -407,7 +400,7 @@ int SUNQRAdd_ICWY_SB(N_Vector *Q, realtype *R, N_Vector df,
  * SUNQRAdd_CGS2 uses a Classical Gram Schmidt with Reorthogonalization
  * formulation to update the QR factorization stored in user inputs
  *   - N_Vector *Q
- *   - realtype *R
+ *   - sunrealtype *R
  * to include the orthonormalized vector input by
  *   - N_Vector df.
  *
@@ -422,7 +415,7 @@ int SUNQRAdd_ICWY_SB(N_Vector *Q, realtype *R, N_Vector df,
  *          vectors or arrays required for the QRAdd routine
  *
  * QRdata should contain :
- *        N_Vector vtemp, N_Vector vtemp2, realtype *temp_array
+ *        N_Vector vtemp, N_Vector vtemp2, sunrealtype *temp_array
  *
  * On return, Q and R contain the updated Q R factors, if
  * SUNQRAdd_CGS2 was successful.
@@ -432,8 +425,8 @@ int SUNQRAdd_ICWY_SB(N_Vector *Q, realtype *R, N_Vector df,
  */
 
 SUNDIALS_EXPORT
-int SUNQRAdd_CGS2(N_Vector *Q, realtype *R, N_Vector df,
-                  int m, int mMax, void *QRdata);
+SUNErrCode SUNQRAdd_CGS2(N_Vector* Q_1d, sunrealtype* R_1d, N_Vector df, int m,
+                         int mMax, void* QRdata);
 
 /*
  * -----------------------------------------------------------------
@@ -444,7 +437,7 @@ int SUNQRAdd_CGS2(N_Vector *Q, realtype *R, N_Vector df,
  * reducing number of inner products) to update the QR factorization
  * stored in user inputs
  *   - N_Vector *Q
- *   - realtype *R
+ *   - sunrealtype *R
  * to include the orthonormalized vector input by
  *   - N_Vector df.
  *
@@ -459,7 +452,7 @@ int SUNQRAdd_CGS2(N_Vector *Q, realtype *R, N_Vector df,
  *          vectors or arrays required for the QRAdd routine
  *
  * QRdata should contain :
- *        N_Vector vtemp, N_Vector vtemp2, realtype *temp_array
+ *        N_Vector vtemp, N_Vector vtemp2, sunrealtype *temp_array
  *
  * On return, Q and R contain the updated Q R factors, if
  * SUNQRAdd_DCGS2 was successful.
@@ -469,8 +462,8 @@ int SUNQRAdd_CGS2(N_Vector *Q, realtype *R, N_Vector df,
  */
 
 SUNDIALS_EXPORT
-int SUNQRAdd_DCGS2(N_Vector *Q, realtype *R, N_Vector df,
-                   int m, int mMax, void *QRdata);
+SUNErrCode SUNQRAdd_DCGS2(N_Vector* Q_1d, sunrealtype* R_1d, N_Vector df, int m,
+                          int mMax, void* QRdata);
 
 /*
  * -----------------------------------------------------------------
@@ -482,8 +475,8 @@ int SUNQRAdd_DCGS2(N_Vector *Q, realtype *R, N_Vector df,
  */
 
 SUNDIALS_EXPORT
-int SUNQRAdd_DCGS2_SB(N_Vector *Q, realtype *R, N_Vector df,
-                      int m, int mMax, void *QRdata);
+SUNErrCode SUNQRAdd_DCGS2_SB(N_Vector* Q_1d, sunrealtype* R_1d, N_Vector df,
+                             int m, int mMax, void* QRdata);
 
 #ifdef __cplusplus
 }

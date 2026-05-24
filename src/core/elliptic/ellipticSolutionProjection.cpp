@@ -46,33 +46,33 @@ void SolutionProjection::updateProjectionSpace()
 
   double flopCount = 0.0;
 
-#if USE_WEIGHTED_INNER_PROD_MULTI_DEVICE
-  platform->linAlg->weightedInnerProdMulti(
-      Nlocal,
-      numVecsProjection,
-      Nfields,
-      fieldOffset,
-      o_invDegree,
-      o_xx,
-      o_bb,
-      platform->comm.mpiComm(),
-      o_alpha,
-      (type == ProjectionType::CLASSIC) ? Nfields * (numVecsProjection - 1) * fieldOffset : 0);
-  o_alpha.copyTo(alpha, numVecsProjection);
-#else
-  platform->linAlg->weightedInnerProdMulti(
-      Nlocal,
-      numVecsProjection,
-      Nfields,
-      fieldOffset,
-      o_invDegree,
-      o_xx,
-      o_bb,
-      platform->comm.mpiComm(),
-      alpha,
-      (type == ProjectionType::CLASSIC) ? Nfields * (numVecsProjection - 1) * fieldOffset : 0);
-  o_alpha.copyFrom(alpha, numVecsProjection);
-#endif
+  if (platform->device.deviceAtomic) {
+    platform->linAlg->weightedInnerProdMulti(
+        Nlocal,
+        numVecsProjection,
+        Nfields,
+        fieldOffset,
+        o_invDegree,
+        o_xx,
+        o_bb,
+        platform->comm.mpiComm(),
+        o_alpha,
+        (type == ProjectionType::CLASSIC) ? Nfields * (numVecsProjection - 1) * fieldOffset : 0);
+    o_alpha.copyTo(alpha, numVecsProjection);
+  } else {
+    platform->linAlg->weightedInnerProdMulti(
+        Nlocal,
+        numVecsProjection,
+        Nfields,
+        fieldOffset,
+        o_invDegree,
+        o_xx,
+        o_bb,
+        platform->comm.mpiComm(),
+        alpha,
+        (type == ProjectionType::CLASSIC) ? Nfields * (numVecsProjection - 1) * fieldOffset : 0);
+    o_alpha.copyFrom(alpha, numVecsProjection);
+  }
 
   const dfloat norm_orig = alpha[numVecsProjection - 1];
   const dfloat one = 1.0;
@@ -147,30 +147,32 @@ void SolutionProjection::computePreProjection(occa::memory &o_r)
     return;
   }
 
-#if USE_WEIGHTED_INNER_PROD_MULTI_DEVICE
-  platform->linAlg->weightedInnerProdMulti(Nlocal,
-                                           numVecsProjection,
-                                           Nfields,
-                                           fieldOffset,
-                                           o_invDegree,
-                                           o_xx,
-                                           o_r,
-                                           platform->comm.mpiComm(),
-                                           o_alpha,
-                                           Nfields * 0 * fieldOffset);
-#else
-  platform->linAlg->weightedInnerProdMulti(Nlocal,
-                                           numVecsProjection,
-                                           Nfields,
-                                           fieldOffset,
-                                           o_invDegree,
-                                           o_xx,
-                                           o_r,
-                                           platform->comm.mpiComm(),
-                                           alpha,
-                                           Nfields * 0 * fieldOffset);
-  o_alpha.copyFrom(alpha, numVecsProjection);
-#endif
+  if (platform->device.deviceAtomic) {
+    platform->linAlg->weightedInnerProdMulti(Nlocal,
+                                             numVecsProjection,
+                                             Nfields,
+                                             fieldOffset,
+                                             o_invDegree,
+                                             o_xx,
+                                             o_r,
+                                             platform->comm.mpiComm(),
+                                             o_alpha,
+                                             Nfields * 0 * fieldOffset);
+  } else {
+    platform->linAlg->weightedInnerProdMulti(Nlocal,
+                                             numVecsProjection,
+                                             Nfields,
+                                             fieldOffset,
+                                             o_invDegree,
+                                             o_xx,
+                                             o_r,
+                                             platform->comm.mpiComm(),
+                                             alpha,
+                                             Nfields * 0 * fieldOffset);
+    o_alpha.copyFrom(alpha, numVecsProjection);
+  }
+
+  o_xbar = platform->deviceMemoryPool.reserve<dfloat>(Nfields * fieldOffset);
 
   // o_xbar = sum_i alpha_i * o_xx_i
   accumulateKernel(Nlocal, numVecsProjection, fieldOffset, o_alpha, o_xx, o_xbar);
@@ -220,6 +222,8 @@ void SolutionProjection::computePostProjection(occa::memory &o_x)
     matvec(o_bb, 0, o_xx, 0);
     updateProjectionSpace();
   }
+
+  o_xbar.free();
 }
 
 SolutionProjection::SolutionProjection(elliptic_t &elliptic,
@@ -234,11 +238,6 @@ SolutionProjection::SolutionProjection(elliptic_t &elliptic,
 {
   solverName = elliptic.name;
 
-  platform_t *platform = platform_t::getInstance();
-
-  o_alpha = platform->device.malloc<dfloat>(maxNumVecsProjection);
-  o_xbar = platform->device.malloc<dfloat>(Nfields * fieldOffset);
-
   nekrsCheck(Nfields * maxNumVecsProjection * static_cast<size_t>(fieldOffset) >
                  std::numeric_limits<int>::max(),
              platform->comm.mpiComm(),
@@ -246,14 +245,10 @@ SolutionProjection::SolutionProjection(elliptic_t &elliptic,
              "%s\n",
              "Nfields * maxNumVecsProjection * fieldOffset exceeds int limit!");
 
-  o_xx = platform->device.malloc<dfloat>(Nfields * maxNumVecsProjection * fieldOffset);
-  o_bb = platform->device.malloc<dfloat>((type == ProjectionType::CLASSIC)
-                                             ? Nfields * fieldOffset * maxNumVecsProjection
-                                             : Nfields * fieldOffset);
-
-  const std::string sectionIdentifier = std::to_string(Nfields) + "-";
+  o_alpha = platform->device.malloc<dfloat>(maxNumVecsProjection);
 
   {
+    const std::string sectionIdentifier = std::to_string(Nfields) + "-";
     multiScaledAddwOffsetKernel = platform->kernelRequests.load(sectionIdentifier + "multiScaledAddwOffset");
     accumulateKernel = platform->kernelRequests.load(sectionIdentifier + "accumulate");
   }
@@ -267,6 +262,28 @@ SolutionProjection::SolutionProjection(elliptic_t &elliptic,
 
 void SolutionProjection::pre(occa::memory &o_r)
 {
+  const auto size_xx = Nfields * maxNumVecsProjection * fieldOffset;
+  const auto size_bb = (type == ProjectionType::CLASSIC)
+                       ? Nfields * fieldOffset * maxNumVecsProjection
+                       : Nfields * fieldOffset;
+
+  if (platform->hostSpilling()) {
+    if (!h_xx.isInitialized()) {
+      h_xx = platform->deviceMemoryPool.reserve<dfloat>(size_xx);
+      h_bb = platform->deviceMemoryPool.reserve<dfloat>(size_bb);
+    }
+    o_xx = platform->deviceMemoryPool.reserve<dfloat>(h_xx.size());
+    h_xx.copyTo(o_xx);
+
+    o_bb = platform->deviceMemoryPool.reserve<dfloat>(h_bb.size());
+    h_bb.copyTo(o_bb);
+  } else {
+    if (!o_xx.isInitialized()) {
+      o_xx = platform->deviceMemoryPool.reserve<dfloat>(size_xx);
+      o_bb = platform->deviceMemoryPool.reserve<dfloat>(size_bb);
+    }
+  }
+
   ++timestep;
   if (timestep < numTimeSteps) {
     return;
@@ -277,7 +294,17 @@ void SolutionProjection::pre(occa::memory &o_r)
   }
 
   prevNumVecsProjection = numVecsProjection;
+
+
   computePreProjection(o_r);
+
+  if (platform->hostSpilling()) {
+    o_xx.copyTo(h_xx);
+    o_xx.free();
+
+    o_bb.copyTo(h_bb);
+    o_bb.free();
+  }  
 }
 
 void SolutionProjection::post(occa::memory &o_x)
@@ -285,5 +312,24 @@ void SolutionProjection::post(occa::memory &o_x)
   if (timestep < numTimeSteps) {
     return;
   }
+
+  if (platform->hostSpilling()) {
+    o_xx = platform->deviceMemoryPool.reserve<dfloat>(h_xx.size());
+    h_xx.copyTo(o_xx);
+
+    o_bb = platform->deviceMemoryPool.reserve<dfloat>(h_bb.size());
+    h_bb.copyTo(o_bb);
+  }
+
   computePostProjection(o_x);
+
+  if (platform->hostSpilling()) {
+    platform->device.finish();
+
+    o_xx.copyTo(h_xx);
+    o_xx.free();
+
+    o_bb.copyTo(h_bb);
+    o_bb.free();
+  }  
 }

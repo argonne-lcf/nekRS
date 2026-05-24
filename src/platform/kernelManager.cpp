@@ -59,8 +59,9 @@ void kernelManager_t::add(kernelRequest_t request, bool checkUnique)
     nekrsCheck(request.props.hash() != exisitingProps.hash(),
                MPI_COMM_SELF,
                EXIT_FAILURE,
-               "request exists already but with a different hash %s\n%s",
+               "request exists already but with a different hash %s\nprops\n %s \n%s",
                exisitingProps.hash().getFullString().c_str(),
+               exisitingProps.toString().c_str(),
                request.to_string().c_str());
 
     auto exisitingFileName = (requestMap.find(request.requestName)->second).fileName;

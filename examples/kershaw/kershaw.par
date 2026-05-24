@@ -1,21 +1,38 @@
 userSections = CASEDATA
 
 [GENERAL] 
-verbose = false 
+#verbose = true 
 polynomialOrder = 7
 timeStepper = tombo2
 advectionSubCyclingSteps = 1
 stopAt = numSteps
 numSteps = 0
 
-[FLUID PRESSURE]
-#solver = gmres+flexible+nVector=15
+[MESH]
+hrefine = 2 # split factor per direction 
+
+[ELLIPTIC BP5]
+poisson = true
+preconditioner = none 
+solver = CG+maxIter=1000
+residualTol = 1e-15
+
+[ELLIPTIC BP6]
+poisson = true
+preconditioner = none 
+solver = CG+block+maxIter=500
+residualTol = 1e-15
+
+[ELLIPTIC BPS5]
+poisson = true
+solver = gmres+flexible+nVector=15 
 residualTol = 1e-8+relative
+initialGuess = previous
 
 # p-MG multiplicative V-cycle, coarse grid solve
 preconditioner = multigrid
 smootherType = RAS+FourthOptChebyshev #+maxEigenvalueBoundFactor=1.1
-#coarseSolver = boomerAMG+device #smoother
+coarseSolver = boomerAMG #+device
 #coarseGridDiscretization = FEM #+Galerkin
 #pMGSchedule = p=7+degree=3, p=3+degree=3, p=1, p=3+degree=3, p=7+degree=3
 
@@ -30,14 +47,7 @@ smootherType = RAS+FourthOptChebyshev #+maxEigenvalueBoundFactor=1.1
 #pMGSchedule = p=7+degree=2, p=7, p=7+degree=2
 
 
-initialGuess = previous
-
-[FLUID VELOCITY]
-boundaryTypeMap = zeroNeumann #zeroDirichlet 
-rho = 1.0
-viscosity = 1.0
-
-#[FLUID PRESSURE BOOMERAMG]
+#[ELLIPTIC BPS5 BOOMERAMG]
 #coarsenType = 8 
 #interpolationType = 6
 #smootherType = 16
@@ -48,18 +58,18 @@ viscosity = 1.0
 #aggressiveCoarseningLevels = 0
 #chebyshevRelaxOrder = 1
 
-#[AMGX]
-#configFile = "amgx.json"
-
 [CASEDATA]
 gsOverlap = 1
 
+wdotp = true
+wdotpRepetitions = 100 
+
 bp5 = true 
-bp5Repetitions = 50
+bp5Repetitions = 50 
 
 bps5 = true 
-bps5Repetitions = 50
+bps5Repetitions = 200 
 eps = 0.3
 
-bp6 = true
-bp6Repetitions = 50
+bp6 = true 
+bp6Repetitions = 50 

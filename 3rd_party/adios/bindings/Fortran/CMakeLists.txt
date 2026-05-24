@@ -20,7 +20,7 @@ adios2_check_fortran_submodules(ADIOS2_HAVE_FORTRAN_SUBMODULES)
 #endif()
 
 if(ADIOS2_USE_Fortran_flag_argument_mismatch)
-  set(CMAKE_Fortran_FLAGS "${CMAKE_Fortran_FLAGS} -fallow-argument-mismatch")
+  set(CMAKE_Fortran_FLAGS "${CMAKE_Fortran_FLAGS} -fallow-argument-mismatch -w")
 endif()
 
 add_library(adios2_fortran
@@ -104,7 +104,7 @@ if(ADIOS2_HAVE_MPI)
         adios2_fortran
       PRIVATE
         adios2_c_mpi
-        adios2_core_mpi
+        adios2_core_mpi_c
       INTERFACE
         MPI::MPI_Fortran
     )
@@ -119,7 +119,7 @@ if(ADIOS2_HAVE_MPI)
     add_library(adios2_fortran_mpi INTERFACE)
     target_link_libraries(adios2_fortran_mpi INTERFACE adios2_fortran MPI::MPI_Fortran)
     target_sources(adios2_fortran PRIVATE ${adios2_fortran_mpi_srcs})
-    target_link_libraries(adios2_fortran PRIVATE adios2_c_mpi adios2_core_mpi)
+    target_link_libraries(adios2_fortran PRIVATE adios2_c_mpi adios2_core_mpi_c)
   endif()
 
   set_property(TARGET adios2_fortran_mpi PROPERTY EXPORT_NAME fortran_mpi)

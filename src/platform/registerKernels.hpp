@@ -15,7 +15,7 @@ void registerLinearSolverKernels();
 void registerPostProcessingKernels();
 void registerPointInterpolationKernels();
 void registerNekNekKernels();
-void registerCvodeKernels();
+void registerCvodeKernels(occa::properties kernelInfoBC);
 void registerMeshKernels(occa::properties kernelInfoBC);
 void registerScalarKernels(occa::properties kernelInfoBC);
 void registerEllipticKernels(std::string section, bool stressForm = false);

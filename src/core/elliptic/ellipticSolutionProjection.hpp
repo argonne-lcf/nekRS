@@ -61,8 +61,12 @@ private:
   std::string solverName;
 
   occa::memory o_xbar;
+
   occa::memory o_xx;
+  occa::memory h_xx;
   occa::memory o_bb;
+  occa::memory h_bb;
+
   occa::memory o_alpha;
   // references to memory on elliptic
   occa::memory& o_invDegree;

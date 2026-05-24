@@ -157,7 +157,8 @@ void ellipticAx(elliptic_t *elliptic,
                 dlong NelementsList,
                 const occa::memory &o_elementsList,
                 const occa::memory &o_q,
-                occa::memory &o_Aq);
+                occa::memory &o_Aq,
+                bool useCachedKernel = true);
 
 void ellipticUpdateJacobi(elliptic_t *ellipticBase, occa::memory &o_invDiagA);
 void ellipticUpdateAllJacobi(elliptic_t *elliptic);

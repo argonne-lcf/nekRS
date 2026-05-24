@@ -101,6 +101,7 @@ static std::vector<std::string> generalKeys = {
     {"numSteps"},
     {"polynomialOrder"},
     {"dealiasing"},
+    {"overintegrationPolynomialOrder"},
     {"cubaturePolynomialOrder"},
     {"startFrom"},
     {"stopAt"},
@@ -111,6 +112,7 @@ static std::vector<std::string> generalKeys = {
     {"writeControl"},
     {"checkpointEngine"},
     {"checkpointControl"},
+    {"checkpointDirectory"},
     {"writeInterval"},
     {"checkpointInterval"},
     {"constFlowRate"},
@@ -243,6 +245,8 @@ static std::vector<std::string> pressureKeys = {};
 
 static std::vector<std::string> geomKeys = {};
 
+static std::vector<std::string> lpmKeys = {{"checkpointDirectory"}};
+
 static std::vector<std::string> deprecatedKeys = {
     // deprecated filter params
     {"filterWeight"},
@@ -267,6 +271,7 @@ static std::vector<std::string> validSections = {
     {"geom"},
     {"scalar"},
     {"cvode"},
+    {"lpm"},
 };
 
 namespace
@@ -290,6 +295,7 @@ void makeStringsLowerCase()
   occaKeys = lowerCase(occaKeys);
   cvodeKeys = lowerCase(cvodeKeys);
   ellipticKeys = lowerCase(ellipticKeys);
+  lpmKeys = lowerCase(lpmKeys);
   validSections = lowerCase(validSections);
 }
 
@@ -357,7 +363,7 @@ const std::vector<std::string> &getValidKeys(const std::string &section)
   if (section == "occa") {
     return occaKeys;
   }
-  if (section == "elliptic") {
+  if (section.find("elliptic ") != std::string::npos) {
     return ellipticKeys;
   }
   if (section == "fluid velocity") {
@@ -365,9 +371,11 @@ const std::vector<std::string> &getValidKeys(const std::string &section)
   }
   if (section == "cvode") {
     return cvodeKeys;
-  } else {
-    return nothing;
   }
+  if (section == "lpm") {
+    return lpmKeys;
+  }
+  return nothing;
 }
 
 void validate(inipp::Ini *ini, const std::vector<std::string> &userSections)
@@ -447,7 +455,6 @@ void validate(inipp::Ini *ini, const std::vector<std::string> &userSections)
         if (std::find(userSections.begin(), userSections.end(), sec.first) != userSections.end()) {
           continue;
         }
-
         if (std::find(validKeys.begin(), validKeys.end(), key) == validKeys.end()) {
           if (std::find(commonKeys.begin(), commonKeys.end(), key) == commonKeys.end()) {
             std::ostringstream error;
@@ -556,6 +563,7 @@ void parseCheckpointing(const int rank, setupAide &options, inipp::Ini *ini, std
 #include "parseNeknek.hpp"
 #include "parseFluid.hpp"
 #include "parseElliptic.hpp"
+#include "parseLPM.hpp"
 
 #include "parseGeneral.hpp"
 
@@ -700,7 +708,7 @@ void Par::parse(setupAide &options)
     iss >> firstWord >> secondWord;
 
     auto val = options.getArgs("USER ELLIPTIC FIELDS");
-    if (!val.empty()) val += " ";
+    if (!val.empty()) val += ",";
     val += secondWord;
     options.setArgs("USER ELLIPTIC FIELDS", val);
   } 
@@ -720,6 +728,12 @@ void Par::parse(setupAide &options)
     options.setArgs("CVODE", "TRUE");
     parseCvodeSolver(rank, options, ini);
   }
+
+  if (ini->sections.count("lpm")) {
+    parseLPMSection(rank, options, ini);
+  }
+
+  parseBoomerAmgSection(rank, options, ini);
 
   cleanupStaleKeys(rank, options, ini);
 

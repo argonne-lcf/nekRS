@@ -39,13 +39,12 @@ struct nonZero_t
   dfloat val;
 };
 
-void ellipticBuildFEM(elliptic_t* elliptic, nonZero_t** A,
-                      dlong* nnz, hlong* globalStarts);
-
+void ellipticBuildFEMHex3D(elliptic_t* elliptic, nonZero_t** A, dlong* nnz, hlong* globalStarts);
 void ellipticBuildFEMGalerkinHex3D(elliptic_t* elliptic,
                                    elliptic_t* ellipticFine,
                                    nonZero_t** A,
                                    dlong* nnz,
-                                   hlong* globalStarts);
+                                   hlong* globalStarts,
+                                   bool assembled = false);
 
 #endif

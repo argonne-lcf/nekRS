@@ -69,9 +69,6 @@ void meshOccaPopulateDeviceHex3D(mesh_t *mesh, setupAide &newOptions, occa::prop
       platform->device.malloc<dfloat>( mesh->cubNq, mesh->cubw);
  
     mesh->o_cubDiffInterpT = mesh->o_cubDWmatrices;
-
-    mesh->o_cubvgeo =
-        platform->device.malloc<dfloat>(mesh->Nelements * mesh->Nvgeo * mesh->cubNp);
  
     free(cubProjectT);
     free(cubInterpT);
@@ -111,13 +108,13 @@ void meshOccaPopulateDeviceHex3D(mesh_t *mesh, setupAide &newOptions, occa::prop
     platform->device.malloc<dfloat>(mesh->Nlocal);
 
   mesh->o_vgeo =
-    platform->device.malloc<dfloat>(mesh->Nlocal * mesh->Nvgeo);
+    platform->deviceMemoryPool.reserve<dfloat>(mesh->Nlocal * mesh->Nvgeo);
 
   mesh->o_sgeo =
-      platform->device.malloc<dfloat>(mesh->Nelements * mesh->Nfaces * mesh->Nfp * mesh->Nsgeo);
+    platform->deviceMemoryPool.reserve<dfloat>(mesh->Nelements * mesh->Nfaces * mesh->Nfp * mesh->Nsgeo);
 
   mesh->o_ggeo =
-    platform->device.malloc<dfloat>(mesh->Nlocal * mesh->Nggeo);
+    platform->deviceMemoryPool.reserve<dfloat>(mesh->Nlocal * mesh->Nggeo);
 
   mesh->o_vmapM =
       platform->device.malloc<dlong>(mesh->Nelements * mesh->Nfp * mesh->Nfaces, mesh->vmapM);

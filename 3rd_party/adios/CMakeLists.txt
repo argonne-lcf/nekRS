@@ -14,7 +14,7 @@ endif()
 
 include(${CMAKE_CURRENT_LIST_DIR}/cmake/ADIOSFunctions.cmake)
 
-setup_version(2.10.1)
+setup_version(2.11.0)
 
 project(ADIOS2 VERSION ${ADIOS2_VERSION})
 
@@ -67,6 +67,7 @@ if(MSVC)
     -D_CRT_SECURE_NO_DEPRECATE
     -D_CRT_SECURE_NO_WARNINGS
     -D_SCL_SECURE_NO_DEPRECATE
+    -D_WINSOCK_DEPRECATED_NO_WARNINGS
     -D_SILENCE_TR1_NAMESPACE_DEPRECATION_WARNING
   )
 endif()
@@ -105,13 +106,20 @@ if(NOT CMAKE_BUILD_TYPE AND NOT CMAKE_CONFIGURATION_TYPES)
   set(CMAKE_BUILD_TYPE "Release" CACHE STRING "Choose the type of build." FORCE)
 endif()
 
-# Force C++11 (No extensions) and C99
-set(CMAKE_CXX_STANDARD 11)
-set(CMAKE_CXX_STANDARD_REQUIRED True)
-set(CMAKE_CXX_EXTENSIONS OFF)
+# This C++ standard is required to build ADIOS2
+set(ADIOS2_REQUIRED_CXX_STANDARD 14)
+if(NOT DEFINED CMAKE_CXX_STANDARD)
+  set(CMAKE_CXX_STANDARD ${ADIOS2_REQUIRED_CXX_STANDARD})
+  set(CMAKE_CXX_STANDARD_REQUIRED ON)
+elseif(CMAKE_CXX_STANDARD LESS ADIOS2_REQUIRED_CXX_STANDARD)
+  message(FATAL_ERROR "Requested CMAKE_CXX_STANDARD=${CMAKE_CXX_STANDARD} which is less than the required ${ADIOS2_REQUIRED_CXX_STANDARD}.")
+endif()
+
 if(NOT MSVC)
-  set(CMAKE_C_STANDARD 99)
-  set(CMAKE_C_STANDARD_REQUIRED True)
+  if(NOT CMAKE_C_STANDARD)
+    set(CMAKE_C_STANDARD 99)
+  endif()
+  set(CMAKE_C_STANDARD_REQUIRED ON)
 endif()
 
 # Option for packagers to add a suffix after "adios" in library names (to
@@ -156,8 +164,10 @@ option(BUILD_TESTING "Build testing" OFF)
 include(CTest)
 mark_as_advanced(CLEAR BUILD_TESTING)
 
+adios_option(BigWhoop   "Enable support for BigWhoop transforms" AUTO)
 adios_option(Blosc2     "Enable support for c-blosc-2 transforms" AUTO)
 adios_option(BZip2      "Enable support for BZip2 transforms" AUTO)
+adios_option(Caliper    "Enable support for Caliper" AUTO)
 adios_option(ZFP        "Enable support for ZFP transforms" AUTO)
 adios_option(SZ         "Enable support for SZ transforms" AUTO)
 adios_option(LIBPRESSIO "Enable support for LIBPRESSIO transforms" AUTO)
@@ -184,26 +194,31 @@ adios_option(Endian_Reverse "Enable support for Little/Big Endian Interoperabili
 adios_option(Sodium     "Enable support for Sodium for encryption" AUTO)
 adios_option(Catalyst   "Enable support for in situ visualization plugin using ParaView Catalyst" AUTO)
 adios_option(Campaign   "Enable support for Campaigns (requires SQLite3 and ZLIB)" AUTO)
+adios_option(OpenSSL    "Enable support for OpenSSL" AUTO)
 adios_option(AWSSDK     "Enable support for S3 compatible storage using AWS SDK's S3 module" OFF)
 adios_option(Derived_Variable    "Enable support for derived variables" OFF)
 adios_option(PIP        "Enable support for pip packaging" OFF)
+adios_option(XRootD     "Enable support for XRootD" AUTO)
+adios_option(KVCACHE    "Enable support for KVCache" OFF)
 
+option(ADIOS2_LIBADIOS_MODE "Install only C/C++ library components" OFF)
+mark_as_advanced(ADIOS2_LIBADIOS_MODE)
 option(ADIOS2_Blosc2_PREFER_SHARED "Prefer shared Blosc2 libraries" ON)
 mark_as_advanced(ADIOS2_Blosc2_PREFER_SHARED)
 mark_as_advanced(ADIOS2_USE_PIP)
 include(${PROJECT_SOURCE_DIR}/cmake/DetectOptions.cmake)
 
 if(ADIOS2_HAVE_CUDA OR ADIOS2_HAVE_Kokkos_CUDA)
-    set(CMAKE_CUDA_STANDARD 11)
-    set(CMAKE_CUDA_STANDARD_REQUIRED TRUE)
-    if(NOT DEFINED CMAKE_CUDA_ARCHITECTURES)
-        if(DEFINED Kokkos_CUDA_ARCHITECTURES)
-            set(CMAKE_CUDA_ARCHITECTURES ${Kokkos_CUDA_ARCHITECTURES})
-        else()
-            # Minimum common non-deprecated architecture
-            set(CMAKE_CUDA_ARCHITECTURES 52)
-        endif()
+  set(CMAKE_CUDA_STANDARD ${CMAKE_CXX_STANDARD})
+  set(CMAKE_CUDA_STANDARD_REQUIRED TRUE)
+  if(NOT DEFINED CMAKE_CUDA_ARCHITECTURES)
+    if(DEFINED Kokkos_CUDA_ARCHITECTURES)
+      set(CMAKE_CUDA_ARCHITECTURES ${Kokkos_CUDA_ARCHITECTURES})
+    else()
+      # Minimum common non-deprecated architecture
+      set(CMAKE_CUDA_ARCHITECTURES 52)
     endif()
+  endif()
 endif()
 
 if(NOT DEFINED CMAKE_HIP_ARCHITECTURES AND DEFINED Kokkos_HIP_ARCHITECTURES)
@@ -258,10 +273,10 @@ endif()
 
 
 set(ADIOS2_CONFIG_OPTS
-    DataMan DataSpaces HDF5 HDF5_VOL MHS SST Fortran MPI Python PIP Blosc2 BZip2
+    DataMan DataSpaces HDF5 HDF5_VOL MHS SST Fortran MPI Python PIP BigWhoop Blosc2 BZip2
     LIBPRESSIO MGARD MGARD_MDR PNG SZ ZFP DAOS IME O_DIRECT Sodium Catalyst SysVShMem UCX
-    ZeroMQ Profiling Endian_Reverse Derived_Variable AWSSDK GPU_Support CUDA Kokkos
-    Kokkos_CUDA Kokkos_HIP Kokkos_SYCL Campaign
+    ZeroMQ Profiling Endian_Reverse Derived_Variable AWSSDK OpenSSL XRootD GPU_Support CUDA Kokkos
+    Kokkos_CUDA Kokkos_HIP Kokkos_SYCL Campaign KVCACHE
 )
 
 GenerateADIOSHeaderConfig(${ADIOS2_CONFIG_OPTS})
@@ -312,6 +327,10 @@ if(MSVC AND BUILD_SHARED_LIBS AND ADIOS2_HAVE_HDF5)
   # See note about building with visual studio and shared libs, here:
   #     https://github.com/HDFGroup/hdf5/blob/develop/release_docs/USING_HDF5_VS.txt
   add_definitions(-DH5_BUILT_AS_DYNAMIC_LIB=1)
+endif()
+
+if (ADIOS2_LIBADIOS_MODE)
+  set(ADIOS2_MAYBE_EXCLUDE_FROM_ALL "EXCLUDE_FROM_ALL")
 endif()
 
 #------------------------------------------------------------------------------#
@@ -394,10 +413,13 @@ endif()
 #------------------------------------------------------------------------------#
 message("")
 message("ADIOS2 build configuration:")
-message("  ADIOS Version: ${ADIOS2_VERSION}")
-message("  C++ Compiler : ${CMAKE_CXX_COMPILER_ID} "
-                         "${CMAKE_CXX_COMPILER_VERSION} "
-                         "${CMAKE_CXX_COMPILER_WRAPPER}")
+message("  ADIOS Version : ${ADIOS2_VERSION}")
+if(DEFINED CMAKE_CXX_STANDARD AND CMAKE_CXX_STANDARD)
+  message("  C++ standard  : "           "${CMAKE_CXX_STANDARD}")
+endif()
+message("  C++ Compiler  : ${CMAKE_CXX_COMPILER_ID} "
+                          "${CMAKE_CXX_COMPILER_VERSION} "
+                          "${CMAKE_CXX_COMPILER_WRAPPER}")
 message("    ${CMAKE_CXX_COMPILER}")
 message("")
 if(ADIOS2_HAVE_CUDA)
@@ -437,7 +459,15 @@ message("    Build Options:")
 foreach(opt IN LISTS ADIOS2_CONFIG_OPTS)
   message_pad("      ${opt}" 25 label)
   if(${ADIOS2_HAVE_${opt}})
-    message("${label}: ON")
+    if (${opt} STREQUAL "HDF5")
+       if (HDF5_IS_PARALLEL)
+          message("${label}: ON, parallel ")
+       else()
+          message("${label}: ON, serial ")
+       endif()
+    else()
+       message("${label}: ON")
+    endif()
   else()
     message("${label}: OFF")
   endif()
@@ -451,7 +481,7 @@ if (ADIOS2_HAVE_SST)
   if (ADIOS2_SST_HAVE_UCX)
      set (HPCDataPlaneList "${HPCDataPlaneList} UCX")
   endif()
-  if (ADIOS2_SST_HAVE_MPI_DP)
+  if (ADIOS2_HAVE_MPI)
      set (HPCDataPlaneList "${HPCDataPlaneList} MPI")
   endif()
 endif()

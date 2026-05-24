@@ -1,9 +1,14 @@
+default:
+  id_tokens:
+    OLCF_ID_TOKEN:
+      aud: https://code.olcf.ornl.gov
+
 child_pipeline_{branch}:
   variables:
     DOWNSTREAM_COMMIT_SHA: '{commit}'
     DOWNSTREAM_BRANCH_REF: '{branch}'
   trigger:
     include:
-      - project: 'ci/csc303_crusher/dev/adios2'
+      - project: 'ci/ums029/dev/adios2'
         ref: '{branch}'
-        file: '.gitlab/gitlab-ci-crusher.yml'
+        file: '.gitlab/gitlab-ci-frontier.yml'

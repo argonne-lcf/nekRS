@@ -2,8 +2,11 @@
 # Programmer(s): David J. Gardner @ LLNL
 # ------------------------------------------------------------------------------
 # SUNDIALS Copyright Start
-# Copyright (c) 2002-2022, Lawrence Livermore National Security
+# Copyright (c) 2025-2026, Lawrence Livermore National Security,
+# University of Maryland Baltimore County, and the SUNDIALS contributors.
+# Copyright (c) 2013-2025, Lawrence Livermore National Security
 # and Southern Methodist University.
+# Copyright (c) 2002-2013, Lawrence Livermore National Security.
 # All rights reserved.
 #
 # See the top-level LICENSE and NOTICE files for details.
@@ -12,11 +15,10 @@
 # SUNDIALS Copyright End
 # ------------------------------------------------------------------------------
 
-# Example lists are tuples "name\;args\;type" where the type is
-# 'develop' for examples excluded from 'make test' in releases
-set(examples_list
-  "cv_bruss_batched_kokkos.cpp\;\;develop"
-)
+# Example lists are tuples "name\;args\;type" where the type is 'develop' for
+# examples excluded from 'make test' in releases
+set(examples_list "cv_bruss_batched_kokkos.cpp\;\;develop"
+                  "cv_bruss_batched_kokkos_2D.cpp\;\;develop")
 
 # Add the build targets for each example
 foreach(example_tuple ${examples_list})
@@ -31,10 +33,10 @@ foreach(example_tuple ${examples_list})
     get_filename_component(example_target ${example} NAME_WE)
     set(example_target "${example_target}.${backend}")
 
-    if (NOT TARGET ${example_target})
+    if(NOT TARGET ${example_target})
 
       # example source files
-      add_executable(${example_target} ${example})
+      sundials_add_executable(${example_target} ${example})
 
       # folder for IDEs
       set_target_properties(${example_target} PROPERTIES FOLDER "Examples")
@@ -43,23 +45,19 @@ foreach(example_tuple ${examples_list})
       target_compile_definitions(${example_target} PRIVATE USE_${backend})
 
       # directories to include
-      target_include_directories(${example_target}
-        PRIVATE
-        "${PROJECT_SOURCE_DIR}/examples/utilities")
+      target_include_directories(
+        ${example_target} PRIVATE "${PROJECT_SOURCE_DIR}/examples/utilities")
 
       # libraries to link against
-      target_link_libraries(${example_target}
-        PRIVATE
-        sundials_cvode
-        sundials_nveckokkos
-        sundials_sunmatrixkokkosdense
-        sundials_sunlinsolkokkosdense
-        ${EXE_EXTRA_LINK_LIBS}
-      )
+      target_link_libraries(
+        ${example_target}
+        PRIVATE sundials_cvode sundials_nveckokkos
+                sundials_sunmatrixkokkosdense sundials_sunlinsolkokkosdense
+                ${EXE_EXTRA_LINK_LIBS})
 
-      if(SUNDIALS_BUILD_PACKAGE_FUSED_KERNELS)
-        target_link_libraries(${example_target} PRIVATE
-          sundials_cvode_fused_stubs)
+      if(SUNDIALS_ENABLE_PACKAGE_FUSED_KERNELS)
+        target_link_libraries(${example_target}
+                              PRIVATE sundials_cvode_fused_stubs)
       endif()
     endif()
 
@@ -71,7 +69,8 @@ foreach(example_tuple ${examples_list})
     endif()
 
     # add example to regression tests
-    sundials_add_test(${test_name} ${example_target}
+    sundials_add_test(
+      ${test_name} ${example_target}
       TEST_ARGS ${example_args}
       EXTRA_ARGS --kokkos-disable-warnings
       ANSWER_DIR ${CMAKE_CURRENT_SOURCE_DIR}
@@ -82,28 +81,18 @@ foreach(example_tuple ${examples_list})
 endforeach()
 
 # Install the targets
-if(EXAMPLES_INSTALL)
+if(SUNDIALS_ENABLE_EXAMPLES_INSTALL)
 
-  if(SUNDIALS_BUILD_PACKAGE_FUSED_KERNELS)
+  if(SUNDIALS_ENABLE_PACKAGE_FUSED_KERNELS)
     set(_fused_stubs cvode_fused_stubs)
   endif()
 
-  sundials_install_examples(cvode examples_list
-    CMAKE_TEMPLATE
-      cmakelists_CXX_ex.in
-    SUNDIALS_COMPONENTS
-      nveckokkos
-      sunmatrixkokkosdense
-      sunlinsolkokkosdense
-    SUNDIALS_TARGETS
-      cvode
-      ${_fused_stubs}
-    OTHER_TARGETS
-      Kokkos::kokkos
-      Kokkos::kokkoskernels
-    EXTRA_FILES
-      "${PROJECT_SOURCE_DIR}/examples/utilities/example_utilities.hpp"
-    DESTINATION
-      cvode/kokkos
-    )
+  sundials_install_examples(
+    cvode examples_list
+    CMAKE_TEMPLATE cmakelists_CXX_ex.in
+    SUNDIALS_COMPONENTS nveckokkos sunmatrixkokkosdense sunlinsolkokkosdense
+    SUNDIALS_TARGETS cvode ${_fused_stubs}
+    OTHER_TARGETS Kokkos::kokkos Kokkos::kokkoskernels
+    EXTRA_FILES "${PROJECT_SOURCE_DIR}/examples/utilities/example_utilities.hpp"
+    DESTINATION cvode/kokkos)
 endif()

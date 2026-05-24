@@ -1,11 +1,12 @@
 """License:
-  Distributed under the OSI-approved Apache License, Version 2.0.  See
-  accompanying file Copyright.txt for details.
+Distributed under the OSI-approved Apache License, Version 2.0.  See
+accompanying file Copyright.txt for details.
 """
 
 import numpy as np
 from adios2.attribute import Attribute
 from adios2.variable import Variable
+from adios2.derived_variable import DerivedVariable
 from adios2.engine import Engine
 
 
@@ -242,6 +243,31 @@ class IO:
         """
         self.impl.RemoveAllVariables()
 
+    def define_derived_variable(self, name, expression, etype=None):
+        """
+        Define a derived variable with an expression
+
+        Parameters
+            name
+                name as it appears in variable list in the output
+
+            expression
+                expression string using other variable names, operators and functions
+
+            type
+                DerivedVarType.StatsOnly     : store only the metadata of the derived variable
+                DerivedVarType.ExpressionString : store only the definition, nothing else
+                DerivedVarType.StoreData        : store as a complete variable (data and metadata)
+        """
+        var_impl = None
+
+        if etype is None:
+            var_impl = self.impl.DefineDerivedVariable(name, expression)
+        else:
+            var_impl = self.impl.DefineDerivedVariable(name, expression, etype)
+
+        return DerivedVariable(var_impl)
+
     def open(self, name, mode, comm=None):
         """
         Open an engine
@@ -261,6 +287,20 @@ class IO:
             return Engine(self.impl.Open(name, mode, comm))
 
         return Engine(self.impl.Open(name, mode))
+
+    def open_with_metadata(self, name, metadata: bytes):
+        """
+        Open an engine with metadata already in memory
+
+        Parameters
+            name
+                Engine name
+
+            metadata
+                file metadata retrieved by FileReader.get_metadata()
+        """
+
+        return Engine(self.impl.Open(name, metadata))
 
     def set_engine(self, name):
         """

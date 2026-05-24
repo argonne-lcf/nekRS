@@ -4,8 +4,8 @@
 #------------------------------------------------------------------------------#
 
 configure_file(
-  ${CMAKE_CURRENT_SOURCE_DIR}/verinfo.h.in
-  ${PROJECT_BINARY_DIR}/verinfo.h
+  "${CMAKE_CURRENT_SOURCE_DIR}/verinfo.h.in"
+  "${PROJECT_BINARY_DIR}/verinfo.h"
   @ONLY
 )
 
@@ -23,21 +23,36 @@ target_include_directories(bpls PRIVATE
 set_property(TARGET bpls PROPERTY OUTPUT_NAME bpls${ADIOS2_EXECUTABLE_SUFFIX})
 install(TARGETS bpls EXPORT adios2
   RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR} COMPONENT adios2_tools-runtime
+  ${ADIOS2_MAYBE_EXCLUDE_FROM_ALL}
 )
 configure_file(
-  ${CMAKE_CURRENT_SOURCE_DIR}/bpls/bpls.cmake.gen.in
-  ${PROJECT_BINARY_DIR}/bpls.cmake.gen
+  "${CMAKE_CURRENT_SOURCE_DIR}/bpls/bpls.cmake.gen.in"
+  "${CMAKE_CURRENT_BINARY_DIR}/bpls.cmake.gen"
   @ONLY
 )
 file(GENERATE
-  OUTPUT ${PROJECT_BINARY_DIR}/$<CONFIG>/bpls.cmake
-  INPUT ${PROJECT_BINARY_DIR}/bpls.cmake.gen
+  OUTPUT "${PROJECT_BINARY_DIR}/$<CONFIG>/bpls.cmake"
+  INPUT "${CMAKE_CURRENT_BINARY_DIR}/bpls.cmake.gen"
 )
 
+# BPCMP
+if(ADIOS2_HAVE_Python)
+  add_subdirectory(bpcmp)
+
+  configure_file(
+    "${CMAKE_CURRENT_SOURCE_DIR}/bpcmp/bpcmp.cmake.gen.in"
+    "${CMAKE_CURRENT_BINARY_DIR}/bpcmp.cmake.gen"
+    @ONLY
+  )
+  file(GENERATE
+    OUTPUT "${PROJECT_BINARY_DIR}/$<CONFIG>/bpcmp.cmake"
+    INPUT "${CMAKE_CURRENT_BINARY_DIR}/bpcmp.cmake.gen"
+  )
+endif()
 
 # BPSPLIT
 #add_executable(bpsplit ./bpsplit/bpsplit.cpp)
-#target_link_libraries(bpsplit adios2::cxx11 adios2sys_interface adios2::thirdparty::pugixml)
+#target_link_libraries(bpsplit adios2::cxx adios2sys_interface adios2::thirdparty::pugixml)
 #install(TARGETS bpsplit EXPORT adios2
 #  RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR}
 #)
@@ -70,6 +85,7 @@ install(TARGETS adios_reorganize
   ${maybe_adios_reorganize_mpi}
   EXPORT adios2
   RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR} COMPONENT adios2_tools-runtime
+  ${ADIOS2_MAYBE_EXCLUDE_FROM_ALL}
 )
 
 if(ADIOS2_HAVE_MPI)
@@ -79,22 +95,25 @@ endif()
 if(Python_Interpreter_FOUND)
   add_subdirectory(bp4dbg)
   add_subdirectory(bp5dbg)
-  add_subdirectory(adios_campaign_manager)
   install(PROGRAMS adios2_json_pp.py
     RENAME adios2_json_pp
     DESTINATION ${CMAKE_INSTALL_BINDIR}
-    COMPONENT adios2_scripts-runtime)
+    COMPONENT adios2_scripts-runtime
+    ${ADIOS2_MAYBE_EXCLUDE_FROM_ALL}
+  )
 endif()
 
 install(PROGRAMS adios2_deactivate_bp
   RENAME adios2_deactivate_bp
   DESTINATION ${CMAKE_INSTALL_BINDIR}
-  COMPONENT adios2_scripts-runtime)
+  COMPONENT adios2_scripts-runtime
+  ${ADIOS2_MAYBE_EXCLUDE_FROM_ALL}
+)
 
 # Simplified wrappers for adios2_reorganize
 configure_file(
-  ${CMAKE_CURRENT_SOURCE_DIR}/adios_reorganize/adios2_reorganize_wrapper
-  ${PROJECT_BINARY_DIR}/adios2_reorganize_wrapper
+  "${CMAKE_CURRENT_SOURCE_DIR}/adios_reorganize/adios2_reorganize_wrapper"
+  "${PROJECT_BINARY_DIR}/adios2_reorganize_wrapper"
   @ONLY
 )
 
@@ -110,3 +129,6 @@ if(ADIOS2_HAVE_HDF5)
     )
   endif()
 endif()
+if (ADIOS2_HAVE_XRootD)
+  add_subdirectory(xrootd-plugin)
+endif ()

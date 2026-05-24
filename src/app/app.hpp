@@ -49,6 +49,7 @@ class app_t {
     virtual void setDefaultSettings(setupAide& options) = 0;
 
     virtual void printSolutionMinMax() = 0;
+    virtual void printPropertiesMinMax() = 0;
 
     int timeStepConverged = 1;
 

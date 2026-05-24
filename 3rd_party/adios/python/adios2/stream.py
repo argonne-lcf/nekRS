@@ -1,24 +1,34 @@
 """License:
-  Distributed under the OSI-approved Apache License, Version 2.0.  See
-  accompanying file Copyright.txt for details.
+Distributed under the OSI-approved Apache License, Version 2.0.  See
+accompanying file Copyright.txt for details.
 """
 
 from functools import singledispatchmethod
 from sys import maxsize
 import numpy as np
+
+# pylint: disable=duplicate-code
+try:
+    import cupy as cp
+
+    ADIOS2_HAS_CUPY = True
+except ImportError:
+    ADIOS2_HAS_CUPY = False
+try:
+    import torch
+
+    ADIOS2_HAS_TORCH = True
+except ImportError:
+    ADIOS2_HAS_TORCH = False
+# pylint: enable=duplicate-code
+
 from adios2 import bindings, Adios, IO, Variable
 
 
 def type_adios_to_numpy(name):
     """Translation between numpy and adios2 types"""
-    if name == "char":
-        if bindings.is_char_signed:
-            print("type_adios_to_numpy char --> signed int8")
-            return np.int8
-        print("type_adios_to_numpy char --> unsigned uint8")
-        return np.uint8
-
     return {
+        "char": np.int8,
         "int8_t": np.int8,
         "uint8_t": np.uint8,
         "int16_t": np.int16,
@@ -151,6 +161,14 @@ class Stream:
 
         return self
 
+    def get_metadata(self):
+        """
+        Get metadata of an open file in a serialized form that can be
+        sent to other processes and used to open the file again by
+        avoiding reading the metadata from disk.
+        """
+        return self._engine.get_metadata()
+
     def step_status(self):
         """Inspect the stream status. Return adios2.bindings.StepStatus"""
         return self._step_status
@@ -171,16 +189,8 @@ class Stream:
 
     def available_variables(self):
         """
-
         Returns a 2-level dictionary with variable information.
         Read mode only.
-
-        Parameters
-            keys
-               list of variable information keys to be extracted (case insensitive)
-               keys=['AvailableStepsCount','Type','Max','Min','SingleValue','Shape']
-               keys=['Name'] returns only the variable names as 1st-level keys
-               leave empty to return all possible keys
 
         Returns
             variables dictionary
@@ -274,6 +284,29 @@ class Stream:
         """
         self._engine.put(variable, content, bindings.Mode.Sync)
 
+    def _get_variable_selection(self, content, shape, start, count):
+        """
+        Internal function to get the shape, start and count when defining a variable for write.
+
+        Parameters
+           content
+                The array that will be written to a variable
+            shape
+                The shape requested for the write
+            start
+                The start requested for the write
+            count
+                The count requested for the write
+        Returns
+            shapt, start, count
+                Either what was selected or dimensions given by the content
+        """
+        if shape == [] and start == [] and count == []:
+            shape = list(content.shape)
+            start = [0] * content.ndim
+            count = shape[:]
+        return shape, start, count
+
     @write.register(str)
     def _(self, name, content, shape=[], start=[], count=[], operations=None):
         """
@@ -302,14 +335,24 @@ class Stream:
 
         if not variable:
             # Sequence variables
-            if isinstance(content, np.ndarray):
+            if isinstance(content, (list, np.ndarray)):
+                if isinstance(content, list):
+                    content = np.asarray(content)
+
+                # If shape, start, and count is not specified, use the numpy array's shape
+                shape, start, count = self._get_variable_selection(content, shape, start, count)
                 variable = self._io.define_variable(name, content, shape, start, count)
-            elif isinstance(content, list):
-                if shape == [] and count == []:
-                    shape = [len(content)]
-                    count = shape
-                    start = [0]
-                variable = self._io.define_variable(name, content, shape, start, count)
+            elif ADIOS2_HAS_CUPY and isinstance(content, cp.ndarray):
+                shape, start, count = self._get_variable_selection(content, shape, start, count)
+                variable = self._io.define_variable(
+                    name, np.array([0], dtype=content.dtype), shape, start, count
+                )
+            elif ADIOS2_HAS_TORCH and isinstance(content, torch.Tensor):
+                shape, start, count = self._get_variable_selection(content, shape, start, count)
+                var_type = str(content.dtype).rsplit(".", maxsplit=1)[-1]
+                variable = self._io.define_variable(
+                    name, np.array([0], dtype=var_type), shape, start, count
+                )
             # Scalar variables
             elif isinstance(content, str):
                 variable = self._io.define_variable(name, content)
@@ -321,7 +364,7 @@ class Stream:
         if shape != [] and not variable.single_value():
             variable.set_shape(shape)
 
-        if start != [] and count != []:
+        if start != [] or count != []:
             variable.set_selection([start, count])
 
         if operations:
@@ -331,15 +374,21 @@ class Stream:
 
         self.write(variable, content)
 
-    def _read_var(self, variable: Variable):
+    def _read_var(self, variable: Variable, defer_read: bool = False):
         """
-        Internal common function to read. Settings must be done to Variable before the call.
+        Internal function to read when there is no preallocated buffer submitted.
+        Settings must be done to Variable before the call.
 
         Parameters
             variable
                 adios2.Variable object to be read
                 Use variable.set_selection(), set_block_selection(), set_step_selection()
                 to prepare a read
+            defer_read
+                False: read now and blocking wait for completion (Sync mode)
+                True: defer reading all requests until read_complete().
+                        The returned numpy array will be filled with data
+                        only after calling read_complete().
         Returns
             array
                 resulting array from selection
@@ -376,12 +425,195 @@ class Stream:
             else:
                 output_shape = []
 
+        mode = bindings.Mode.Sync
+        if defer_read:
+            mode = bindings.Mode.Deferred
+
         output = np.zeros(output_shape, dtype=dtype)
-        self._engine.get(variable, output)
+        self._engine.get(variable, output, mode)
         return output
 
+    def _set_variable_settings(self, variable, start, count, block_id, step_selection):
+        """
+        Internal function to set the settings to Variable before getting data.
+
+        Parameters
+            variable
+                adios2.Variable object to be read
+
+            start
+                variable offset dimensions
+
+            count
+                variable local dimensions from offset
+
+            block_id
+                (int) Required for reading local variables, local array, and local
+                value.
+
+            step_selection
+                (list): On the form of [start, count].
+        Returns
+            variable
+                the variable with the selection set
+        """
+        if step_selection is not None and not self._mode == bindings.Mode.ReadRandomAccess:
+            raise RuntimeError("step_selection parameter requires 'rra' mode")
+
+        if step_selection is not None:
+            variable.set_step_selection(step_selection)
+
+        if block_id is not None:
+            variable.set_block_selection(block_id)
+
+        if variable.type() == "string" and variable.single_value() is True:
+            return variable
+
+        if start != [] and count != []:
+            variable.set_selection([start, count])
+        return variable
+
     @singledispatchmethod
-    def read(self, variable: Variable, start=[], count=[], block_id=None, step_selection=None):
+    def read_in_buffer(
+        self,
+        variable: Variable,
+        buffer,
+        start=[],
+        count=[],
+        block_id=None,
+        step_selection=None,
+        defer_read: bool = False,
+    ):
+        """
+        Read a variable into a preallocated buffer.
+        Random access read allowed to select steps.
+
+        Parameters
+            variable
+                adios2.Variable object to be read
+                Use variable.set_selection(), set_block_selection(), set_step_selection()
+                to prepare a read
+
+            buffer
+                the pre-allocated buffer that will hold the read data
+                (numpy, cupy, torch.Tensor arrays)
+
+            start
+                variable offset dimensions
+
+            count
+                variable local dimensions from offset
+
+            block_id
+                (int) Required for reading local variables, local array, and local
+                value.
+
+            step_selection
+                (list): On the form of [start, count].
+
+            defer_read
+                False: read now and blocking wait for completion (Sync mode)
+                True: defer reading all requests until read_complete().
+                      The returned numpy array will be filled with data
+                      only after calling read_complete().
+        """
+        variable = self._set_variable_settings(variable, start, count, block_id, step_selection)
+        # make sure the buffer is a mutable array
+        islist = False
+        if isinstance(buffer, (list, np.ndarray)):
+            islist = True
+        elif ADIOS2_HAS_CUPY and isinstance(buffer, cp.ndarray):
+            islist = True
+        elif ADIOS2_HAS_TORCH and isinstance(buffer, torch.Tensor):
+            islist = True
+        if not islist:
+            raise RuntimeError(
+                "Cannot read single value in predefined buffers. "
+                "Please use val = stream.read(var, ...) form instead"
+            )
+
+        if ADIOS2_HAS_TORCH and isinstance(buffer, torch.Tensor):
+            buf_type = str(buffer.dtype).rsplit(".", maxsplit=1)[-1]
+        else:
+            buf_type = buffer.dtype
+
+        dtype = type_adios_to_numpy(variable.type())
+        if dtype(10).dtype != buf_type:
+            raise RuntimeError(f"Read buffer type {buf_type} does not match variable type {dtype}")
+
+        count = np.prod(variable.count())
+        buf_size = buffer.size
+        if ADIOS2_HAS_TORCH and isinstance(buffer, torch.Tensor):
+            buf_size = buffer.numel()
+        if count != buf_size:
+            raise RuntimeError("Read buffer size {buf_size} does not match variable size {count}")
+
+        mode = bindings.Mode.Sync
+        if defer_read:
+            mode = bindings.Mode.Deferred
+
+        self._engine.get(variable, buffer, mode)
+
+    @read_in_buffer.register(str)
+    def _(
+        self,
+        name: str,
+        buffer,
+        start=[],
+        count=[],
+        block_id=None,
+        step_selection=None,
+        defer_read: bool = False,
+    ):
+        """
+        Read a variable into a preallocated buffer.
+        Random access read allowed to select steps.
+
+        Parameters
+            name
+                variable to be read
+
+            buffer
+                the pre-allocated buffer that will hold the read data
+                (numpy, cupy, torch.Tensor arrays)
+
+            start
+                variable offset dimensions
+
+            count
+                variable local dimensions from offset
+
+            block_id
+                (int) Required for reading local variables, local array, and local
+                value.
+
+            step_selection
+                (list): On the form of [start, count].
+
+            defer_read
+                False: read now and blocking wait for completion (Sync mode)
+                True: defer reading all requests until read_complete().
+                      The returned numpy array will be filled with data
+                      only after calling read_complete().
+        """
+        variable = self._io.inquire_variable(name)
+        if not variable:
+            raise ValueError()
+
+        self.read_in_buffer(
+            variable, buffer, start, count, block_id, step_selection, defer_read=defer_read
+        )
+
+    @singledispatchmethod
+    def read(
+        self,
+        variable: Variable,
+        start=[],
+        count=[],
+        block_id=None,
+        step_selection=None,
+        defer_read: bool = False,
+    ):
         """
         Read a variable.
         Random access read allowed to select steps.
@@ -404,29 +636,32 @@ class Stream:
 
             step_selection
                 (list): On the form of [start, count].
+
+            defer_read
+                False: read now and blocking wait for completion (Sync mode)
+                True: defer reading all requests until read_complete().
+                        The returned numpy array will be filled with data
+                        only after calling read_complete().
         Returns
             array
                 resulting array from selection
         """
-        if step_selection is not None and not self._mode == bindings.Mode.ReadRandomAccess:
-            raise RuntimeError("step_selection parameter requires 'rra' mode")
 
-        if step_selection is not None:
-            variable.set_step_selection(step_selection)
-
-        if block_id is not None:
-            variable.set_block_selection(block_id)
-
+        variable = self._set_variable_settings(variable, start, count, block_id, step_selection)
         if variable.type() == "string" and variable.single_value() is True:
             return self._engine.get(variable)
-
-        if start != [] and count != []:
-            variable.set_selection([start, count])
-
-        return self._read_var(variable)
+        return self._read_var(variable, defer_read=defer_read)
 
     @read.register(str)
-    def _(self, name: str, start=[], count=[], block_id=None, step_selection=None):
+    def _(
+        self,
+        name: str,
+        start=[],
+        count=[],
+        block_id=None,
+        step_selection=None,
+        defer_read: bool = False,
+    ):
         """
         Read a variable.
         Random access read allowed to select steps.
@@ -447,6 +682,12 @@ class Stream:
 
             step_selection
                 (list): On the form of [start, count].
+
+            defer_read
+                False: read now and blocking wait for completion (Sync mode)
+                True: defer reading all requests until read_complete().
+                        The returned numpy array will be filled with data
+                        only after calling read_complete().
         Returns
             array
                 resulting array from selection
@@ -455,7 +696,15 @@ class Stream:
         if not variable:
             raise ValueError()
 
-        return self.read(variable, start, count, block_id, step_selection)
+        return self.read(variable, start, count, block_id, step_selection, defer_read=defer_read)
+
+    def read_complete(self):
+        """
+        Complete reading all deferred read requests.
+        The returned numpy arrays of each read(..., defer_read=True) will be
+        filled with data after this call.
+        """
+        self._engine.perform_gets()
 
     def write_attribute(self, name, content, variable_name="", separator="/"):
         """

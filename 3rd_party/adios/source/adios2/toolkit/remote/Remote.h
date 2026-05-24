@@ -16,72 +16,50 @@
 
 #include "adios2/common/ADIOSConfig.h"
 
-#include "remote_common.h"
-
 namespace adios2
 {
 class Remote
 {
 
 public:
-    profiling::IOChrono m_Profiler; ///< profiles Open, Write/Read, Close
+    Remote(const adios2::HostOptions &hostOptions);
+    virtual ~Remote();
 
-    /**
-     * Base constructor that all derived classes pass
-     * @param type from derived class
-     * @param comm passed to m_Comm
-     */
-    Remote();
-    ~Remote();
+    // Talk to local connection manager and ask for an existing or new SSH connection
+    // to 'remoteHost'. Return the local port through which one can talk to the remote server
+    int LaunchRemoteServerViaConnectionManager(const std::string remoteHost);
 
-    explicit operator bool() const { return m_Active; }
+    // Talk to local connection manager and ask for a key
+    // Return a hex string of a key
+    std::string GetKeyFromConnectionManager(const std::string keyID);
 
-    void Open(const std::string hostname, const int32_t port, const std::string filename,
-              const Mode mode, bool RowMajorOrdering);
+    virtual explicit operator bool() const { return false; }
 
-    void OpenSimpleFile(const std::string hostname, const int32_t port, const std::string filename);
+    virtual void Open(const std::string hostname, const int32_t port, const std::string filename,
+                      const Mode mode, bool RowMajorOrdering);
 
-    typedef int GetHandle;
+    virtual void OpenSimpleFile(const std::string hostname, const int32_t port,
+                                const std::string filename);
 
-    GetHandle Get(char *VarName, size_t Step, size_t BlockID, Dims &Count, Dims &Start, void *dest);
+    virtual void OpenReadSimpleFile(const std::string hostname, const int32_t port,
+                                    const std::string filename, std::vector<char> &contents);
 
-    bool WaitForGet(GetHandle handle);
+    typedef void *GetHandle;
 
-    GetHandle Read(size_t Start, size_t Size, void *Dest);
+    virtual GetHandle Get(const char *VarName, size_t Step, size_t StepCount, size_t BlockID,
+                          Dims &Count, Dims &Start, Accuracy &accuracy, void *dest);
 
-    int64_t m_ID;
+    virtual bool WaitForGet(GetHandle handle);
+
+    virtual GetHandle Read(size_t Start, size_t Size, void *Dest);
+
+    virtual void Close();
+
     size_t m_Size;
 
 private:
-#ifdef ADIOS2_HAVE_SST
-    void InitCMData();
-    RemoteCommon::Remote_evpath_state ev_state;
-    CMConnection m_conn = NULL;
-    std::mutex m_CMInitMutex;
-#endif
-    bool m_Active = false;
+    const std::shared_ptr<adios2::HostOptions> m_HostOptions;
 };
-
-#ifdef ADIOS2_HAVE_SST
-class CManagerSingleton
-{
-public:
-    static CManagerSingleton &Instance(RemoteCommon::Remote_evpath_state &ev_state);
-
-private:
-    CManager m_cm = NULL;
-    RemoteCommon::Remote_evpath_state internalEvState;
-    CManagerSingleton()
-    {
-        m_cm = CManager_create();
-        internalEvState.cm = m_cm;
-        RegisterFormats(internalEvState);
-        CMfork_comm_thread(internalEvState.cm);
-    }
-
-    ~CManagerSingleton() { CManager_close(m_cm); }
-};
-#endif
 
 } // end namespace adios2
 

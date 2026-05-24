@@ -82,6 +82,7 @@ struct mesh_t {
 
   int geometricFactors();
   void surfaceGeometricFactors();
+  void cubatureGeometricFactors(occa::memory o_in = o_NULL);
 
   void computeInvLMM();
 
@@ -173,6 +174,7 @@ struct mesh_t {
 
   // volumeGeometricFactors;
   dlong Nvgeo;
+  dlong Ncubvgeo;
 
   // second order volume geometric factors
   dlong Nggeo;
@@ -245,7 +247,12 @@ struct mesh_t {
   occa::memory o_DT;
   occa::memory o_DTdouble;
 
-  occa::memory o_vgeo, o_sgeo;
+  occa::memory o_vgeo;
+  occa::memory h_vgeo;
+
+  occa::memory o_sgeo;
+  occa::memory h_sgeo;
+
   occa::memory o_vmapM, o_vmapP, o_mapP;
 
   occa::memory o_EToB, o_x, o_y, o_z;
@@ -257,8 +264,10 @@ struct mesh_t {
   occa::memory o_cubInterpT, o_cubProjectT;
 
   occa::memory o_cubvgeo;
+  occa::memory h_cubvgeo;
 
   occa::memory o_ggeo; // second order geometric factors
+  occa::memory h_ggeo;
 
   occa::memory o_gllz;
   occa::memory o_gllw;

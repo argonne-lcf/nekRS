@@ -16,7 +16,11 @@ void registerCoreKernels(occa::properties kernelInfoBC)
   registerNekNekKernels();
 
   LVector_t<dfloat>::registerKernels();
-  LVector_t<pfloat>::registerKernels();
+  if constexpr (std::is_same_v<dfloat, double>) {
+    LVector_t<float>::registerKernels();
+  } else {
+    LVector_t<double>::registerKernels();
+  }
 
   const std::string section = "core-";
   const std::string oklpath = getenv("NEKRS_KERNEL_DIR") + std::string("/core/");
@@ -149,7 +153,7 @@ void registerCoreKernels(occa::properties kernelInfoBC)
     }
 
     int cubN;
-    platform->options.getArgs("CUBATURE POLYNOMIAL DEGREE", cubN);
+    platform->options.getArgs("OVERINTEGRATION POLYNOMIAL DEGREE ", cubN);
     const int cubNq = cubN + 1;
     const int cubNp = cubNq * cubNq * cubNq;
 
@@ -164,7 +168,7 @@ void registerCoreKernels(occa::properties kernelInfoBC)
     prop["includes"] += diffInterpDataFile.c_str();
 
     if (platform->options.compareArgs("REGISTER ONLY", "TRUE")) {
-      if (platform->options.compareArgs("ADVECTION TYPE", "CUBATURE")) {
+      if (platform->options.compareArgs("ADVECTION TYPE", "OVERINTEGRATION")) {
         prop["defines/p_cubNq"] = cubNq;
         prop["defines/p_cubNp"] = cubNp;
 

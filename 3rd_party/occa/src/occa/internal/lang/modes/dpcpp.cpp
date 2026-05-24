@@ -55,7 +55,7 @@ public:
     pout << ") ";
     
     if (0 < simd_length) {
-      pout << "[[intel::reqd_sub_group_size("; 
+      pout << "[[sycl::reqd_sub_group_size("; 
       pout.print(simd_length);
       pout << ")]]";
     }

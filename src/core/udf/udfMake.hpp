@@ -187,19 +187,23 @@ int udfMake(setupAide &options, const std::string &solverName, int rank)
     return EXIT_FAILURE;
   }
 
-  const std::string useFloat = (sizeof(dfloat) == sizeof(float)) ? "ON" : "OFF";
+  const std::string useDfloatFloat = (sizeof(dfloat) == sizeof(float)) ? "ON" : "OFF";
+  const std::string usePfloatFloat = (sizeof(pfloat) == sizeof(float)) ? "ON" : "OFF";
+
   const std::string cmakeVerbose = (verbose) ? "ON" : "OFF";
 
   snprintf(cmd,
            cmdSize,
            "cmake %s -S %s -B %s "
            "-DNEKRS_USE_DFLOAT_FLOAT=%s "
+           "-DNEKRS_USE_PFLOAT_FLOAT=%s "
            "-DNEKRS_INSTALL_DIR=\"%s\" -DCASE_DIR=\"%s\" -DCMAKE_CXX_COMPILER=\"$NEKRS_CXX\" "
            "-DCMAKE_CXX_FLAGS=\"$NEKRS_CXXFLAGS\" -DCMAKE_VERBOSE_MAKEFILE=%s >cmake.log 2>&1",
            cmakeFlags.c_str(),
            cmakeBuildDir.c_str(),
            cmakeBuildDir.c_str(),
-           useFloat.c_str(),
+           useDfloatFloat.c_str(),
+           usePfloatFloat.c_str(),
            installDir.c_str(),
            case_dir.c_str(),
            cmakeVerbose.c_str());

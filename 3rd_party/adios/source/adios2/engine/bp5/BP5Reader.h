@@ -17,6 +17,7 @@
 #include "adios2/helper/adiosRangeFilter.h"
 #include "adios2/toolkit/format/bp5/BP5Deserializer.h"
 #include "adios2/toolkit/format/buffer/heap/BufferMalloc.h"
+#include "adios2/toolkit/kvcache/KVCacheCommon.h"
 #include "adios2/toolkit/remote/Remote.h"
 #include "adios2/toolkit/transportman/TransportMan.h"
 
@@ -44,8 +45,12 @@ public:
      */
     BP5Reader(IO &io, const std::string &name, const Mode mode, helper::Comm comm);
 
+    BP5Reader(IO &io, const std::string &name, const Mode mode, helper::Comm comm, const char *md,
+              const size_t mdsize);
+
     ~BP5Reader();
 
+    void GetMetadata(char **md, size_t *size) final;
     StepStatus BeginStep(StepMode mode = StepMode::Read, const float timeoutSeconds = -1.0) final;
 
     size_t CurrentStep() const final;
@@ -55,9 +60,11 @@ public:
     void PerformGets() final;
 
     MinVarInfo *MinBlocksInfo(const VariableBase &, const size_t Step) const;
+    MinVarInfo *MinBlocksInfo(const VariableBase &, const size_t Step, const size_t WriterID,
+                              const size_t BlockID) const;
     bool VarShape(const VariableBase &Var, const size_t Step, Dims &Shape) const;
     bool VariableMinMax(const VariableBase &, const size_t Step, MinMaxStruct &MinMax);
-    const char *VariableExprStr(const VariableBase &Var);
+    std::string VariableExprStr(const VariableBase &Var);
     void SetFlattenMode(bool flatten) { m_FlattenSteps = flatten; };
 
 private:
@@ -95,9 +102,16 @@ private:
     /* transport manager for managing the active flag file */
     transportman::TransportMan m_ActiveFlagFileManager;
     bool m_dataIsRemote = false;
-    Remote m_Remote;
+    std::shared_ptr<Remote> m_Remote;
     bool m_WriterIsActive = true;
     adios2::profiling::JSONProfiler m_JSONProfiler;
+
+    /* KVCache for remote data */
+    kvcache::KVCacheCommon m_KVCache;
+    std::unordered_map<std::string, MinVarInfo *> MinBlocksInfoMap;
+
+    /* Fingerprint to verify local validity against remote data */
+    std::string m_Fingerprint = "";
 
     /** used for per-step reads, TODO: to be moved to BP5Deserializer */
     size_t m_CurrentStep = 0;
@@ -116,10 +130,12 @@ private:
     Minifooter m_Minifooter;
 
     bool m_InitialWriterActiveCheckDone = false;
+    bool m_ReadMetadataFromFile = true;
 
     void Init();
     void InitParameters();
     void InitTransports();
+    void ProcessMetadataFromMemory(const char *md);
 
     /* Sleep up to pollSeconds time if we have not reached timeoutInstant.
      * Return true if slept
@@ -232,6 +248,7 @@ private:
 
     void InstallMetaMetaData(format::BufferSTL MetaMetadata);
     void InstallMetadataForTimestep(size_t Step);
+    void ParallelInstallMetadataForTimestep(size_t Step);
     std::pair<double, double> ReadData(adios2::transportman::TransportMan &FileManager,
                                        const size_t maxOpenFiles, const size_t WriterRank,
                                        const size_t Timestep, const size_t StartOffset,
@@ -253,6 +270,8 @@ private:
     void PerformLocalGets();
 
     void PerformRemoteGets();
+
+    void PerformRemoteGetsWithKVCache();
 
     void DestructorClose(bool Verbose) noexcept;
 

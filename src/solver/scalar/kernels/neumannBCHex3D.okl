@@ -31,7 +31,7 @@
     s_lhsU[j][i] = 0;                                                                                        \
     if (bcType == p_bcType_udfNeumann || bcType == p_bcType_udfRobin) {                                      \
       struct bcData bc;                                                                                      \
-      _strcpy(bc.fieldName, name);                                                                           \
+      _strcpy(bc.fieldName, name + scalarId*nameOffset);                                                     \
       bc.idxVol = vmapM[sk];                                                                                 \
       bc.time = time;                                                                                        \
       bc.id = EToBM[face + p_Nfaces * e];                                                                    \
@@ -64,14 +64,16 @@
         udfRobin(&bc);                                                                                       \
         bc.fluxScalar = bc.h * bc.sInfScalar;                                                                \
         s_lhsU[j][i] = bc.h * WsJ * sgeo[sk * p_Nsgeo + p_IJWID];                                            \
+      } else {                                                                                               \
+        udfNeumann(&bc);                                                                                     \
       }                                                                                                      \
-      udfNeumann(&bc);                                                                                       \
       s_ndU[j][i] = -WsJ * bc.fluxScalar;                                                                    \
     }                                                                                                        \
   }
 
 // RHS contributions for continuous solver
 @kernel void neumannBCHex3D(@ restrict const char *name,
+                            const int nameOffset,
                             const dlong Nelements,
                             const dlong Nscalars,
                             @ restrict const dfloat *sgeo,
@@ -271,7 +273,9 @@
           for (int k = 0; k < p_Nq; k++) {
             const dlong id = e * p_Np + k * p_Nq * p_Nq + j * p_Nq + i;
             rhsU[id + scalarId * outputOffset] -= r_rhsU[k];
+#if p_lhs
             lhsU[id + scalarId * outputOffset] = r_lhsU[k];
+#endif
           }
         }
       }

@@ -1,48 +1,39 @@
 #ifndef ADIOS2_DERIVED_Function_H_
 #define ADIOS2_DERIVED_Function_H_
 
-#include "ExprHelper.h"
-#include "adios2/common/ADIOSTypes.h"
-#include "adios2/helper/adiosLog.h"
-#include <functional>
+#include "DerivedData.h"
 
 namespace adios2
 {
 namespace derived
 {
+DerivedData AddFunc(ExprData input);
+DerivedData SubtractFunc(ExprData input);
+DerivedData SinFunc(ExprData input);
+DerivedData CosFunc(ExprData input);
+DerivedData TanFunc(ExprData input);
+DerivedData AsinFunc(ExprData input);
+DerivedData AcosFunc(ExprData input);
+DerivedData AtanFunc(ExprData input);
+DerivedData MultFunc(ExprData input);
+DerivedData DivFunc(ExprData input);
+DerivedData SqrtFunc(ExprData input);
+DerivedData PowFunc(ExprData input);
+DerivedData MagnitudeFunc(ExprData input);
+DerivedData Cross3DFunc(ExprData input);
+DerivedData Curl3DFunc(ExprData input);
 
-struct DerivedData
-{
-    void *Data;
-    Dims Start;
-    Dims Count;
-};
+std::tuple<Dims, Dims, Dims> SameDimsFunc(std::vector<std::tuple<Dims, Dims, Dims>> input,
+                                          bool constants);
+std::tuple<Dims, Dims, Dims> SameDimsWithAgrFunc(std::vector<std::tuple<Dims, Dims, Dims>> input,
+                                                 bool constants);
+std::tuple<Dims, Dims, Dims> Cross3DDimsFunc(std::vector<std::tuple<Dims, Dims, Dims>> input,
+                                             bool constants);
+std::tuple<Dims, Dims, Dims> CurlDimsFunc(std::vector<std::tuple<Dims, Dims, Dims>> input,
+                                          bool constants);
 
-struct OperatorFunctions
-{
-    std::function<DerivedData(std::vector<DerivedData>, DataType)> ComputeFct;
-    std::function<Dims(std::vector<Dims>)> DimsFct;
-};
-
-DerivedData AddFunc(std::vector<DerivedData> input, DataType type);
-DerivedData MagnitudeFunc(std::vector<DerivedData> input, DataType type);
-DerivedData Curl3DFunc(std::vector<DerivedData> input, DataType type);
-
-template <class T>
-T linear_interp(T *data, size_t index, size_t count, size_t stride = 1);
-
-Dims SameDimsFunc(std::vector<Dims> input);
-Dims CurlDimsFunc(std::vector<Dims> input);
-
-const std::map<adios2::detail::ExpressionOperator, OperatorFunctions> OpFunctions = {
-    {adios2::detail::ExpressionOperator::OP_ADD, {AddFunc, SameDimsFunc}},
-    {adios2::detail::ExpressionOperator::OP_CURL, {Curl3DFunc, CurlDimsFunc}},
-    {adios2::detail::ExpressionOperator::OP_MAGN, {MagnitudeFunc, SameDimsFunc}}};
-
-template <class T>
-T *ApplyOneToOne(std::vector<DerivedData> inputData, size_t dataSize,
-                 std::function<T(T, T)> compFct);
-
+DataType SameTypeFunc(DataType input);
+DataType FloatTypeFunc(DataType input);
 }
 }
 #endif

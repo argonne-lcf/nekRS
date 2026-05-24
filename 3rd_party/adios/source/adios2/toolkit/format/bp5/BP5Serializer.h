@@ -57,6 +57,7 @@ public:
     void Marshal(void *Variable, const char *Name, const DataType Type, size_t ElemSize,
                  size_t DimCount, const size_t *Shape, const size_t *Count, const size_t *Offsets,
                  const void *Data, bool Sync, BufferV::BufferPos *span);
+    size_t PutCount(void *Variable);
     /*
      * BP5 has two attribute marshalling methods.  The first,
      * MarshallAttribute(), creates new MetaMetadata whenever a new
@@ -137,8 +138,9 @@ public:
     size_t m_PreMetaMetadataFileLength = 0;
 
     size_t m_BufferAlign = 1; // align buffers in memory
-    // align buffers to integer multiples of block size
-    size_t m_BufferBlockSize = sizeof(max_align_t);
+    // force buffer sizes to integer multiples of block size.
+    // size once was sizeof(max_align_t), changed for predictability across platforms
+    size_t m_BufferBlockSize = 16;
 
 private:
     void Init();

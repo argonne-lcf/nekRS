@@ -44,9 +44,14 @@ if (NEKRS_BUILD_FLOAT)
   endif()
 endif()
 
-target_include_directories(nekrs-lib PUBLIC ${CMAKE_CURRENT_BINARY_DIR} src src/lib ${APP_INCLUDE} ${SOLVER_INCLUDE} ${CORE_INCLUDE} ${PLATFORM_INCLUDE}) 
+target_include_directories(nekrs-lib PUBLIC ${CMAKE_CURRENT_BINARY_DIR} src src/lib ${APP_INCLUDE} ${SOLVER_INCLUDE})
+target_include_directories(nekrs-lib PUBLIC ${CORE_INCLUDE})
+target_include_directories(nekrs-lib PUBLIC ${PLATFORM_INCLUDE})
+
 if (NEKRS_BUILD_FLOAT)
-  target_include_directories(nekrs-lib-fp32 PUBLIC ${CMAKE_CURRENT_BINARY_DIR} src src/lib ${APP_INCLUDE} ${SOLVER_INCLUDE} ${CORE_INCLUDE} ${PLATFORM_INCLUDE}) 
+  target_include_directories(nekrs-lib-fp32 PUBLIC ${CMAKE_CURRENT_BINARY_DIR} src src/lib ${APP_INCLUDE} ${SOLVER_INCLUDE}) 
+  target_include_directories(nekrs-lib-fp32 PUBLIC ${CORE_INCLUDE})
+  target_include_directories(nekrs-lib-fp32 PUBLIC ${PLATFORM_INCLUDE})
   target_compile_definitions(nekrs-lib-fp32 PUBLIC NEKRS_USE_DFLOAT_FLOAT)
 endif()
 

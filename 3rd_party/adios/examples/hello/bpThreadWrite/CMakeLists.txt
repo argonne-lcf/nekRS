@@ -6,7 +6,9 @@
 cmake_minimum_required(VERSION 3.12)
 project(ADIOS2HelloThreadWriteExample)
 
+set(maybe_standalone_project OFF)
 if(NOT TARGET adios2_core)
+  set(maybe_standalone_project ON)
   set(_components CXX)
 
   find_package(Threads QUIET)
@@ -16,6 +18,8 @@ endif()
 
 if(Threads_FOUND)
   add_executable(adios2_hello_bpThreadWrite bpThreadWrite.cpp)
-  target_link_libraries(adios2_hello_bpThreadWrite adios2::cxx11 ${CMAKE_THREAD_LIBS_INIT})
-  install(TARGETS adios2_hello_bpThreadWrite RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR})
+  target_link_libraries(adios2_hello_bpThreadWrite adios2::cxx ${CMAKE_THREAD_LIBS_INIT})
+  if (maybe_standalone_project)
+    install(TARGETS adios2_hello_bpThreadWrite RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR})
+  endif()
 endif()

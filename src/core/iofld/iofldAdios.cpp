@@ -41,6 +41,9 @@ void iofldAdios::openEngine()
       return filename.compare(filename.length() - extension.length(), extension.length(), extension) == 0;
     };
 
+    if (!folderName.empty()) {
+      fileNameBase = folderName + fileNameBase;
+    }
     if (!endsWithBp(fileNameBase)) {
       fileNameBase += extension;
     }

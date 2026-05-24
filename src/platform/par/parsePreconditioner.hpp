@@ -53,6 +53,7 @@ void parseCoarseSolver(const int rank, setupAide &options, inipp::Ini *ini, std:
       {"smoother"},
       {"jpcg"},
       {"boomeramg"},
+      {"xxt"},
 //      {"amgx"},
       {"combined"},
       {"maxiter"},
@@ -73,7 +74,9 @@ void parseCoarseSolver(const int rank, setupAide &options, inipp::Ini *ini, std:
 
   const int amgx = p_coarseSolver.find("amgx") != std::string::npos;
   const int boomer = p_coarseSolver.find("boomeramg") != std::string::npos;
-  if (amgx + boomer > 1) {
+  const int xxt = p_coarseSolver.find("xxt") != std::string::npos;
+
+  if (xxt + boomer > 1) {
     append_error("Conflicting solver types in coarseSolver!\n");
   }
 
@@ -95,8 +98,6 @@ void parseCoarseSolver(const int rank, setupAide &options, inipp::Ini *ini, std:
         append_error("AMGX was requested but is not enabled!\n");
       }
     }
-
-    options.setArgs(parSectionName + "MULTIGRID COARSE SOLVER PRECISION", "FP32");
 
     options.setArgs(parSectionName + "MULTIGRID COARSE SOLVER LOCATION", "CPU");
     if (options.compareArgs(parSectionName + "PRECONDITIONER", "SEMFEM")) {
@@ -143,16 +144,25 @@ void parseCoarseSolver(const int rank, setupAide &options, inipp::Ini *ini, std:
       options.setArgs(parSectionName + "MULTIGRID COARSE SOLVER", val + upperCase("+COMBINED"));
     }
 
-    options.removeArgs(parSectionName + "MULTIGRID COARSE SOLVER PRECISION");
     options.removeArgs(parSectionName + "MULTIGRID COARSE SOLVER LOCATION");
+  } else if (xxt) {
+    options.setArgs(parSectionName + "MULTIGRID COARSE SOLVER", "XXT");
+    options.setArgs(parSectionName + "MULTIGRID COARSE SOLVER LOCATION", "CPU");
+    options.setArgs(parSectionName + "GALERKIN COARSE OPERATOR", "TRUE");
+    if (options.compareArgs(parSectionName + "MULTIGRID COARSE SOLVER LOCATION", "DEVICE")) {
+      append_error("XXT on DEVICE is not supported!\n");
+    }
+    if (options.compareArgs(parSectionName + "MGSOLVER CYCLE", "OVERLAPCRS")) {
+      append_error("Overlapping XXT solve is not supported!\n");
+    }
   } else {
     options.setArgs(parSectionName + "MULTIGRID COARSE SOLVER", "SMOOTHER");
-    options.removeArgs(parSectionName + "MULTIGRID COARSE SOLVER PRECISION");
     options.removeArgs(parSectionName + "MULTIGRID COARSE SOLVER LOCATION");
     if (options.compareArgs(parSectionName + "MGSOLVER CYCLE", "OVERLAPCRS")) {
       append_error("Overlap qualifier invalid if coarse solver is smoother!\n");
     }
   }
+
 
   if (amgx && options.compareArgs(parSectionName + "MULTIGRID COARSE SOLVER LOCATION", "CPU")) {
     append_error("AMGX on CPU is not supported!\n");
@@ -209,7 +219,7 @@ void parseSmoother(const int rank, setupAide &options, inipp::Ini *ini, std::str
 
   if (options.compareArgs(parSection + "PRECONDITIONER", "MULTIGRID")) {
     options.setArgs(parSection + "MULTIGRID SMOOTHER", "FOURTHOPTCHEBYSHEV+DAMPEDJACOBI");
-    options.setArgs(parSection + "MULTIGRID CHEBYSHEV DEGREE", "1");
+    options.setArgs(parSection + "MULTIGRID CHEBYSHEV DEGREE", "3");
     options.setArgs(parSection + "MULTIGRID CHEBYSHEV MAX EIGENVALUE BOUND FACTOR", "1.1");
     if (parScope == "fluid pressure") {
       if (options.compareArgs(parSection + "PRECONDITIONER", "MULTIGRID+SEMFEM")) {

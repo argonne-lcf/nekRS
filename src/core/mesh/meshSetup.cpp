@@ -82,9 +82,10 @@ occa::properties meshKernelProperties(int N)
                  "p_Nfaces"] = Nfaces;
   meshProperties["defines/"
                  "p_NfacesNfp"] = Nfp * Nfaces;
-
   meshProperties["defines/"
                  "p_Nvgeo"] = Nvgeo;
+  meshProperties["defines/"
+                 "p_Ncubvgeo"] = Ncubvgeo;
   meshProperties["defines/"
                  "p_Nsgeo"] = Nsgeo;
   meshProperties["defines/"
@@ -224,10 +225,6 @@ std::pair<mesh_t *, mesh_t *> createMesh(MPI_Comm comm, int N, int cubN, occa::p
     return nelgt != nelgv;
   }();
 
-  if (platform->comm.mpiRank() == 0) {
-    printf("generating mesh ...\n");
-  }
-
   meshNekReaderHex3D(N, mesh);
 
   nekrsCheck(static_cast<size_t>(mesh->Nelements) * mesh->Nvgeo * cubN > std::numeric_limits<int>::max(),
@@ -244,7 +241,7 @@ std::pair<mesh_t *, mesh_t *> createMesh(MPI_Comm comm, int N, int cubN, occa::p
   if (platform->comm.mpiRank() == 0) {
     printf("polynomial order N: %d", mesh->N);
     if (cubN) {
-      printf(", over-integration order cubN: %d", mesh->cubNq - 1);
+      printf(", over-integration polynomial order: %d", mesh->cubNq - 1);
     }
     printf("\n");
   }
@@ -408,12 +405,11 @@ mesh_t *createMeshMG(mesh_t *_mesh, int Nc)
   mesh->o_vgeo.free();
 
   {
-    const auto length = mesh->o_ggeo.length();
-    auto o_tmp = platform->device.malloc<dfloat>(length);
+    auto o_tmp = platform->device.malloc<dfloat>(mesh->o_ggeo.size());
     mesh->o_ggeo.copyTo(o_tmp);
     mesh->o_ggeo.free();
-    mesh->o_ggeo = platform->device.malloc<pfloat>(length);
-    platform->copyDfloatToPfloatKernel(length, o_tmp, mesh->o_ggeo);
+    mesh->o_ggeo = platform->device.malloc<pfloat>(o_tmp.size());
+    platform->copyDfloatToPfloatKernel(o_tmp.size(), o_tmp, mesh->o_ggeo);
   }
 
   {

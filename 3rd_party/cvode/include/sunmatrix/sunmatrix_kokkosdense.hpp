@@ -2,8 +2,11 @@
  * Programmer(s): David J. Gardner @ LLNL
  * -----------------------------------------------------------------------------
  * SUNDIALS Copyright Start
- * Copyright (c) 2002-2022, Lawrence Livermore National Security
+ * Copyright (c) 2025-2026, Lawrence Livermore National Security,
+ * University of Maryland Baltimore County, and the SUNDIALS contributors.
+ * Copyright (c) 2013-2025, Lawrence Livermore National Security
  * and Southern Methodist University.
+ * Copyright (c) 2002-2013, Lawrence Livermore National Security.
  * All rights reserved.
  *
  * See the top-level LICENSE and NOTICE files for details.
@@ -46,7 +49,7 @@ inline MatrixType* GetDenseMat(SUNMatrix A)
 
 namespace impl {
 
-SUNMatrix_ID SUNMatGetID_KokkosDense(SUNMatrix A)
+static SUNMatrix_ID SUNMatGetID_KokkosDense(SUNMatrix A)
 {
   return SUNMATRIX_KOKKOSDENSE;
 }
@@ -56,7 +59,7 @@ SUNMatrix SUNMatClone_KokkosDense(SUNMatrix A)
 {
   auto A_mat{GetDenseMat<MatrixType>(A)};
   auto new_mat{new MatrixType(*A_mat)};
-  return new_mat->Convert();
+  return new_mat->get();
 }
 
 template<class MatrixType>
@@ -68,7 +71,7 @@ void SUNMatDestroy_KokkosDense(SUNMatrix A)
 }
 
 template<class MatrixType>
-int SUNMatZero_KokkosDense(SUNMatrix A)
+SUNErrCode SUNMatZero_KokkosDense(SUNMatrix A)
 {
   auto A_mat{GetDenseMat<MatrixType>(A)};
 
@@ -89,11 +92,11 @@ int SUNMatZero_KokkosDense(SUNMatrix A)
       A_data(i, j, k) = SUN_RCONST(0.0);
     });
 
-  return SUNMAT_SUCCESS;
+  return SUN_SUCCESS;
 }
 
 template<class MatrixType>
-int SUNMatCopy_KokkosDense(SUNMatrix A, SUNMatrix B)
+SUNErrCode SUNMatCopy_KokkosDense(SUNMatrix A, SUNMatrix B)
 {
   auto A_mat{GetDenseMat<MatrixType>(A)};
   auto B_mat{GetDenseMat<MatrixType>(B)};
@@ -116,11 +119,11 @@ int SUNMatCopy_KokkosDense(SUNMatrix A, SUNMatrix B)
       B_data(i, j, k) = A_data(i, j, k);
     });
 
-  return SUNMAT_SUCCESS;
+  return SUN_SUCCESS;
 }
 
 template<class MatrixType>
-int SUNMatScaleAdd_KokkosDense(sunrealtype c, SUNMatrix A, SUNMatrix B)
+SUNErrCode SUNMatScaleAdd_KokkosDense(sunrealtype c, SUNMatrix A, SUNMatrix B)
 {
   auto A_mat{GetDenseMat<MatrixType>(A)};
   auto B_mat{GetDenseMat<MatrixType>(B)};
@@ -143,11 +146,11 @@ int SUNMatScaleAdd_KokkosDense(sunrealtype c, SUNMatrix A, SUNMatrix B)
       A_data(i, j, k) = c * A_data(i, j, k) + B_data(i, j, k);
     });
 
-  return SUNMAT_SUCCESS;
+  return SUN_SUCCESS;
 }
 
 template<class MatrixType>
-int SUNMatScaleAddI_KokkosDense(sunrealtype c, SUNMatrix A)
+SUNErrCode SUNMatScaleAddI_KokkosDense(sunrealtype c, SUNMatrix A)
 {
   auto A_mat{GetDenseMat<MatrixType>(A)};
 
@@ -169,11 +172,11 @@ int SUNMatScaleAddI_KokkosDense(sunrealtype c, SUNMatrix A)
       else A_data(i, j, k) = c * A_data(i, j, k);
     });
 
-  return SUNMAT_SUCCESS;
+  return SUN_SUCCESS;
 }
 
 template<class VectorType, class MatrixType>
-int SUNMatMatvec_KokkosDense(SUNMatrix A, N_Vector x, N_Vector y)
+SUNErrCode SUNMatMatvec_KokkosDense(SUNMatrix A, N_Vector x, N_Vector y)
 {
   auto A_mat{GetDenseMat<MatrixType>(A)};
   auto x_vec{GetVec<VectorType>(x)};
@@ -210,7 +213,11 @@ int SUNMatMatvec_KokkosDense(SUNMatrix A, N_Vector x, N_Vector y)
           Kokkos::subview(y_data,
                           Kokkos::pair<size_type, size_type>(idx * rows,
                                                              (idx + 1) * rows));
+#if KOKKOSKERNELS_VERSION_MAJOR > 3
+        KokkosBlas::TeamVectorGemv<
+#else
         KokkosBatched::TeamVectorGemv<
+#endif
           member_type, KokkosBatched::Trans::NoTranspose,
           KokkosBatched::Algo::Gemv::Unblocked>::invoke(team_member,
                                                         SUN_RCONST(1.0),
@@ -226,7 +233,7 @@ int SUNMatMatvec_KokkosDense(SUNMatrix A, N_Vector x, N_Vector y)
                      y_data);
   }
 
-  return SUNMAT_SUCCESS;
+  return SUN_SUCCESS;
 }
 
 } // namespace impl
@@ -363,16 +370,16 @@ public:
   // Override the ConvertibleTo methods
 
   // Implicit conversion to a SUNMatrix
-  operator SUNMatrix() override { return object_.get(); }
+  operator SUNMatrix() noexcept override { return object_.get(); }
 
   // Implicit conversion to SUNMatrix
-  operator SUNMatrix() const override { return object_.get(); }
+  operator SUNMatrix() const noexcept override { return object_.get(); }
 
   // Explicit conversion to a SUNMatrix
-  SUNMatrix Convert() override { return object_.get(); }
+  SUNMatrix get() noexcept override { return object_.get(); }
 
   // Explicit conversion to a SUNMatrix
-  SUNMatrix Convert() const override { return object_.get(); }
+  SUNMatrix get() const noexcept override { return object_.get(); }
 
 private:
   exec_space exec_space_; // Kokkos execution space

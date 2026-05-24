@@ -9,7 +9,7 @@ SEMFEMSolver_t::SEMFEMSolver_t(elliptic_t *elliptic_)
   auto mesh = elliptic->mesh;
 
   const int verbose = (platform->verbose()) ? 1 : 0;
-  const int useFP32 = elliptic->options.compareArgs("MULTIGRID COARSE SOLVER PRECISION", "FP32");
+  const int useFP32 = std::is_same_v<pfloat, float>; 
   const bool useDevice = elliptic->options.compareArgs("MULTIGRID COARSE SOLVER LOCATION", "DEVICE");
 
   MPI_Barrier(platform->comm.mpiComm());

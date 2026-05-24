@@ -184,7 +184,7 @@ struct COOGraph {
   std::vector<long long> rowOffsets;
   std::vector<int> ncols; // size of each column
   std::vector<long long> cols;
-  std::vector<float> vals;
+  std::vector<pfloat> vals;
 };
 
 COOGraph construct_coo_graph();

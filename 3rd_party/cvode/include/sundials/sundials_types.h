@@ -3,8 +3,11 @@
  *                Aaron Collier, and Slaven Peles @ LLNL
  * -----------------------------------------------------------------
  * SUNDIALS Copyright Start
- * Copyright (c) 2002-2022, Lawrence Livermore National Security
+ * Copyright (c) 2025-2026, Lawrence Livermore National Security,
+ * University of Maryland Baltimore County, and the SUNDIALS contributors.
+ * Copyright (c) 2013-2025, Lawrence Livermore National Security
  * and Southern Methodist University.
+ * Copyright (c) 2002-2013, Lawrence Livermore National Security.
  * All rights reserved.
  *
  * See the top-level LICENSE and NOTICE files for details.
@@ -48,13 +51,16 @@
 #ifndef _SUNDIALS_TYPES_H
 #define _SUNDIALS_TYPES_H
 
-#include <sundials/sundials_config.h>
-
 #include <float.h>
 #include <stddef.h>
 #include <stdint.h>
+#include <sundials/sundials_config.h>
 
-#ifdef __cplusplus  /* wrapper to enable C++ usage */
+#if SUNDIALS_MPI_ENABLED
+#include <mpi.h>
+#endif
+
+#ifdef __cplusplus /* wrapper to enable C++ usage */
 extern "C" {
 #endif
 
@@ -81,53 +87,45 @@ extern "C" {
  *------------------------------------------------------------------
  */
 
+#define SUN_STRING_HELPER(x) #x
+#define SUN_STRING(x)        SUN_STRING_HELPER(x)
+
 #if defined(SUNDIALS_SINGLE_PRECISION)
 
-/* deprecated */
-typedef float realtype;
-# define RCONST(x) x##F
-# define BIG_REAL FLT_MAX
-# define SMALL_REAL FLT_MIN
-# define UNIT_ROUNDOFF FLT_EPSILON
-
 typedef float sunrealtype;
-# define SUN_RCONST(x) x##F
-# define SUN_BIG_REAL FLT_MAX
-# define SUN_SMALL_REAL FLT_MIN
-# define SUN_UNIT_ROUNDOFF FLT_EPSILON
+#define SUN_RCONST(x)     x##F
+#define SUN_BIG_REAL      FLT_MAX
+#define SUN_SMALL_REAL    FLT_MIN
+#define SUN_UNIT_ROUNDOFF FLT_EPSILON
+// TODO(SBR): In C11, FLT_DECIMAL_DIG may be a better choice
+#define SUN_FORMAT_E "% ." SUN_STRING(FLT_DIG) "e"
+#define SUN_FORMAT_G "%." SUN_STRING(FLT_DIG) "g"
+// TODO(SBR): This can probably be removed once a complex format macro is added
+#define SUN_FORMAT_SG "%+." SUN_STRING(FLT_DIG) "g"
 
 #elif defined(SUNDIALS_DOUBLE_PRECISION)
 
-/* deprecated */
-typedef double realtype;
-# define RCONST(x) x
-# define BIG_REAL DBL_MAX
-# define SMALL_REAL DBL_MIN
-# define UNIT_ROUNDOFF DBL_EPSILON
-
 typedef double sunrealtype;
-# define SUN_RCONST(x) x
-# define SUN_BIG_REAL DBL_MAX
-# define SUN_SMALL_REAL DBL_MIN
-# define SUN_UNIT_ROUNDOFF DBL_EPSILON
+#define SUN_RCONST(x)     x
+#define SUN_BIG_REAL      DBL_MAX
+#define SUN_SMALL_REAL    DBL_MIN
+#define SUN_UNIT_ROUNDOFF DBL_EPSILON
+#define SUN_FORMAT_E      "% ." SUN_STRING(DBL_DIG) "e"
+#define SUN_FORMAT_G      "%." SUN_STRING(DBL_DIG) "g"
+#define SUN_FORMAT_SG     "%+." SUN_STRING(DBL_DIG) "g"
 
 #elif defined(SUNDIALS_EXTENDED_PRECISION)
 
-/* deprecated */
-typedef long double realtype;
-# define RCONST(x) x##L
-# define BIG_REAL LDBL_MAX
-# define SMALL_REAL LDBL_MIN
-# define UNIT_ROUNDOFF LDBL_EPSILON
-
 typedef long double sunrealtype;
-# define SUN_RCONST(x) x##L
-# define SUN_BIG_REAL LDBL_MAX
-# define SUN_SMALL_REAL LDBL_MIN
-# define SUN_UNIT_ROUNDOFF LDBL_EPSILON
+#define SUN_RCONST(x)     x##L
+#define SUN_BIG_REAL      LDBL_MAX
+#define SUN_SMALL_REAL    LDBL_MIN
+#define SUN_UNIT_ROUNDOFF LDBL_EPSILON
+#define SUN_FORMAT_E      "% ." SUN_STRING(LDBL_DIG) "Le"
+#define SUN_FORMAT_G      "%." SUN_STRING(LDBL_DIG) "Lg"
+#define SUN_FORMAT_SG     "%+." SUN_STRING(LDBL_DIG) "Lg"
 
 #endif
-
 
 /*
  *------------------------------------------------------------------
@@ -141,6 +139,16 @@ typedef long double sunrealtype;
  */
 
 typedef SUNDIALS_INDEX_TYPE sunindextype;
+
+/*
+ *------------------------------------------------------------------
+ * Type : suncountertype
+ *------------------------------------------------------------------
+ * Defines integer type to be used for counters within sundials.
+ *------------------------------------------------------------------
+ */
+
+typedef SUNDIALS_COUNTER_TYPE suncountertype;
 
 /*
  *------------------------------------------------------------------
@@ -159,11 +167,6 @@ typedef SUNDIALS_INDEX_TYPE sunindextype;
  *------------------------------------------------------------------
  */
 
-/* deprecated */
-#ifndef booleantype
-#define booleantype int
-#endif
-
 #ifndef sunbooleantype
 #define sunbooleantype int
 #endif
@@ -178,19 +181,104 @@ typedef SUNDIALS_INDEX_TYPE sunindextype;
 
 /*
  *------------------------------------------------------------------
- * Type : sunoutputformat
+ * Type : SUNOutputFormat
  *------------------------------------------------------------------
  * Constants for different output formats
  *------------------------------------------------------------------
  */
 
-typedef enum {
+enum SUNOutputFormat
+{
   SUN_OUTPUTFORMAT_TABLE,
   SUN_OUTPUTFORMAT_CSV
-} SUNOutputFormat;
+};
+
+#ifndef SWIG
+typedef enum SUNOutputFormat SUNOutputFormat;
+#endif
+
+/*
+ *------------------------------------------------------------------
+ * Type : SUNErrCode
+ *------------------------------------------------------------------
+ * Error code type
+ *------------------------------------------------------------------
+ */
+
+typedef int SUNErrCode;
+
+/* -----------------------------------------------------------------------------
+ * Forward declarations of SUNDIALS objects
+ * ---------------------------------------------------------------------------*/
+
+/* SUNDIALS context -- see sundials_context_impl.h */
+typedef struct SUNContext_* SUNContext;
+
+/* SUNDIALS error handler -- see sundials_errors.h */
+typedef struct SUNErrHandler_* SUNErrHandler;
+
+/* SUNDIALS profiler */
+typedef struct SUNProfiler_* SUNProfiler;
+
+/* SUNDIALS logger */
+typedef struct SUNLogger_* SUNLogger;
+
+/* -----------------------------------------------------------------------------
+ * SUNDIALS function types
+ * ---------------------------------------------------------------------------*/
+
+/* Error handler function */
+typedef void (*SUNErrHandlerFn)(int line, const char* func, const char* file,
+                                const char* msg, SUNErrCode err_code,
+                                void* err_user_data, SUNContext sunctx);
+
+/*
+ *------------------------------------------------------------------
+ * Type : SUNComm
+ *------------------------------------------------------------------
+ * SUNComm replaces MPI_Comm use in SUNDIALS code. It maps to
+ * MPI_Comm when MPI is enabled.
+ *------------------------------------------------------------------
+ */
+
+/* We don't define SUN_COMM_NULL when SWIG is processing the header
+    because we manually insert the wrapper code for SUN_COMM_NULL
+    (and %ignoring it in the SWIG code doesn't seem to work). */
+
+#ifndef SWIG
+#define SUN_COMM_NULL 0
+#endif
+
+#if SUNDIALS_MPI_ENABLED
+#ifndef SWIG
+#undef SUN_COMM_NULL
+#define SUN_COMM_NULL MPI_COMM_NULL
+#endif
+typedef MPI_Comm SUNComm;
+#else
+typedef int SUNComm;
+#endif
 
 #ifdef __cplusplus
 }
 #endif
 
-#endif  /* _SUNDIALS_TYPES_H */
+/*
+ *------------------------------------------------------------------
+ * Type : SUNDataIOMode
+ *------------------------------------------------------------------
+ * Type that controls IO modes for certain data operations, notably
+ * checkpoints for adjoints.
+ *------------------------------------------------------------------
+ */
+
+enum SUNDataIOMode
+{
+  SUNDATAIOMODE_INMEM,
+};
+
+#ifndef SWIG
+typedef enum SUNDataIOMode SUNDataIOMode;
+#endif
+
+#endif /* _SUNDIALS_TYPES_H */

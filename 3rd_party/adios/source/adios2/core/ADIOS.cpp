@@ -25,10 +25,6 @@
 
 #include <adios2-perfstubs-interface.h>
 
-// callbacks
-#include "adios2/operator/callback/Signature1.h"
-#include "adios2/operator/callback/Signature2.h"
-
 #ifdef ADIOS2_HAVE_AWSSDK
 #include <aws/core/Aws.h>
 #include <aws/core/utils/logging/LogLevel.h>
@@ -102,13 +98,21 @@ public:
 };
 
 ADIOS::GlobalServices ADIOS::m_GlobalServices;
+adios2::HostOptions *StaticHostOptions = nullptr;
+static std::mutex StaticHostOptionsMutex;
 
 std::mutex PerfStubsMutex;
 static std::atomic_uint adios_refcount(0); // adios objects at the same time
 static std::atomic_uint adios_count(0);    // total adios objects during runtime
 
-/** User defined options from ~/.config/adios2/adios2.yaml if it exists */
+/** User defined options from ~/.config/adios2/adios2.yaml and ~/.config/hpc-campaign/config.yaml if
+ * they exist */
 const adios2::UserOptions &ADIOS::GetUserOptions() { return m_UserOptions; };
+
+/** A constant reference to the host options from ~/.config/hpc-campaign/hosts.yaml */
+const adios2::HostOptions &ADIOS::GetHostOptions() { return m_HostOptions; };
+/** A constant reference to the host options from ~/.config/hpc-campaign/hosts.yaml */
+const adios2::HostOptions &ADIOS::StaticGetHostOptions() { return *StaticHostOptions; };
 
 ADIOS::ADIOS(const std::string configFile, helper::Comm comm, const std::string hostLanguage)
 : m_HostLanguage(hostLanguage), m_Comm(std::move(comm)), m_ConfigFile(configFile),
@@ -129,6 +133,7 @@ ADIOS::ADIOS(const std::string configFile, helper::Comm comm, const std::string 
     }
 #endif
     ProcessUserConfig();
+    ProcessHostConfig();
     if (!configFile.empty())
     {
         if (!adios2sys::SystemTools::FileExists(configFile))
@@ -204,10 +209,38 @@ void ADIOS::ProcessUserConfig()
     homePath = getenv("HOME");
 #endif
     SetUserOptionDefaults();
-    const std::string cfgFile = homePath + "/.config/adios2/adios2.yaml";
+    const std::string cfgFile = homePath + PathSeparator + ".config" + PathSeparator + "adios2" +
+                                PathSeparator + "adios2.yaml";
     if (adios2sys::SystemTools::FileExists(cfgFile))
     {
         helper::ParseUserOptionsFile(m_Comm, cfgFile, m_UserOptions, homePath);
+    }
+    const std::string cfgFile2 = homePath + PathSeparator + ".config" + PathSeparator +
+                                 "hpc-campaign" + PathSeparator + "config.yaml";
+    if (adios2sys::SystemTools::FileExists(cfgFile2))
+    {
+        helper::ParseUserOptionsFile(m_Comm, cfgFile2, m_UserOptions, homePath);
+    }
+}
+
+void ADIOS::ProcessHostConfig()
+{
+    // read config parameters from config file
+    std::string homePath;
+#ifdef _WIN32
+    homePath = getenv("HOMEPATH");
+#else
+    homePath = getenv("HOME");
+#endif
+    const std::string cfgFile = homePath + PathSeparator + ".config" + PathSeparator +
+                                "hpc-campaign" + PathSeparator + "hosts.yaml";
+    if (adios2sys::SystemTools::FileExists(cfgFile))
+    {
+        helper::ParseHostOptionsFile(m_Comm, cfgFile, m_HostOptions, homePath);
+    }
+    {
+        std::lock_guard<std::mutex> lck(StaticHostOptionsMutex);
+        StaticHostOptions = &m_HostOptions;
     }
 }
 

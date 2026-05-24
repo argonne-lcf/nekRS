@@ -4,6 +4,10 @@
 
 void mesh_t::update()
 {
+  if (platform->comm.mpiRank() == 0 && platform->verbose()) {
+    std::cout << "updating mesh ...\n";
+  }
+
   {
     auto retVal = geometricFactors();
     nekrsCheck(retVal > 0,
@@ -17,5 +21,11 @@ void mesh_t::update()
 
   computeInvLMM();
 
-  surfaceGeometricFactors();
+  if (o_sgeo.isInitialized()) {
+    surfaceGeometricFactors();
+  }
+
+  if (o_cubvgeo.isInitialized()) {
+    cubatureGeometricFactors();
+  }
 }

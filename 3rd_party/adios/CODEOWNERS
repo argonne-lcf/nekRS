@@ -1,19 +1,20 @@
-# Caitlin's stuff
-plugins/ @caitlinross
+*.bash @ornladios/infrastructure
+*.json @ornladios/infrastructure
+*.toml @ornladios/infrastructure
+*.sh @ornladios/infrastructure
+*.yaml @ornladios/infrastructure
+*.yml @ornladios/infrastructure
 
-# Vicente's stuff
-*.bash @vicentebolea
-*.cmake @vicentebolea
-*.in @vicentebolea
-*.json @vicentebolea
-*.sh @vicentebolea
-*.yaml @vicentebolea
-*.yml @vicentebolea
-cmake/ @vicentebolea
-scripts/ @vicentebolea
-python/ @vicentebolea
-.github/ @vicentebolea
-.circleci/ @vicentebolea
+.gitlab/ @ornladios/infrastructure
+.github/ @ornladios/infrastructure
+.shellcheck_exclude_paths @ornladios/infrastructure
+
+cmake/ @ornladios/infrastructure
+python/ @ornladios/infrastructure
+scripts/ @ornladios/infrastructure
+thirdparty/ @ornladios/infrastructure
+
+plugins/ @caitlinross
 source/adios2/toolkit/sst/dp/mpi_dp.c @vicentebolea
 
 # GPU-aware specific files

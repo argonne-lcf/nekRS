@@ -29,7 +29,10 @@ SOFTWARE.
 #include "stdio.h"
 #include "timer.hpp"
 
+#include "hypreWrapper.hpp"
+#include "hypreWrapperDevice.hpp"
 #include "AMGX.hpp"
+#include "xxt.hpp"
 
 #include "platform.hpp"
 #include "linAlg.hpp"
@@ -43,6 +46,7 @@ MGSolver_t::coarseLevel_t::coarseLevel_t(const std::string &name_, setupAide opt
   options = options_;
   comm = comm_;
   solveOnHost = false;
+
   solvePtr = nullptr;
 }
 
@@ -75,11 +79,10 @@ void MGSolver_t::coarseLevel_t::updateMatrix(
 }
 
 void MGSolver_t::coarseLevel_t::setupSolver(
-    hlong *globalRowStarts,
-    dlong nnz,     //--
-    hlong *Ai,     //-- Local A matrix data (globally indexed, COO storage, row sorted)
-    hlong *Aj,     //--
-    dfloat *Avals, //--
+    const std::vector<hlong>& globalId,
+    const std::vector<hlong>& Ai,
+    const std::vector<hlong>& Aj,
+    const std::vector<dfloat>& Av,
     const occa::memory& o_weight_,
     ogs_t *ogs_,
     bool nullSpace)
@@ -94,15 +97,20 @@ void MGSolver_t::coarseLevel_t::setupSolver(
   MPI_Barrier(comm);
   double startTime = MPI_Wtime();
   if (rank == 0) {
-    printf("setup FEM solver ...");
+    printf("setup FEM solver ... ");
   }
   fflush(stdout);
 
-  N = (dlong)(globalRowStarts[rank + 1] - globalRowStarts[rank]);
+  const auto nnz = Av.size();
+  if (options.compareArgs("MULTIGRID COARSE SOLVER", "XXT")) {
+    N = globalId.size();
+  } else {
+    N = (dlong)(globalId[rank + 1] - globalId[rank]); // globalId stores starts of the global row ids for each rank
+  } 
 
   const int verbose = (platform->verbose()) ? 1 : 0;
   const bool useDevice = options.compareArgs("MULTIGRID COARSE SOLVER LOCATION", "DEVICE");
-  const int useFP32 = options.compareArgs("MULTIGRID COARSE SOLVER PRECISION", "FP32");
+  const int useFP32 = std::is_same_v<pfloat, float>;
 
   const std::string kernelName = "vectorDotStar";
   if (!vectorDotStarKernel.isInitialized()) {
@@ -122,9 +130,9 @@ void MGSolver_t::coarseLevel_t::setupSolver(
   o_weight.copyTo(h_weight, h_weight.size());
 
   // convert dfloat to double
-  std::vector<double> Av(nnz);
+  std::vector<double> AvDouble(nnz);
   for (int i = 0; i < Av.size(); i++) {
-    Av[i] = Avals[i];
+    AvDouble[i] = Av[i];
   }
 
   if (options.compareArgs("MULTIGRID COARSE SOLVER", "BOOMERAMG")) {
@@ -162,9 +170,9 @@ void MGSolver_t::coarseLevel_t::setupSolver(
     if (useDevice) {
       boomerAMG = new hypreWrapperDevice::boomerAMG_t(N,
                                                       nnz,
-                                                      Ai,
-                                                      Aj,
-                                                      Av.data(),
+                                                      Ai.data(),
+                                                      Aj.data(),
+                                                      AvDouble.data(),
                                                       (int)nullSpace,
                                                       comm,
                                                       platform->device.occaDevice(),
@@ -175,9 +183,9 @@ void MGSolver_t::coarseLevel_t::setupSolver(
       const int Nthreads = 1;
       boomerAMG = new hypreWrapper::boomerAMG_t(N,
                                                 nnz,
-                                                Ai,
-                                                Aj,
-                                                Av.data(),
+                                                Ai.data(),
+                                                Aj.data(),
+                                                AvDouble.data(),
                                                 (int)nullSpace,
                                                 comm,
                                                 Nthreads,
@@ -194,15 +202,30 @@ void MGSolver_t::coarseLevel_t::setupSolver(
     }
     AMGX = new AMGX_t(N,
                       nnz,
-                      Ai,
-                      Aj,
-                      Av.data(),
+                      Ai.data(),
+                      Aj.data(),
+                      AvDouble.data(),
                       (int)nullSpace,
                       comm,
                       platform->device.id(),
                       useFP32,
                       std::stoi(getenv("NEKRS_GPU_MPI")),
                       cfg);
+  } else if (options.compareArgs("MULTIGRID COARSE SOLVER", "XXT")) {
+    std::vector<dlong> _Ai(Ai.size());
+    std::vector<dlong> _Aj(Aj.size());
+    for (int i = 0; i < Ai.size(); i++) {
+      _Ai[i] = Ai[i];
+      _Aj[i] = Aj[i];
+    }
+
+    xxt = new xxt_t(globalId,
+                    _Ai, 
+                    _Aj, 
+                    Av, 
+                    nullSpace, 
+                    comm, 
+                    (bool) verbose); 
   } else {
     std::string amgSolver;
     options.getArgs("MULTIGRID COARSE SOLVER", amgSolver);
@@ -220,16 +243,18 @@ void MGSolver_t::coarseLevel_t::setupSolver(
 
 MGSolver_t::coarseLevel_t::~coarseLevel_t()
 {
-  const auto useDevice = options.compareArgs("MULTIGRID COARSE SOLVER LOCATION", "DEVICE");
   if (boomerAMG) {
-    if (useDevice) {
+    if (options.compareArgs("MULTIGRID COARSE SOLVER LOCATION", "DEVICE")) {
       delete (hypreWrapperDevice::boomerAMG_t *)this->boomerAMG;
     } else {
       delete (hypreWrapper::boomerAMG_t *)this->boomerAMG;
     }
   }
   if (AMGX) {
-    delete AMGX;
+    delete (AMGX_t *)this->AMGX;
+  }
+  if (xxt) {
+    delete (xxt_t *)this->xxt;
   }
 }
 
@@ -237,9 +262,18 @@ void MGSolver_t::coarseLevel_t::solve(occa::memory &o_rhs, occa::memory &o_x)
 {
   const std::string timerName = name + " coarseLevel_t::solve";
 
-  if (solveOnHost) {
-    platform->timer.hostTic(timerName, true);
+  if (options.compareArgs("MULTIGRID COARSE SOLVER", "XXT")) {
+    platform->timer.hostTic(timerName);
+    auto xxt = static_cast<xxt_t *>(this->xxt);
+    vectorDotStarKernel(ogs->N, static_cast<pfloat>(1.0), static_cast<pfloat>(0.0), o_weight, o_rhs, o_Sx);
+    xxt->solve<pfloat>(o_Sx, o_x);
+    platform->timer.hostToc(timerName);
+    return;
+  }
 
+  if (solveOnHost) {
+    platform->timer.hostTic(timerName);
+    if (options.compareArgs("MULTIGRID COARSE SOLVER", "BOOMERAMG")) {
     // masked E->T
     auto rhsPtr = o_rhs.ptr<pfloat>();
     auto weightPtr = h_weight.ptr<pfloat>();
@@ -254,11 +288,12 @@ void MGSolver_t::coarseLevel_t::solve(occa::memory &o_rhs, occa::memory &o_x)
     for (int i = 0; i < N; i++) {
       xBufferPtr[i] = 0;
     }
-    auto boomerAMG = (hypreWrapper::boomerAMG_t *)this->boomerAMG;
+    auto boomerAMG = static_cast<hypreWrapper::boomerAMG_t *>(this->boomerAMG);
     boomerAMG->solve(h_Gx.ptr<pfloat>(), h_xBuffer.ptr<pfloat>());
 
     // masked T->E
     ogsScatter(o_x.ptr<pfloat>(), h_xBuffer.ptr<pfloat>(), ogsPfloat, ogsAdd, ogs);
+    }
     platform->timer.hostToc(timerName);
   } else {
     platform->timer.tic(timerName);
@@ -277,13 +312,14 @@ void MGSolver_t::coarseLevel_t::solve(occa::memory &o_rhs, occa::memory &o_x)
     }
     if (options.compareArgs("MULTIGRID COARSE SOLVER", "BOOMERAMG")) {
       if (useDevice) {
-        auto boomerAMG = (hypreWrapperDevice::boomerAMG_t *)this->boomerAMG;
+        auto boomerAMG = static_cast<hypreWrapperDevice::boomerAMG_t *>(this->boomerAMG);
         boomerAMG->solve(o_Gx, o_xBuffer);
       } else {
-        auto boomerAMG = (hypreWrapper::boomerAMG_t *)this->boomerAMG;
+        auto boomerAMG = static_cast<hypreWrapper::boomerAMG_t *>(this->boomerAMG);
         boomerAMG->solve(h_Gx.ptr<pfloat>(), h_xBuffer.ptr<pfloat>());
       }
     } else if (options.compareArgs("MULTIGRID COARSE SOLVER", "AMGX")) {
+      auto AMGX = (AMGX_t *)this->AMGX;
       AMGX->solve(o_Gx.ptr(), o_xBuffer.ptr());
     }
 

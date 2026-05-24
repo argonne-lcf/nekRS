@@ -17,18 +17,11 @@ using dfloat = double;
 #define dfloatString "double"
 #endif
 
-// smoother float data type
-#if 1
-using pfloat = float;
-#define MPI_PFLOAT MPI_FLOAT
-#define pfloatFormat "%f"
-#define pfloatString "float"
-#else
-using pfloat = double;
-#define MPI_PFLOAT MPI_DOUBLE
-#define pfloatFormat "%lf"
-#define pfloatString "double"
-#endif
+// preconditioner float data type
+using pfloat = @PFLOAT_TYPE@;
+#define MPI_PFLOAT @MPI_PFLOAT@
+#define pfloatFormat "@PFLOAT_FORMAT@"
+#define pfloatString "@PFLOAT_STRING@"
 
 // host index data type
 #if 0

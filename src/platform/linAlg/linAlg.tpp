@@ -592,7 +592,8 @@ void weightedInnerProdMulti(const dlong N,
 
   for (int field = 0; field < NVec; ++field) {
     T dot = 0;
-    for (dlong n = 0; n < o_scratch.size() / NVec; ++n) {
+    const auto scratchSize = o_scratch.size() / NVec;
+    for (dlong n = 0; n < scratchSize; ++n) {
       dot += scratch[n + field * Nblock];
     }
     result[field] = dot;
@@ -722,7 +723,8 @@ T weightedInnerProdMany(const dlong N,
     dot = *((T *)o_scratch.ptr());
   } else {
     o_scratch.copyTo(scratch);
-    for (dlong n = 0; n < o_scratch.size(); ++n) {
+    const auto scratchSize = o_scratch.size();
+    for (dlong n = 0; n < scratchSize; ++n) {
       dot += scratch[n];
     }
   }

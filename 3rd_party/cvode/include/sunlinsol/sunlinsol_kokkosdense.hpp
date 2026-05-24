@@ -2,8 +2,11 @@
  * Programmer(s): David J. Gardner @ LLNL
  * -----------------------------------------------------------------------------
  * SUNDIALS Copyright Start
- * Copyright (c) 2002-2022, Lawrence Livermore National Security
+ * Copyright (c) 2025-2026, Lawrence Livermore National Security,
+ * University of Maryland Baltimore County, and the SUNDIALS contributors.
+ * Copyright (c) 2013-2025, Lawrence Livermore National Security
  * and Southern Methodist University.
+ * Copyright (c) 2002-2013, Lawrence Livermore National Security.
  * All rights reserved.
  *
  * See the top-level LICENSE and NOTICE files for details.
@@ -40,12 +43,12 @@ class DenseLinearSolver;
 
 namespace impl {
 
-SUNLinearSolver_Type SUNLinSolGetType_KokkosDense(SUNLinearSolver S)
+static SUNLinearSolver_Type SUNLinSolGetType_KokkosDense(SUNLinearSolver S)
 {
   return SUNLINEARSOLVER_DIRECT;
 }
 
-SUNLinearSolver_ID SUNLinSolGetID_KokkosDense(SUNLinearSolver S)
+static SUNLinearSolver_ID SUNLinSolGetID_KokkosDense(SUNLinearSolver S)
 {
   return SUNLINEARSOLVER_KOKKOSDENSE;
 }
@@ -76,7 +79,7 @@ int SUNLinSolSetup_KokkosDense(SUNLinearSolver S, SUNMatrix A)
                                                                  A_subdata);
     });
 
-  return SUNLS_SUCCESS;
+  return SUN_SUCCESS;
 }
 
 template<class VectorType, class MatrixType, class LinearSolverType>
@@ -128,15 +131,15 @@ int SUNLinSolSolve_KokkosDense(SUNLinearSolver S, SUNMatrix A, N_Vector x,
                                                       A_subdata, x_subdata);
     });
 
-  return SUNLS_SUCCESS;
+  return SUN_SUCCESS;
 }
 
 template<class LinearSolverType>
-int SUNLinSolFree_KokkosDense(SUNLinearSolver S)
+SUNErrCode SUNLinSolFree_KokkosDense(SUNLinearSolver S)
 {
   auto S_ls{static_cast<LinearSolverType*>(S->content)};
   delete S_ls; // NOLINT
-  return SUNLS_SUCCESS;
+  return SUN_SUCCESS;
 }
 
 } // namespace impl
@@ -200,16 +203,16 @@ public:
   // Override the ConvertibleTo methods
 
   // Implicit conversion to a SUNLinearSolver
-  operator SUNLinearSolver() override { return object_.get(); }
+  operator SUNLinearSolver() noexcept override { return object_.get(); }
 
   // Implicit conversion to SUNLinearSolver
-  operator SUNLinearSolver() const override { return object_.get(); }
+  operator SUNLinearSolver() const noexcept override { return object_.get(); }
 
   // Explicit conversion to a SUNLinearSolver
-  SUNLinearSolver Convert() override { return object_.get(); }
+  SUNLinearSolver get() noexcept override { return object_.get(); }
 
   // Explicit conversion to a SUNLinearSolver
-  SUNLinearSolver Convert() const override { return object_.get(); }
+  SUNLinearSolver get() const noexcept override { return object_.get(); }
 
 private:
   void initSUNLinearSolver()

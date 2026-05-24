@@ -5,12 +5,11 @@
 
 namespace adios2
 {
-namespace RemoteCommon
+namespace EVPathRemoteCommon
 {
 
 FMField OpenFileList[] = {
-    {"OpenResponseCondition", "integer", sizeof(long),
-     FMOffset(OpenFileMsg, OpenResponseCondition)},
+    {"OpenResponseCondition", "integer", sizeof(int), FMOffset(OpenFileMsg, OpenResponseCondition)},
     {"FileName", "string", sizeof(char *), FMOffset(OpenFileMsg, FileName)},
     {"Mode", "integer", sizeof(RemoteFileMode), FMOffset(OpenFileMsg, Mode)},
     {"RowMajorOrder", "integer", sizeof(int), FMOffset(OpenFileMsg, RowMajorOrder)},
@@ -20,9 +19,10 @@ FMStructDescRec OpenFileStructs[] = {{"OpenFile", OpenFileList, sizeof(struct _O
                                      {NULL, NULL, 0, NULL}};
 
 FMField OpenSimpleFileList[] = {
-    {"OpenResponseCondition", "integer", sizeof(long),
+    {"OpenResponseCondition", "integer", sizeof(int),
      FMOffset(OpenSimpleFileMsg, OpenResponseCondition)},
     {"FileName", "string", sizeof(char *), FMOffset(OpenSimpleFileMsg, FileName)},
+    {"ReadContents(0)", "integer", sizeof(long), FMOffset(OpenSimpleFileMsg, ReadContents)},
     {NULL, NULL, 0, 0}};
 
 FMStructDescRec OpenSimpleFileStructs[] = {
@@ -30,7 +30,7 @@ FMStructDescRec OpenSimpleFileStructs[] = {
     {NULL, NULL, 0, NULL}};
 
 FMField OpenResponseList[] = {
-    {"OpenResponseCondition", "integer", sizeof(long),
+    {"OpenResponseCondition", "integer", sizeof(int),
      FMOffset(OpenResponseMsg, OpenResponseCondition)},
     {"FileHandle", "integer", sizeof(intptr_t), FMOffset(OpenResponseMsg, FileHandle)},
     {NULL, NULL, 0, 0}};
@@ -40,7 +40,7 @@ FMStructDescRec OpenResponseStructs[] = {
     {NULL, NULL, 0, NULL}};
 
 FMField OpenSimpleResponseList[] = {
-    {"OpenResponseCondition", "integer", sizeof(long),
+    {"OpenResponseCondition", "integer", sizeof(int),
      FMOffset(OpenSimpleResponseMsg, OpenResponseCondition)},
     {"FileHandle", "integer", sizeof(intptr_t), FMOffset(OpenSimpleResponseMsg, FileHandle)},
     {"FileSize", "integer", sizeof(size_t), FMOffset(OpenSimpleResponseMsg, FileSize)},
@@ -56,11 +56,15 @@ FMField GetRequestList[] = {
     {"FileHandle", "integer", sizeof(int64_t), FMOffset(GetRequestMsg, FileHandle)},
     {"RequestType", "integer", sizeof(int), FMOffset(GetRequestMsg, RequestType)},
     {"Step", "integer", sizeof(size_t), FMOffset(GetRequestMsg, Step)},
+    {"StepCount", "integer", sizeof(size_t), FMOffset(GetRequestMsg, StepCount)},
     {"VarName", "string", sizeof(char *), FMOffset(GetRequestMsg, VarName)},
     {"BlockID", "integer", sizeof(int64_t), FMOffset(GetRequestMsg, BlockID)},
     {"DimCount", "integer", sizeof(size_t), FMOffset(GetRequestMsg, DimCount)},
     {"Count", "integer[DimCount]", sizeof(size_t), FMOffset(GetRequestMsg, Count)},
     {"Start", "integer[DimCount]", sizeof(size_t), FMOffset(GetRequestMsg, Start)},
+    {"Error", "double", sizeof(double), FMOffset(GetRequestMsg, Error)},
+    {"Norm", "double", sizeof(double), FMOffset(GetRequestMsg, Norm)},
+    {"Relative", "integer", sizeof(uint8_t), FMOffset(GetRequestMsg, Relative)},
     {"Dest", "integer", sizeof(size_t), FMOffset(GetRequestMsg, Dest)},
     {NULL, NULL, 0, 0}};
 
@@ -68,7 +72,7 @@ FMStructDescRec GetRequestStructs[] = {{"Get", GetRequestList, sizeof(struct _Ge
                                        {NULL, NULL, 0, NULL}};
 
 FMField ReadRequestList[] = {
-    {"ReadResponseCondition", "integer", sizeof(long),
+    {"ReadResponseCondition", "integer", sizeof(int),
      FMOffset(ReadRequestMsg, ReadResponseCondition)},
     {"FileHandle", "integer", sizeof(intptr_t), FMOffset(ReadRequestMsg, FileHandle)},
     {"Offset", "integer", sizeof(size_t), FMOffset(ReadRequestMsg, Offset)},
@@ -80,9 +84,10 @@ FMStructDescRec ReadRequestStructs[] = {
     {"Read", ReadRequestList, sizeof(struct _ReadRequestMsg), NULL}, {NULL, NULL, 0, NULL}};
 
 FMField ReadResponseList[] = {
-    {"ReadResponseCondition", "integer", sizeof(long),
+    {"ReadResponseCondition", "integer", sizeof(int),
      FMOffset(ReadResponseMsg, ReadResponseCondition)},
     {"Dest", "integer", sizeof(void *), FMOffset(ReadResponseMsg, Dest)},
+    {"OperatorType", "integer", sizeof(uint8_t), FMOffset(ReadResponseMsg, OperatorType)},
     {"Size", "integer", sizeof(size_t), FMOffset(ReadResponseMsg, Size)},
     {"ReadData", "char[Size]", sizeof(char), FMOffset(ReadResponseMsg, ReadData)},
     {NULL, NULL, 0, 0}};
@@ -93,10 +98,24 @@ FMStructDescRec ReadResponseStructs[] = {
 
 FMField CloseFileList[] = {
     {"FileHandle", "integer", sizeof(intptr_t), FMOffset(CloseFileMsg, FileHandle)},
+    {"CloseResponseCondition", "integer", sizeof(int),
+     FMOffset(CloseFileMsg, CloseResponseCondition)},
     {NULL, NULL, 0, 0}};
 
 FMStructDescRec CloseFileStructs[] = {{"Close", CloseFileList, sizeof(struct _CloseFileMsg), NULL},
                                       {NULL, NULL, 0, NULL}};
+
+FMField CloseResponseList[] = {
+    {"CloseResponseCondition", "integer", sizeof(int),
+     FMOffset(CloseFileResponseMsg, CloseResponseCondition)},
+    {"Status", "integer", sizeof(int), FMOffset(CloseFileResponseMsg, Status)},
+    {"unused1", "integer", sizeof(size_t), FMOffset(CloseFileResponseMsg, unused)},
+    {"unused2", "integer", sizeof(size_t), FMOffset(CloseFileResponseMsg, unused2)},
+    {NULL, NULL, 0, 0}};
+
+FMStructDescRec CloseResponseStructs[] = {
+    {"CloseResponse", CloseResponseList, sizeof(struct _CloseFileResponseMsg), NULL},
+    {NULL, NULL, 0, NULL}};
 
 FMField KillServerList[] = {{"KillResponseCondition", "integer", sizeof(long),
                              FMOffset(KillServerMsg, KillResponseCondition)},
@@ -134,23 +153,32 @@ FMStructDescRec StatusResponseStructs[] = {
     {"StatusResponse", StatusResponseList, sizeof(struct _StatusResponseMsg), NULL},
     {NULL, NULL, 0, NULL}};
 
-void RegisterFormats(RemoteCommon::Remote_evpath_state &ev_state)
+void RegisterFormats(EVPathRemoteCommon::Remote_evpath_state &ev_state)
 {
-    ev_state.OpenFileFormat = CMregister_format(ev_state.cm, RemoteCommon::OpenFileStructs);
+    ev_state.OpenFileFormat = CMregister_format(ev_state.cm, EVPathRemoteCommon::OpenFileStructs);
     ev_state.OpenSimpleFileFormat =
-        CMregister_format(ev_state.cm, RemoteCommon::OpenSimpleFileStructs);
-    ev_state.OpenResponseFormat = CMregister_format(ev_state.cm, RemoteCommon::OpenResponseStructs);
+        CMregister_format(ev_state.cm, EVPathRemoteCommon::OpenSimpleFileStructs);
+    ev_state.OpenResponseFormat =
+        CMregister_format(ev_state.cm, EVPathRemoteCommon::OpenResponseStructs);
     ev_state.OpenSimpleResponseFormat =
-        CMregister_format(ev_state.cm, RemoteCommon::OpenSimpleResponseStructs);
-    ev_state.GetRequestFormat = CMregister_format(ev_state.cm, RemoteCommon::GetRequestStructs);
-    ev_state.ReadRequestFormat = CMregister_format(ev_state.cm, RemoteCommon::ReadRequestStructs);
-    ev_state.ReadResponseFormat = CMregister_format(ev_state.cm, RemoteCommon::ReadResponseStructs);
-    ev_state.CloseFileFormat = CMregister_format(ev_state.cm, RemoteCommon::CloseFileStructs);
-    ev_state.KillServerFormat = CMregister_format(ev_state.cm, RemoteCommon::KillServerStructs);
-    ev_state.KillResponseFormat = CMregister_format(ev_state.cm, RemoteCommon::KillResponseStructs);
-    ev_state.StatusServerFormat = CMregister_format(ev_state.cm, RemoteCommon::StatusServerStructs);
+        CMregister_format(ev_state.cm, EVPathRemoteCommon::OpenSimpleResponseStructs);
+    ev_state.GetRequestFormat =
+        CMregister_format(ev_state.cm, EVPathRemoteCommon::GetRequestStructs);
+    ev_state.ReadRequestFormat =
+        CMregister_format(ev_state.cm, EVPathRemoteCommon::ReadRequestStructs);
+    ev_state.ReadResponseFormat =
+        CMregister_format(ev_state.cm, EVPathRemoteCommon::ReadResponseStructs);
+    ev_state.CloseFileFormat = CMregister_format(ev_state.cm, EVPathRemoteCommon::CloseFileStructs);
+    ev_state.CloseResponseFormat =
+        CMregister_format(ev_state.cm, EVPathRemoteCommon::CloseResponseStructs);
+    ev_state.KillServerFormat =
+        CMregister_format(ev_state.cm, EVPathRemoteCommon::KillServerStructs);
+    ev_state.KillResponseFormat =
+        CMregister_format(ev_state.cm, EVPathRemoteCommon::KillResponseStructs);
+    ev_state.StatusServerFormat =
+        CMregister_format(ev_state.cm, EVPathRemoteCommon::StatusServerStructs);
     ev_state.StatusResponseFormat =
-        CMregister_format(ev_state.cm, RemoteCommon::StatusResponseStructs);
+        CMregister_format(ev_state.cm, EVPathRemoteCommon::StatusResponseStructs);
 }
 }
 }

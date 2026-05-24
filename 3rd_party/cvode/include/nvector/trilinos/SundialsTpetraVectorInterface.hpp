@@ -2,8 +2,11 @@
  * Programmer(s): Slaven Peles @ LLNL
  * -----------------------------------------------------------------
  * SUNDIALS Copyright Start
- * Copyright (c) 2002-2022, Lawrence Livermore National Security
+ * Copyright (c) 2025-2026, Lawrence Livermore National Security,
+ * University of Maryland Baltimore County, and the SUNDIALS contributors.
+ * Copyright (c) 2013-2025, Lawrence Livermore National Security
  * and Southern Methodist University.
+ * Copyright (c) 2002-2013, Lawrence Livermore National Security.
  * All rights reserved.
  *
  * See the top-level LICENSE and NOTICE files for details.
@@ -18,37 +21,32 @@
 #include <Tpetra_Vector.hpp>
 #include <nvector/nvector_trilinos.h>
 
-namespace sundials
+namespace sundials {
+namespace trilinos {
+namespace nvector_tpetra {
+
+struct TpetraVectorInterface : public _N_VectorContent_Trilinos
 {
-namespace trilinos
-{
-namespace nvector_tpetra
-{
+  // Typedef of Tpetra vector class to be used with SUNDIALS
+  typedef Tpetra::Vector<sunrealtype, int, sunindextype> vector_type;
 
-  struct TpetraVectorInterface : public _N_VectorContent_Trilinos
-  {
-    // Typedef of Tpetra vector class to be used with SUNDIALS
-    typedef Tpetra::Vector<realtype, int, sunindextype> vector_type;
+  TpetraVectorInterface(Teuchos::RCP<vector_type> rcpvec) { rcpvec_ = rcpvec; }
 
-    TpetraVectorInterface(Teuchos::RCP<vector_type> rcpvec)
-    {
-      rcpvec_ = rcpvec;
-    }
+  ~TpetraVectorInterface() = default;
 
-    ~TpetraVectorInterface() = default;
-
-    Teuchos::RCP<vector_type> rcpvec_;
-  };
-
+  Teuchos::RCP<vector_type> rcpvec_;
+};
 
 } // namespace nvector_tpetra
 } // namespace trilinos
 } // namespace sundials
 
-inline Teuchos::RCP<sundials::trilinos::nvector_tpetra::TpetraVectorInterface::vector_type> N_VGetVector_Trilinos(N_Vector v)
+inline Teuchos::RCP<sundials::trilinos::nvector_tpetra::TpetraVectorInterface::vector_type> N_VGetVector_Trilinos(
+  N_Vector v)
 {
   sundials::trilinos::nvector_tpetra::TpetraVectorInterface* iface =
-  reinterpret_cast<sundials::trilinos::nvector_tpetra::TpetraVectorInterface*>(v->content);
+    reinterpret_cast<sundials::trilinos::nvector_tpetra::TpetraVectorInterface*>(
+      v->content);
 
   return iface->rcpvec_;
 }
@@ -61,10 +59,8 @@ inline Teuchos::RCP<sundials::trilinos::nvector_tpetra::TpetraVectorInterface::v
  * -----------------------------------------------------------------
  */
 
-SUNDIALS_EXPORT N_Vector
-N_VMake_Trilinos(Teuchos::RCP<sundials::trilinos::nvector_tpetra::TpetraVectorInterface::vector_type> v,
-                 SUNContext sunctx);
-
-
+SUNDIALS_EXPORT N_Vector N_VMake_Trilinos(
+  Teuchos::RCP<sundials::trilinos::nvector_tpetra::TpetraVectorInterface::vector_type> v,
+  SUNContext sunctx);
 
 #endif // _TPETRA_SUNDIALS_INTERFACE_HPP_

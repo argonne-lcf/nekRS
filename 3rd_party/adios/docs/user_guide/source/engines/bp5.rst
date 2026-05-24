@@ -62,19 +62,36 @@ This engine allows the user to fine tune the buffering operations through the fo
 
 #. Aggregation
 
-   #. **AggregationType**: *TwoLevelShm*, *EveryoneWritesSerial* and *EveryoneWrites* are three aggregation strategies. See :ref:`Aggregation in BP5`. The default is *TwoLevelShm*.
+   #. **AggregationType**: *TwoLevelShm*, *EveryoneWritesSerial*, *DataSizeBased*, and
+      *EveryoneWrites* are four data aggregation strategies. See :ref:`Aggregation in BP5`. The default is *TwoLevelShm*.
  
-   #. **NumAggregators**: The number of processes that will ever write data directly to storage. The default is set to the number of compute nodes the application is running on (i.e. one process per compute node). TwoLevelShm will select a fixed number of processes *per compute-node* to get close to the intention of the user but does not guarantee the exact number of aggregators.
+   #. **NumAggregators**: The number of processes that will ever write data directly to storage. The default is set to the number of compute nodes the application is running on (i.e. one process per compute node). TwoLevelShm will select a fixed number of processes *per compute-node* to get close to the intention of the user but does not guarantee the exact number of aggregators. *DataSaizeBased* will ignore this configuration setting and set the value to *NumSubFiles*.
 
    #. **AggregatorRatio**: An alternative option to NumAggregators to pick every nth process as aggregator. The number of aggregators will be automatically kept to be within 1 and total number of processes no matter what bad number is supplied here. Moreover, TwoLevelShm will select an fixed number of processes *per compute-node* to get close to the intention of this ratio but does not guarantee the exact number of aggregators.
 
-   #. **NumSubFiles**: The number of data files to write to in the *.bp/* directory. Only used by *TwoLevelShm* aggregator, where the number of files can be smaller then the number of aggregators. The default is set to *NumAggregators*. 
+   #. **NumSubFiles**: The number of data files to write to in the *.bp/* directory. Used by *TwoLevelShm* and *DataSizeBased* aggregators.  For *TwoLevelShm* the number of files can be smaller then the number of aggregators, while for *DataSizeBased*, the number of aggregators is ignored and set equal to this value. The default is set to *NumAggregators*.
 
    #. **StripeSize**: The data blocks of different processes are aligned to this size (default is 4096 bytes) in the files. Its purpose is to avoid multiple processes to write to the same file system block and potentially slow down the write.  
 
    #. **MaxShmSize**: Upper limit for how much shared memory an aggregator process in *TwoLevelShm* can allocate. For optimum performance, this should be at least *2xM +1KB* where *M* is the maximum size any process writes in a single step. However, there is no point in allowing for more than 4GB. The default is 4GB.
 
+   #. **UseSelectiveMetadataAggregation**: There are two metadata
+      aggregation strategies in BP5.  If this parameter is true (the default),
+      SelectiveMetadataAggregation is employed, which uses a multi-phase approach
+      to limit the amount of data exchanged.   If false, a less
+      complex two-level metadata aggregation is performed.  In most
+      cases the default is more efficient.
 
+   #. **OneLevelGatherRankLimit**:  For the
+      SelectiveMetadataAggregation method, this parameter specifies an
+      MPI cohort size above which it resorts to a two-stage
+      aggregation process rather than gathering all metadata to rank 0
+      in one MPI collective operation.  Some HPC machines have
+      unpredictable behaviour with gatherv at both large numbers of
+      ranks and large amounts of data.  The default value (6000)
+      avoids this behaviour on ORNL's Frontier.  Higher or lower values may
+      be useful on other machines.
+      
 #. Buffering
 
    #. **BufferVType**: *chunk* or *malloc*, default is chunking. Chunking maintains the buffer as a list of memory blocks, either ADIOS-owned for sync-ed Puts and small Puts, and user-owned pointers of deferred Puts. Malloc maintains a single memory block and extends it (reallocates) whenever more data is buffered. Chunking incurs extra cost in I/O by having to write data in chunks (multiple write system calls), which can be helped by increasing *BufferChunkSize* and *MinDeferredSize*. Malloc incurs extra cost by reallocating memory whenever more data is buffered (by Put()), which can be helped by increasing *InitialBufferSize*. 
@@ -128,7 +145,13 @@ This engine allows the user to fine tune the buffering operations through the fo
 
    #. **MaxOpenFilesAtOnce**: Specify how many subfiles a process can keep open at once. Default is unlimited. If a dataset contains more subfiles than how many open file descriptors the system allows (see *ulimit -n*) then one can either try to raise that system limit (set it with *ulimit -n*), or set this parameter to force the reader to close some subfiles to stay within the limits.
    
-   #. **Threads**: Read side: Specify how many threads one process can use to speed up reading. The default value is *0*, to let the engine estimate the number of threads based on how many processes are running on the compute node and how many hardware threads are available on the compute node but it will use maximum 16 threads. Value *1* forces the engine to read everything within the main thread of the process. Other values specify the exact number of threads the engine can use. Although multithreaded reading works in a single *Get(adios2::Mode::Sync)* call if the read selection spans multiple data blocks in the file, the best parallelization is achieved by using deferred mode and reading everything in *PerformGets()/EndStep()*.   
+   #. **Threads**: Read side: Specify how many threads one process can
+      use to speed up data reading. The default value is *0*, to let the engine estimate the number of threads based on how many processes are running on the compute node and how many hardware threads are available on the compute node but it will use maximum 16 threads. Value *1* forces the engine to read everything within the main thread of the process. Other values specify the exact number of threads the engine can use. Although multithreaded reading works in a single *Get(adios2::Mode::Sync)* call if the read selection spans multiple data blocks in the file, the best parallelization is achieved by using deferred mode and reading everything in *PerformGets()/EndStep()*.   
+
+   #. **MetadataThreads**: Read side: Specify the maximum number of threads one
+      process can use to speed up metadata installation. The default
+      value is *8*, but the engine will never use more threads than
+      the number of ranks that were used when the file was written..   
 
    #. **FlattenSteps**: This is a writer-side parameter specifies that the
       reader should interpret multiple writer-created timesteps as a
@@ -138,35 +161,37 @@ This engine allows the user to fine tune the buffering operations through the fo
       tells the reader to ignore any FlattenSteps parameter supplied
       to the writer.
 
-============================== ===================== ===========================================================
- **Key**                       **Value Format**      **Default** and Examples
-============================== ===================== ===========================================================
- OpenTimeoutSecs                float                 **0** for *ReadRandomAccess* mode, **3600** for *Read* mode, ``10.0``, ``5``
- BeginStepPollingFrequencySecs  float                 **1**, 10.0 
- AggregationType                string                **TwoLevelShm**, EveryoneWritesSerial, EveryoneWrites
- NumAggregators                 integer >= 1          **0 (one file per compute node)**
- AggregatorRatio                integer >= 1          not used unless set
- NumSubFiles                    integer >= 1          **=NumAggregators**, only used when *AggregationType=TwoLevelShm*
- StripeSize                     integer+units         **4KB**
- MaxShmSize                     integer+units         **4294762496**
- BufferVType                    string                **chunk**, malloc
- BufferChunkSize                integer+units         **128MB**, worth increasing up to min(2GB, datasize/process/step)
- MinDeferredSize                integer+units         **4MB**
- InitialBufferSize              float+units >= 16Kb   **16Kb**, 10Mb, 0.5Gb
- GrowthFactor                   float > 1             **1.05**, 1.01, 1.5, 2
- AppendAfterSteps               integer >= 0          **INT_MAX**
- SelectSteps                    string                "0 6 3 2", "1:5", "0:n:3  10:n:5"
- AsyncOpen                      string On/Off         **On**, Off, true, false
- AsyncWrite                     string On/Off         **Off**, On, true, false
- DirectIO                       string On/Off         **Off**, On, true, false
- DirectIOAlignOffset            integer >= 0          **512**
- DirectIOAlignBuffer            integer >= 0          set to DirectIOAlignOffset if unset
- StatsLevel                     integer, 0 or 1       **1**, 0
- MaxOpenFilesAtOnce             integer >= 0          **UINT_MAX**, 1024, 1
- Threads                        integer >= 0          **0**, 1, 32
- FlattenSteps                   boolean               **off**, on, true, false
- IgnoreFlattenSteps             boolean               **off**, on, true, false
-============================== ===================== ===========================================================
+=============================== ===================== ===========================================================
+ **Key**                        **Value Format**      **Default** and Examples
+=============================== ===================== ===========================================================
+ OpenTimeoutSecs                 float                 **0** for *ReadRandomAccess* mode, **3600** for *Read* mode, ``10.0``, ``5``
+ BeginStepPollingFrequencySecs   float                 **1**, 10.0 
+ AggregationType                 string                **TwoLevelShm**, EveryoneWritesSerial, DataSizeBased, EveryoneWrites
+ NumAggregators                  integer >= 1          **0 (one file per compute node)**, ignored when *AggregationType=DataSizeBased*
+ AggregatorRatio                 integer >= 1          not used unless set
+ NumSubFiles                     integer >= 1          **=NumAggregators**, used when *AggregationType=TwoLevelShm* or *AggregationType=DataSizeBased*
+ StripeSize                      integer+units         **4KB**
+ MaxShmSize                      integer+units         **4294762496**
+ BufferVType                     string                **chunk**, malloc
+ BufferChunkSize                 integer+units         **128MB**, worth increasing up to min(2GB, datasize/process/step)
+ MinDeferredSize                 integer+units         **4MB**
+ InitialBufferSize               float+units >= 16Kb   **16Kb**, 10Mb, 0.5Gb
+ GrowthFactor                    float > 1             **1.05**, 1.01, 1.5, 2
+ AppendAfterSteps                integer >= 0          **INT_MAX**
+ SelectSteps                     string                "0 6 3 2", "1:5", "0:n:3  10:n:5"
+ AsyncOpen                       string On/Off         **On**, Off, true, false
+ AsyncWrite                      string On/Off         **Off**, On, true, false
+ DirectIO                        string On/Off         **Off**, On, true, false
+ DirectIOAlignOffset             integer >= 0          **512**
+ DirectIOAlignBuffer             integer >= 0          set to DirectIOAlignOffset if unset
+ UseSelectiveMetadataAggregation boolean               **On**, Off, true, false
+ OneLevelGatherRanksLimit        integer               **6000**
+ StatsLevel                      integer, 0 or 1       **1**, 0
+ MaxOpenFilesAtOnce              integer >= 0          **UINT_MAX**, 1024, 1
+ Threads                         integer >= 0          **0**, 1, 32
+ FlattenSteps                    boolean               **off**, on, true, false
+ IgnoreFlattenSteps              boolean               **off**, on, true, false
+=============================== ===================== ===========================================================
 
 
 Only file transport types are supported. Optional parameters for ``IO::AddTransport`` or in runtime config file transport field:

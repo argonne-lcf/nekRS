@@ -70,6 +70,16 @@ endfunction()
 # Multithreading
 find_package(Threads REQUIRED)
 
+# BigWhoop
+if(ADIOS2_USE_BigWhoop STREQUAL AUTO)
+ find_package(BWC CONFIG)
+elseif(ADIOS2_USE_BigWhoop)
+  find_package(BWC REQUIRED CONFIG)
+endif()
+if(BWC_FOUND)
+  set(ADIOS2_HAVE_BigWhoop TRUE)
+endif()
+
 # Blosc2
 if(ADIOS2_USE_Blosc2 STREQUAL AUTO)
   find_package(Blosc2 2.10.1 QUIET)
@@ -77,6 +87,10 @@ elseif(ADIOS2_USE_Blosc2)
   find_package(Blosc2 2.10.1)
 endif()
 if(Blosc2_FOUND)
+  if (CMAKE_VERSION VERSION_LESS 3.18)
+    message(FATAL_ERROR "Blosc2 dependency requires CMake>=3.18.")
+  endif()
+
   set(ADIOS2_HAVE_Blosc2 TRUE)
   if(TARGET Blosc2::blosc2_shared)
     set(blosc2_shlib_available ON)
@@ -337,11 +351,11 @@ endif()
 # HDF5
 if(ADIOS2_USE_HDF5 STREQUAL AUTO)
   find_package(HDF5 COMPONENTS C)
-  if(HDF5_FOUND AND (NOT HDF5_IS_PARALLEL OR ADIOS2_HAVE_MPI))
-    set(ADIOS2_HAVE_HDF5 TRUE)
-  endif()
 elseif(ADIOS2_USE_HDF5)
   find_package(HDF5 REQUIRED COMPONENTS C)
+endif()
+
+if (HDF5_FOUND)
   if(HDF5_IS_PARALLEL AND NOT ADIOS2_HAVE_MPI)
     message(FATAL_ERROR "MPI is disabled but parallel HDF5 is detected.")
   endif()
@@ -460,14 +474,14 @@ if(ADIOS2_USE_SST AND NOT WIN32)
         "-DLINK_DIRECTORIES=${LIBFABRIC_LIBRARIES}")
     message(STATUS "Libfabric support for the HPE CXI provider: ${ADIOS2_SST_HAVE_CRAY_CXI}")
   endif()
-  if(ADIOS2_HAVE_MPI AND NOT "${ADIOS2_SST_HAVE_MPI_DP}")
-    set(CMAKE_REQUIRED_LIBRARIES "MPI::MPI_C;Threads::Threads")
+  if (ADIOS2_HAVE_MPI)
+    set(CMAKE_REQUIRED_LIBRARIES "MPI::MPI_CXX;Threads::Threads")
     include(CheckCXXSourceRuns)
     check_cxx_source_runs([=[
         #include <chrono>
         #include <future>
         #include <mpi.h>
-	#include <thread>
+        #include <thread>
         #include <stdlib.h>
 
         #if !defined(MPICH)
@@ -489,16 +503,10 @@ if(ADIOS2_USE_SST AND NOT WIN32)
           MPI_Finalize();
           exit(EXIT_SUCCESS);
         }]=]
-    ADIOS2_HAVE_MPI_CLIENT_SERVER)
+    ADIOS2_SST_HAVE_MPI_DP_HEURISTICS_PASSED)
     unset(CMAKE_REQUIRED_LIBRARIES)
-    if (ADIOS2_HAVE_MPI_CLIENT_SERVER)
-      set(ADIOS2_SST_HAVE_MPI_DP TRUE)
-    else()
-      if ("${ADIOS2_SST_EXPECT_MPI_DP}") 
-          message(FATAL_ERROR "Expected MPI to support Client-server connection model, but test failed.")
-      endif()
-    endif()
   endif()
+
   # UCX
   if(ADIOS2_USE_UCX STREQUAL AUTO)
     find_package(UCX 1.9.0)
@@ -512,9 +520,26 @@ if(ADIOS2_USE_SST AND NOT WIN32)
 endif()
 
 # DAOS
-find_package(DAOS)
-if(DAOS_FOUND)
-  set(ADIOS2_HAVE_DAOS TRUE)
+if(ADIOS2_USE_DAOS STREQUAL AUTO)
+  find_package(DAOS)
+  if(DAOS_FOUND)
+    set(ADIOS2_HAVE_DAOS TRUE)
+    find_package(Caliper)
+    if (Caliper_Found)
+      set(ADIOS2_HAVE_Caliper TRUE)
+    endif()
+  endif()
+elseif (ADIOS2_USE_DAOS)
+  find_package(DAOS REQUIRED)
+  find_package(Caliper)
+  if (Caliper_Found)
+    set(ADIOS2_HAVE_Caliper TRUE)
+  endif()
+endif()
+
+if(DAOS_FOUND AND Caliper_FOUND)
+   set(ADIOS2_HAVE_DAOS TRUE)
+   set(ADIOS2_HAVE_Caliper TRUE)
 endif()
 
 #SysV IPC
@@ -573,6 +598,35 @@ elseif(ADIOS2_USE_AWSSDK)
 endif()
 if(AWSSDK_FOUND)
     set(ADIOS2_HAVE_AWSSDK TRUE)
+endif(AWSSDK_FOUND)
+
+# OpenSSL
+if(ADIOS2_USE_OpenSSL STREQUAL AUTO)
+  find_package(OpenSSL COMPONENTS Crypto SSL)
+elseif(ADIOS2_USE_OpenSSL)
+  find_package(OpenSSL REQUIRED COMPONENTS Crypto SSL)
+endif()
+if(OpenSSL_FOUND)
+  set(ADIOS2_HAVE_OpenSSL TRUE)
+endif()
+
+# XRootD
+if(ADIOS2_USE_XRootD STREQUAL AUTO)
+  find_package(XRootD QUIET COMPONENTS CLIENT UTILS SSI)
+elseif(ADIOS2_USE_XRootD)
+  find_package(XRootD REQUIRED COMPONENTS CLIENT UTILS SSI)
+endif()
+if(XRootD_FOUND)
+  set(ADIOS2_HAVE_XRootD TRUE)
+  find_program(XROOTD_SERVER_BINARY xrootd
+               HINTS
+               ${XROOTD_DIR}
+               $ENV{XROOTD_DIR}
+               /usr
+               /opt/xrootd
+               PATH_SUFFIXES bin
+  )
+
 endif()
 
 # Campaign Management
@@ -596,6 +650,35 @@ elseif(ADIOS2_USE_Campaign)
   endif()
 endif()  
 
+# KVCache
+if(ADIOS2_USE_KVCACHE STREQUAL AUTO)
+    find_package(hiredis QUIET)
+elseif(ADIOS2_USE_KVCACHE)
+    find_package(hiredis REQUIRED)
+endif()
+if (hiredis_FOUND)
+  message(STATUS "hiredis found. Turn on KVCache")
+  set(ADIOS2_HAVE_KVCACHE TRUE)
+  FIND_PROGRAM(REDIS_SERVER_BINARY redis-server
+    HINTS
+    ${REDIS_DIR}
+    $ENV{REDIS_DIR}
+    /usr
+    /opt/redis
+    PATH_SUFFIXES src
+  )
+  message(STATUS "redis server binary is ${REDIS_SERVER_BINARY}")
+  FIND_PROGRAM(REDIS_CLI_BINARY redis-cli
+    HINTS
+    ${REDIS_DIR}
+    $ENV{REDIS_DIR}
+    /usr
+    /opt/redis
+    PATH_SUFFIXES src
+  )
+  message(STATUS "redis cli binary is ${REDIS_CLI_BINARY}")
+endif()
+
 # Multithreading
 find_package(Threads REQUIRED)
 
@@ -613,5 +696,5 @@ if(ADIOS2_HAVE_Fortran)
   #check_float_type_representation("real(kind=16)" REAL16_TYPE_Fortran LANGUAGE Fortran)
 
   include(CheckFortranCompilerFlag)
-  check_fortran_compiler_flag("-fallow-argument-mismatch" ADIOS2_USE_Fortran_flag_argument_mismatch)
+  check_fortran_compiler_flag("-fallow-argument-mismatch -w" ADIOS2_USE_Fortran_flag_argument_mismatch)
 endif()

@@ -25,7 +25,7 @@ std::vector<dfloat> integral(mesh_t *mesh,
       h_sumFace.free();
     }
     h_sumFace = platform->device.mallocHost<dfloat>(Nfields * mesh->Nelements);
-    sumFace = (dfloat *)h_sumFace.ptr();
+    sumFace = h_sumFace.ptr<dfloat>();
 
     if (sum) {
       free(sum);

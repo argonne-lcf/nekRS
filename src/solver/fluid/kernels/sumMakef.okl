@@ -20,10 +20,10 @@
       dfloat bdfy = 0;
       dfloat bdfz = 0;
 
-#if p_SUBCYCLING
-      bdfx += BF[id + 0 * fieldOffset];
-      bdfy += BF[id + 1 * fieldOffset];
-      bdfz += BF[id + 2 * fieldOffset];
+#if p_ADVECTION == 1 && p_SUBCYCLING == 1
+      bdfx += ADV[id + 0 * fieldOffset];
+      bdfy += ADV[id + 1 * fieldOffset];
+      bdfz += ADV[id + 2 * fieldOffset];
 #else
 
 #pragma unroll p_nBDF
@@ -50,7 +50,7 @@
         nltx += JW * coeffEXT[s] * FU[id + 0 * fieldOffset + sOffset];
         nlty += JW * coeffEXT[s] * FU[id + 1 * fieldOffset + sOffset];
         nltz += JW * coeffEXT[s] * FU[id + 2 * fieldOffset + sOffset];
-#if p_ADVECTION
+#if p_ADVECTION == 1 && p_SUBCYCLING == 0
         nltx -= JW * coeffEXT[s] * ADV[id + 0 * fieldOffset + sOffset];
         nlty -= JW * coeffEXT[s] * ADV[id + 1 * fieldOffset + sOffset];
         nltz -= JW * coeffEXT[s] * ADV[id + 2 * fieldOffset + sOffset];

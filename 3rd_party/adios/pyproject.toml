@@ -32,7 +32,7 @@ classifiers = [
     "Operating System :: OS Independent",
 ]
 dependencies = [
-  "numpy",
+  "numpy>=1.22",
 ]
 
 [project.optional-dependencies]
@@ -47,9 +47,6 @@ Documentation = "https://adios2.readthedocs.io/"
 "Bug Tracker" = "https://github.com/ornladios/adios2/issues"
 Discussions = "https://github.com/ornladios/ADIOS2/discussions"
 Changelog = "https://github.com/ornladios/ADIOS2/releases"
-
-[project.entry-points."xarray.backends"]
-adios = "adios2.xarraybackend:AdiosBackendEntrypoint"
 
 [tool.cibuildwheel]
 # Trigger an install of the package, and run a basic test
@@ -86,4 +83,4 @@ include = 'python/adios2/.*.py|testing/adios2/python/.*.py'
 
 [tool.pylint]
 disable = ['E0401', 'W0102', 'R0904', 'R0913', 'R0401']
-good-names = ['io']
+good-names = ['io', 'JoinedDim']

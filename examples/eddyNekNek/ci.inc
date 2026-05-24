@@ -14,7 +14,7 @@ void ciSetup(MPI_Comm comm, setupAide &options)
   options.setArgs("END TIME", std::string("5e-3"));
   options.setArgs("DT", std::string("1e-4"));
   options.setArgs("SUBCYCLING STEPS", std::string("0"));
-  options.setArgs("ADVECTION TYPE", "CONVECTIVE+CUBATURE");
+  options.setArgs("ADVECTION TYPE", "CONVECTIVE+OVERINTEGRATION");
 
   options.setArgs("BDF ORDER", "3");
   if (ciMode == 1 || ciMode == 3) {

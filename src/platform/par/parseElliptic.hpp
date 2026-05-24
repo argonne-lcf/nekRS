@@ -1,6 +1,6 @@
 void parseEllipticSection(const int rank, setupAide &options, inipp::Ini *ini)
 {
-  auto list = serializeString(options.getArgs("USER ELLIPTIC FIELDS"), ' ');
+  auto list = serializeString(options.getArgs("USER ELLIPTIC FIELDS"), ',');
   for (auto const &entry : list) {
     const auto parScope = "elliptic " + entry;
 
@@ -10,7 +10,7 @@ void parseEllipticSection(const int rank, setupAide &options, inipp::Ini *ini)
         options.setArgs(upperCase(parScope) + " HELMHOLTZ TYPE", "POISSON");
       } 
     }
-    options.setArgs(upperCase(parScope) + " ELLIPTIC COEFF FIELD", "TRUE");
+    options.setArgs(upperCase(parScope) + " ELLIPTIC COEFF FIELD", "FALSE");
 
     parseInitialGuess(rank, options, ini, parScope);
 
@@ -20,12 +20,21 @@ void parseEllipticSection(const int rank, setupAide &options, inipp::Ini *ini)
 
     parseSolverTolerance(rank, options, ini, parScope);
 
+    std::string variableCoeff;
+    if (ini->extract(parScope, "variableCoeff", variableCoeff)) {
+      if (checkForTrue(variableCoeff)) {
+        options.setArgs(upperCase(parScope) + " ELLIPTIC COEFF FIELD", "TRUE");
+      }
+    }
+
+#if 0
     std::string fieldType;
     if (ini->extract(parScope, "vectorfield", fieldType)) {
       if (checkForTrue(fieldType)) {
         options.setArgs(upperCase(parScope) + " VECTOR FIELD", "TRUE");
       }
     }
+#endif
 
     std::string bcMap;
     if (ini->extract(parScope, "boundarytypemap", bcMap)) {

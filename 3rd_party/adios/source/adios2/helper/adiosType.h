@@ -115,7 +115,10 @@ public:
     // memory remains valid as long as it is necessary.  If you don't
     // know the memory will be valid the entire time, use the
     // DimsArray class which copies the dimension data.
-    CoreDims(std::vector<size_t> vec) : DimCount(vec.size()), DimensSpan(vec.data()) {}
+    CoreDims(const std::vector<size_t> &vec)
+    : DimCount(vec.size()), DimensSpan((size_t *)vec.data())
+    {
+    }
     CoreDims(size_t count, size_t *span_val) : DimCount(count), DimensSpan(span_val) {}
 
     size_t size() const { return DimCount; }
@@ -143,11 +146,16 @@ public:
 class DimsArray : public CoreDims
 {
 private:
-    size_t Dimensions[MAX_DIMS];
+    size_t Dimensions[MAX_DIMS]{0};
 
 public:
     //  constructor with no init of values
     DimsArray(const size_t count) : CoreDims(count, &Dimensions[0]) {}
+
+    DimsArray(const DimsArray &d1) : CoreDims(d1.size(), &Dimensions[0])
+    {
+        std::copy(d1.begin(), d1.end(), &Dimensions[0]);
+    }
 
     //  constructor with single init value
     DimsArray(const size_t count, const size_t init) : CoreDims(count, &Dimensions[0])
@@ -158,7 +166,7 @@ public:
         }
     }
     //  constructor from vector
-    DimsArray(const std::vector<size_t> vec) : CoreDims(vec.size(), &Dimensions[0])
+    DimsArray(const std::vector<size_t> &vec) : CoreDims(vec.size(), &Dimensions[0])
     {
         for (size_t i = 0; i < vec.size(); i++)
         {
@@ -178,6 +186,19 @@ public:
         std::copy(d1.begin(), d1.end(), &Dimensions[0]);
     }
 };
+
+/**
+ * Make an adios2::Dims vector from steps + another Dims vector
+ * @return adios2::Dims vector, first element is 'firstElement', rest is input vector
+ */
+adios2::Dims DimsWithStep(size_t firstElement, adios2::Dims &dimsWithoutSteps) noexcept;
+
+/**
+ * Separate adios2::Dims vector with step
+ * @return tuple of first element, and an adios2::Dims vector without first element of input
+ * vector.
+ */
+std::tuple<size_t, adios2::Dims> DimsWithoutStep(adios2::Dims &dimsWithSteps) noexcept;
 
 /**
  * Gets type from template parameter T

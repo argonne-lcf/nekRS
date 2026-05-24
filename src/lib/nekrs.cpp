@@ -346,9 +346,21 @@ void setup(MPI_Comm commg_in,
 
   platform->device.printMemoryUsage(platform->comm.mpiComm());
 
+  platform->deviceMemoryPool.shrinkToFit();
+  //platform->memoryPool.shrinkToFit();
+
   platform->flopCounter->clear();
 
+  if (platform->comm.mpiRank() == 0) {
+    printf("\n================= INITIAL CONDITION ====================\n");
+  }
+
   platform->app->printSolutionMinMax();
+
+  if (platform->comm.mpiRank() == 0) {
+    printf("\nproperties:\n");
+  }
+  platform->app->printPropertiesMinMax();
 
   if (rank == 0) {
     std::cout << std::endl;
@@ -365,7 +377,7 @@ void udfExecuteStep(double time, int tstep, int checkpointStep)
     nek::ifoutfld(1);
   }
 
-  platform->timer.tic("udfExecuteStep", 1);
+  platform->timer.tic("udfExecuteStep");
   if (udf.executeStep) {
     if (platform->comm.mpiRank() == 0 && platform->verbose()) {
       std::cout << "calling udfExecuteStep ..." << std::flush << std::endl;
@@ -691,6 +703,11 @@ int finalize()
     hypreWrapper::finalize();
     hypreWrapperDevice::finalize();
     AMGXfinalize();
+
+    if (udf.finalize) {
+      udf.finalize();
+    }
+
     nek::finalize();
   }
 

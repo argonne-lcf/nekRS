@@ -63,7 +63,6 @@ occa::memory strongGradVec(mesh_t *mesh, dlong offset, const occa::memory &o_in,
 {
   poolDeviceMemory<dfloat> o_out(mesh->dim * mesh->dim * offset);
   strongGradVec(mesh, offset, o_in, o_out, avg);
-  if (avg) runAvg(mesh, o_out, offset, mesh->dim * mesh->dim);
   return o_out;
 }
 

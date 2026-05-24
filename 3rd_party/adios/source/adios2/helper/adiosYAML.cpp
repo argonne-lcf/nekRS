@@ -74,7 +74,7 @@ inline void FixHomePath(std::string &path, std::string &homePath)
     }
 }
 
-/*std::string NodeType(const YAML::Node &node)
+std::string NodeType(const YAML::Node &node)
 {
     switch (node.Type())
     {
@@ -90,13 +90,13 @@ inline void FixHomePath(std::string &path, std::string &homePath)
         return "Undefined";
     }
     return "NoIdeaWhatThisIs";
-}*/
+}
 
 template <class T>
 void SetOption(T &value, const std::string nodeName, const YAML::Node &upperNode,
-               const std::string &hint)
+               const std::string &hint, bool mandatory = isNotMandatory)
 {
-    auto node = YAMLNode(nodeName, upperNode, hint, isNotMandatory, YAML::NodeType::Scalar);
+    auto node = YAMLNode(nodeName, upperNode, hint, mandatory, YAML::NodeType::Scalar);
     if (node)
     {
         value = node.as<T>();
@@ -272,12 +272,12 @@ void ParseUserOptionsFile(Comm &comm, const std::string &configFileYAML, UserOpt
         helper::Throw<std::invalid_argument>(
             "Helper", "adiosUserOptions", "ParseUserOptionsFile",
             "parser error in file " + configFileYAML +
-                " invalid format. Check with any YAML editor if format is ill-formed, " + hint);
+                ": invalid format. Check with any YAML editor if format is ill-formed, " + hint);
     }
 
     /*
      * This code section below determines what options we recognize at all from the
-     * ~/.config/adios2/adios2.yaml file
+     * ~/.config/adios2/adios2.yaml and ~/.config/hpc-campaign/config.yaml files
      */
     {
         UserOptions::General &opts = options.general;
@@ -311,6 +311,209 @@ void ParseUserOptionsFile(Comm &comm, const std::string &configFileYAML, UserOpt
         if (sst)
         {
             SetOption(opts.verbose, "verbose", sst, hint);
+        }
+    }
+}
+
+HostAccessProtocol GetHostAccessProtocol(std::string valueStr)
+{
+    std::transform(valueStr.begin(), valueStr.end(), valueStr.begin(), ::tolower);
+    if (valueStr == "ssh")
+    {
+        return HostAccessProtocol::SSH;
+    }
+    else if (valueStr == "s3")
+    {
+        return HostAccessProtocol::S3;
+    }
+    else if (valueStr == "xrootd")
+    {
+        return HostAccessProtocol::XRootD;
+    }
+    return HostAccessProtocol::Invalid;
+}
+
+HostAuthProtocol GetHostAuthProtocol(std::string valueStr)
+{
+    std::transform(valueStr.begin(), valueStr.end(), valueStr.begin(), ::tolower);
+    if (valueStr == "password")
+    {
+        return HostAuthProtocol::Password;
+    }
+    else if (valueStr == "x509" || valueStr == "x.509")
+    {
+        return HostAuthProtocol::X509;
+    }
+    return HostAuthProtocol::Invalid;
+}
+
+void ParseHostOptionsFile(Comm &comm, const std::string &configFileYAML, HostOptions &hosts,
+                          std::string &homePath)
+{
+    const std::string hint =
+        "when parsing host config file " + configFileYAML + " in call to ADIOS constructor";
+
+    const std::string configFileContents = comm.BroadcastFile(configFileYAML, hint);
+
+    const YAML::Node document = YAML::Load(configFileContents);
+    if (!document)
+    {
+        helper::Throw<std::invalid_argument>(
+            "Helper", "adiosHostOptions", "ParseHostOptionsFile",
+            "parser error in file " + configFileYAML +
+                ": invalid format. Check with any YAML editor if format is ill-formed, " + hint);
+    }
+
+    if (!document.IsMap())
+    {
+        helper::Throw<std::invalid_argument>("Helper", "adiosHostOptions", "ParseHostOptionsFile",
+                                             "parser error: not a YAML Map of hosts, " + hint);
+    }
+
+    /* top level is a dictionary of <hostname, dictionary of options> */
+    for (auto itDoc = document.begin(); itDoc != document.end(); ++itDoc)
+    {
+        std::string hostname = itDoc->first.as<std::string>();
+
+        /* a dictionary of host options, with each entry a dictionary */
+        YAML::Node hostentry = itDoc->second;
+        if (!hostentry.IsMap())
+        {
+            helper::Throw<std::invalid_argument>(
+                "Helper", "adiosHostOptions", "ParseHostOptionsFile",
+                "parser error for host " + hostname +
+                    ": each host must have a YAML Map of options, " + hint);
+        }
+
+        std::vector<HostConfig> hostConfigs;
+        for (auto itHost = hostentry.begin(); itHost != hostentry.end(); ++itHost)
+        {
+            /* one connection setup as a dictionary */
+            HostConfig hc;
+            hc.name = itHost->first.as<std::string>();
+            const YAML::Node &hostmap = itHost->second;
+            if (!hostmap.IsMap())
+            {
+                helper::Throw<std::invalid_argument>(
+                    "Helper", "adiosHostOptions", "ParseHostOptionsFile",
+                    "parser error for host " + hostname +
+                        ": each entry in the list must be a YAML Map, " + hint);
+            }
+
+            SetOption(hc.verbose, "verbose", hostmap, hint);
+            std::string protocolStr;
+            SetOption(protocolStr, "protocol", hostmap, hint, isMandatory);
+            hc.protocol = GetHostAccessProtocol(protocolStr);
+            switch (hc.protocol)
+            {
+            case HostAccessProtocol::SSH: {
+                std::string authStr;
+                SetOption(authStr, "authentication", hostmap, hint, isMandatory);
+                hc.authentication = GetHostAuthProtocol(authStr);
+                SetOption(hc.hostname, "host", hostmap, hint, isMandatory);
+                SetOption(hc.username, "user", hostmap, hint);
+                SetOption(hc.remoteServerPath, "serverpath", hostmap, hint, isMandatory);
+                SetOption(hc.port, "port", hostmap, hint);
+                SetOption(hc.localPort, "local_port", hostmap, hint);
+                break;
+            }
+            case HostAccessProtocol::XRootD: {
+                std::string authStr;
+                SetOption(authStr, "authentication", hostmap, hint, isMandatory);
+                hc.authentication = GetHostAuthProtocol(authStr);
+                SetOption(hc.hostname, "host", hostmap, hint, isMandatory);
+                SetOption(hc.username, "user", hostmap, hint);
+                SetOption(hc.remoteServerPath, "serverpath", hostmap, hint);
+                SetOption(hc.port, "port", hostmap, hint);
+                break;
+            }
+            case HostAccessProtocol::S3: {
+                SetOption(hc.awsProfile, "profile", hostmap, hint);
+                SetOption(hc.endpoint, "endpoint", hostmap, hint, isMandatory);
+                SetOption(hc.isAWS_EC2, "aws_ec2_metadata", hostmap, hint);
+                SetOption(hc.recheckMetadata, "recheck_metadata", hostmap, hint);
+                break;
+            }
+            default:
+                helper::Throw<std::invalid_argument>(
+                    "Helper", "adiosHostOptions", "ParseHostOptionsFile",
+                    "parser error: invalid access host protocol '" + protocolStr + " for " +
+                        hc.name + "', " + hint);
+            }
+
+            hostConfigs.push_back(hc);
+        }
+        hosts.emplace(hostname, hostConfigs);
+    }
+}
+
+void ParseTimeSeriesFile(Comm &comm, const std::string &atsYAML, TimeSeriesList &tsl)
+{
+    const std::string hint =
+        "when parsing ATS time series file " + atsYAML + " in call to TimeSeries engine";
+
+    const std::string content = comm.BroadcastFile(atsYAML, hint);
+
+    const YAML::Node document = YAML::Load(content);
+
+    if (!document)
+    {
+        helper::Throw<std::invalid_argument>(
+            "Helper", "TimeSeries", "ParseTimeSeriesFile",
+            "parser error in file " + atsYAML +
+                ": invalid format. Check with any YAML editor if format is ill-formed, " + hint);
+    }
+
+    if (!document.IsSequence())
+    {
+        helper::Throw<std::invalid_argument>("Helper", "TimeSeries", "ParseTimeSeriesFile",
+                                             "parser error: not a YAML Sequence of file entries, " +
+                                                 hint);
+    }
+
+    /* top level is a sequence of local path scalars and remote path dictionaries */
+    int nEntry = -1;
+    for (auto itDoc = document.begin(); itDoc != document.end(); ++itDoc)
+    {
+        ++nEntry;
+        if (nEntry < tsl.lastUsedEntry)
+            continue;
+
+        if (itDoc->Type() == YAML::NodeType::Scalar)
+        {
+            TimeSeriesEntry tse;
+            tse.localpath = itDoc->as<std::string>();
+            if (tse.localpath == "end")
+            {
+                tsl.ended = true;
+                break;
+            }
+            tsl.entries.push_back(tse);
+            continue;
+        }
+        else if (itDoc->Type() == YAML::NodeType::Map)
+        {
+            TimeSeriesEntry tse;
+            /* a dictionary of host options, with each entry a dictionary */
+            YAML::Node nameentry = *itDoc;
+
+            SetOption(tse.localpath, "localpath", nameentry, hint, isMandatory);
+            if (tse.localpath == "end")
+            {
+                tsl.ended = true;
+                break;
+            }
+
+            SetOption(tse.remotehost, "remotehost", nameentry, hint);
+            SetOption(tse.remotepath, "remotepath", nameentry, hint);
+            SetOption(tse.uuid, "uuid", nameentry, hint);
+            tsl.entries.push_back(tse);
+        }
+        else
+        {
+            helper::Throw<std::invalid_argument>("Helper", "TimeSeries", "ParseTimeSeriesFile",
+                                                 "parser error: entry " + std::to_string(nEntry) +
+                                                     " is " + NodeType(*itDoc) + ", " + hint);
         }
     }
 }

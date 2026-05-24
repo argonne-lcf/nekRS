@@ -31,7 +31,8 @@ std::vector<int> determineMGLevels(std::string section)
 
     const auto coarseLevelN = levels.back();
     nekrsCheck(coarseLevelN > 1 &&
-                   platform->options.compareArgs(optionsPrefix + "MULTIGRID COARSE SOLVER", "BOOMERAMG"),
+                 (platform->options.compareArgs(optionsPrefix + "MULTIGRID COARSE SOLVER", "BOOMERAMG") || 
+                  platform->options.compareArgs(optionsPrefix + "MULTIGRID COARSE SOLVER", "XXT")),
                platform->comm.mpiComm(),
                EXIT_FAILURE,
                "%s\n",

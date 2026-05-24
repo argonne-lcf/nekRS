@@ -91,6 +91,10 @@ int main(int argc, char** argv)
       std::cout << "FATAL ERROR: Cannot initialize MPI!" << "\n";
       exit(EXIT_FAILURE);
     }
+    if (provided < request) {
+      std::cout << "FATAL ERROR: Requested thread level not provided by MPI library" << std::endl;
+      exit(EXIT_FAILURE);
+    }
     MPI_Comm_rank(MPI_COMM_WORLD, &worldRank);
   }
 
@@ -373,6 +377,8 @@ int main(int argc, char** argv)
   const int exitValue = nekrs::finalize();
 
   MPI_Barrier(commGlobal);
+  MPI_Comm_free(&commGlobal);
+
   MPI_Finalize();
 
   if(exitValue)

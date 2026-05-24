@@ -62,6 +62,8 @@ void meshBuildFaceNodesHex3D(mesh_t *mesh);
 
 /* offsets for geometric factors */
 constexpr int Nvgeo = 12;
+constexpr int Ncubvgeo = 10;
+
 #define RXID 0
 #define RYID 1
 #define RZID 2
@@ -71,8 +73,8 @@ constexpr int Nvgeo = 12;
 #define TXID 6
 #define TYID 7
 #define TZID 8
-#define JID 9
-#define JWID 10
+#define JWID 9 
+#define JID 10
 #define IJWID 11
 
 /* offsets for second order geometric factors */

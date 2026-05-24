@@ -86,12 +86,14 @@ function(python_add_test)
     set_property(TEST ${ARGS_NAME} PROPERTY
       ENVIRONMENT
         "PYTHONPATH=${ADIOS2_BINARY_DIR}/${CMAKE_INSTALL_PYTHONDIR}:$ENV{PYTHONPATH}"
+        "PYTHONUSERBASE=${CMAKE_BINARY_DIR}"
     )
   else()
     set_property(TEST ${ARGS_NAME} PROPERTY
       ENVIRONMENT
-        "PYTHONPATH=${ADIOS2_BINARY_DIR}/${CMAKE_INSTALL_PYTHONDIR};$ENV{PYTHONPATH}"
-        "PATH=$<TARGET_FILE_DIR:adios2_py>;$ENV{PATH}"
+        "PYTHONPATH=${ADIOS2_BINARY_DIR}/${CMAKE_INSTALL_PYTHONDIR};$<SHELL_PATH:$<TARGET_FILE_DIR:adios2_py>>;$ENV{PYTHONPATH}"
+        "PATH=$<SHELL_PATH:$<TARGET_FILE_DIR:adios2_py>>;$<SHELL_PATH:$<TARGET_FILE_DIR:adios2_core>>;$ENV{PATH}"
+        "PYTHONUSERBASE=${CMAKE_BINARY_DIR}"
     )
   endif()
 endfunction()
@@ -161,6 +163,14 @@ function(adios2_add_thirdparty_target PackageName TargetName)
   target_link_libraries(adios2::thirdparty::${PackageName}
     INTERFACE ${TargetName}
   )
+
+  if (TargetName)
+    get_target_property(interface_include_directories ${TargetName} INTERFACE_INCLUDE_DIRECTORIES)
+    if (interface_include_directories)
+      set_target_properties(adios2::thirdparty::${PackageName} PROPERTIES
+        INTERFACE_INCLUDE_DIRECTORIES "${interface_include_directories}")
+    endif()
+  endif()
 endfunction()
 
 # Setup the test dependencies and fixtures for a given pipeline:

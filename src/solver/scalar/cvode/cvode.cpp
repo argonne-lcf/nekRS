@@ -1,37 +1,5 @@
 #include "platform.hpp"
 #include "cvode.hpp"
-#include "elliptic.hpp"
-#include "maskedFaceIds.hpp"
-#include "inipp.hpp"
-#include "nekInterfaceAdapter.hpp"
-#include "udf.hpp"
-
-#include "plugins/lowMach.hpp"
-#include "tabularPrinter.hpp"
-
-#ifdef ENABLE_CVODE
-
-// cvode includes
-#include "sunlinsol/sunlinsol_spgmr.h"
-#include "sundials/sundials_types.h"
-#include "sundials/sundials_math.h"
-#include "cvode/cvode.h"
-
-#include <sunnonlinsol/sunnonlinsol_fixedpoint.h>
-
-#include "nvector/nvector_serial.h"
-#include "nvector/nvector_mpiplusx.h"
-
-#ifdef ENABLE_CUDA
-#include "nvector/nvector_cuda.h"
-#endif
-#ifdef ENABLE_HIP
-#include "nvector/nvector_hip.h"
-#endif
-
-#include "getN_VectorMemory.hpp"
-
-#endif
 
 namespace
 {
@@ -123,7 +91,7 @@ void cvode_t::printInfo(bool printVerboseInfo)
 {
 }
 
-void cvode_t::printTimers()
+void cvode_t::printTimers(std::string tag)
 {
 }
 

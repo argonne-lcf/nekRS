@@ -35,9 +35,9 @@ void ellipticUpdateJacobi(elliptic_t *elliptic, occa::memory &o_invDiagA)
 
   if (!o_invDiagA.isInitialized()) {
     if (elliptic->mgLevel) {
-      o_invDiagA = platform->device.malloc<pfloat>(elliptic->Nfields * elliptic->fieldOffset);
+      o_invDiagA = platform->deviceMemoryPool.reserve<pfloat>(elliptic->Nfields * elliptic->fieldOffset);
     } else {
-      o_invDiagA = platform->device.malloc<dfloat>(elliptic->Nfields * elliptic->fieldOffset);
+      o_invDiagA = platform->deviceMemoryPool.reserve<dfloat>(elliptic->Nfields * elliptic->fieldOffset);
     }
   }
 

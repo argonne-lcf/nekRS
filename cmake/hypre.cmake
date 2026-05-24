@@ -13,6 +13,23 @@ if("${CMAKE_CXX_COMPILE_OPTIONS_VISIBILITY}" STREQUAL "")
 endif()
 string(APPEND HYPRE_FLAGS_EXTRA " ${CMAKE_CXX_COMPILE_OPTIONS_VISIBILITY}hidden")
 
+set(HYPRE_CONFIGURE_FLAGS
+  --disable-shared
+  --enable-mixedint
+  --disable-fortran
+)
+if(NEKRS_USE_PFLOAT_FLOAT)
+  list(APPEND HYPRE_CONFIGURE_FLAGS --enable-single)
+endif()
+
+if(NEKRS_GPU_MPI)
+  list(APPEND HYPRE_CONFIGURE_FLAGS --enable-gpu-aware-mpi)
+endif()
+
+if(CUDAToolkit_VERSION VERSION_GREATER_EQUAL "13.0.0")
+  #disable for now as it might not play well with all MPI implementations
+  #list(APPEND HYPRE_CONFIGURE_FLAGS --enable-device-malloc-async)
+endif()
 
 set(HYPRE_INSTALL_DIR ${CMAKE_CURRENT_BINARY_DIR}/HYPRE_BUILD-prefix)
 set(HYPRE_BUILD_DIR ${HYPRE_INSTALL_DIR}/src/HYPRE_BUILD)
@@ -24,13 +41,15 @@ ExternalProject_Add(
      --prefix=${HYPRE_INSTALL_DIR}
      --with-extra-CFLAGS=${HYPRE_FLAGS_EXTRA}
      --with-extra-CXXFLAGS=${HYPRE_FLAGS_EXTRA}
-     --disable-shared --enable-single --enable-mixedint --disable-fortran
      ${HYPRE_CONFIGURE_FLAGS}
    BUILD_COMMAND "" 
    INSTALL_COMMAND cd ${HYPRE_BUILD_DIR}/src && $(MAKE) install
 )
 
 add_library(nekrs-hypre SHARED ${CMAKE_CURRENT_SOURCE_DIR}/src/core/linearSolver/hypre/hypreWrapper.cpp)
+if(NEKRS_USE_PFLOAT_FLOAT)
+  target_compile_definitions(nekrs-hypre PUBLIC NEKRS_HYPRE_USE_FLOAT)
+endif()
 add_dependencies(nekrs-hypre HYPRE_BUILD)
 target_include_directories(nekrs-hypre PRIVATE ${HYPRE_INSTALL_DIR}/include)
 target_link_libraries(nekrs-hypre PUBLIC MPI::MPI_C 
@@ -59,12 +78,8 @@ if(OCCA_CUDA_ENABLED)
 
   if(CUDAToolkit_VERSION VERSION_GREATER_EQUAL "13.0.0")
     set(HYPRE_DEVICE_ARCH "HYPRE_CUDA_SM=80 90")
-    #disable for now as it might not play well with all MPI implementations
-    #set(HYPRE_CONFIGURE_FLAGS "--enable-device-malloc-async")
   elseif(CUDAToolkit_VERSION VERSION_GREATER_EQUAL "12.0.0")
     set(HYPRE_DEVICE_ARCH "HYPRE_CUDA_SM=70 80")
-    #disable for now as it might not play well with all MPI implementations
-    #set(HYPRE_CONFIGURE_FLAGS "--enable-device-malloc-async")
   endif()
 
 elseif(OCCA_HIP_ENABLED)
@@ -88,10 +103,6 @@ elseif(OCCA_HIP_ENABLED)
   set(HYPRE_BACKEND "--with-hip")
 endif()
 
-if(NEKRS_GPU_MPI)
-  list(APPEND HYPRE_CONFIGURE_FLAGS "--enable-gpu-aware-mpi --with-cxxstandard=17")
-endif()
-
   set(HYPRE_INSTALL_DIR ${CMAKE_CURRENT_BINARY_DIR}/HYPRE_BUILD_DEVICE-prefix)
   set(HYPRE_BUILD_DIR ${HYPRE_INSTALL_DIR}/src/HYPRE_BUILD_DEVICE)
   ExternalProject_Add(
@@ -103,7 +114,6 @@ endif()
      --with-extra-CFLAGS=${HYPRE_COMPILER_C_FLAGS}
      --with-extra-CXXFLAGS=${HYPRE_COMPILER_CXX_FLAGS}
      --with-extra-CUFLAGS=${HYPRE_DEVICE_COMPILER_FLAGS}
-     --disable-shared --enable-single --enable-mixedint --disable-fortran
      ${HYPRE_BACKEND} ${HYPRE_DEVICE_ARCH}
      ${HYPRE_CONFIGURE_FLAGS}
    BUILD_COMMAND "" 
@@ -111,6 +121,9 @@ endif()
   )
 
   add_library(nekrs-hypre-device SHARED ${CMAKE_CURRENT_SOURCE_DIR}/src/core/linearSolver/hypre/hypreWrapperDevice.cpp)
+  if(NEKRS_USE_PFLOAT_FLOAT)
+    target_compile_definitions(nekrs-hypre-device PUBLIC NEKRS_HYPRE_USE_FLOAT)
+  endif()
   add_dependencies(nekrs-hypre-device HYPRE_BUILD_DEVICE)
   target_compile_definitions(nekrs-hypre-device PRIVATE -DENABLE_HYPRE_GPU)
   target_include_directories(nekrs-hypre-device PRIVATE ${HYPRE_INSTALL_DIR}/include)

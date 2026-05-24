@@ -8,7 +8,7 @@ void registerMeshKernels(occa::properties kernelInfoBC)
 
   int p, pCub = 0;
   platform->options.getArgs("POLYNOMIAL DEGREE", p);
-  platform->options.getArgs("CUBATURE POLYNOMIAL DEGREE", pCub);
+  platform->options.getArgs("OVERINTEGRATION POLYNOMIAL DEGREE ", pCub);
 
   std::vector<int> Nlist = {p};
 

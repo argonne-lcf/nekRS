@@ -13,7 +13,7 @@ static void advectionFlops(mesh_t *mesh, int Nfields)
   const auto Np = mesh->Np;
   const auto Nelements = mesh->Nelements;
   double flopCount = 0.0; // per elem basis
-  if (platform->options.compareArgs("ADVECTION TYPE", "CUBATURE")) {
+  if (platform->options.compareArgs("ADVECTION TYPE", "OVERINTEGRATION")) {
     flopCount += 4. * Nq * (cubNp + cubNq * cubNq * Nq + cubNq * Nq * Nq); // interpolation
     flopCount += 6. * cubNp * cubNq;                                       // apply Dcub
     flopCount += 5 * cubNp; // compute advection term on cubature mesh
@@ -35,18 +35,18 @@ void scalar_t::advectionSubcycling(int nEXT, double time, int is)
   const auto nFields = 1;
 
   auto o_Si = o_S.slice(fieldOffsetScan[is], mesh->Nlocal);
-  auto o_JwFi = o_JwF.slice(fieldOffsetScan[is], mesh->Nlocal);
+  auto o_ADVi = o_ADV.slice(fieldOffsetScan[is], mesh->Nlocal);
 
   static occa::kernel kernel;
   if (!kernel.isInitialized()) {
-    if (platform->options.compareArgs("ADVECTION TYPE", "CUBATURE")) {
+    if (platform->options.compareArgs("ADVECTION TYPE", "OVERINTEGRATION")) {
       kernel = platform->kernelRequests.load("core-subCycleStrongCubatureVolumeScalarHex3D");
     } else {
       kernel = platform->kernelRequests.load("core-subCycleStrongVolumeScalarHex3D");
     }
   }
 
-  platform->linAlg->fill(o_JwFi.size(), 0, o_JwFi);
+  platform->linAlg->fill(o_ADVi.size(), 0, o_ADVi);
 
   advectionSubcyclingRK(mesh,
                         meshV,
@@ -63,16 +63,16 @@ void scalar_t::advectionSubcycling(int nEXT, double time, int is)
                         vCubatureOffset,
                         fieldOffsetSum,
                         (geom) ? geom->o_div : o_NULL,
-                        o_relUrst,
+                        *o_relUrst,
                         o_Si,
-                        o_JwFi);
+                        o_ADVi);
 
   if (platform->verbose()) {
     const dfloat debugNorm = platform->linAlg->weightedNorm2Many(mesh->Nlocal,
                                                                  1,
                                                                  0,
                                                                  mesh->ogs->o_invDegree,
-                                                                 o_JwFi,
+                                                                 o_ADVi,
                                                                  platform->comm.mpiComm());
     if (platform->comm.mpiRank() == 0) {
       printf("%s%s advSub norm: %.15e\n", "scalar", scalarDigitStr(is).c_str(), debugNorm);
@@ -110,29 +110,20 @@ scalar_t::scalar_t(scalarConfig_t &cfg, const std::unique_ptr<geomSolver_t> &_ge
   o_coeffEXT = cfg.o_coeffEXT;
 
   _fieldOffset = cfg.fieldOffset; // for now same for all scalars
-  vFieldOffset = o_U.isInitialized() ? cfg.vFieldOffset : _fieldOffset;
+  vFieldOffset = cfg.vFieldOffset;
   vCubatureOffset = cfg.vCubatureOffset;
 
   o_U = cfg.o_U;
-  if (!o_U.isInitialized()) {
-    o_U = platform->device.malloc<dfloat>(meshV->dim * std::max(o_coeffBDF.size(), o_coeffEXT.size()) *
-                                          vFieldOffset);
-  }
-
-  o_Ue = cfg.o_Ue;
-  if (!o_Ue.isInitialized()) {
-    o_Ue = platform->device.malloc<dfloat>(meshV->dim * vFieldOffset);
-  }
+  nekrsCheck(o_U->size() < meshV->dim * vFieldOffset,
+             platform->comm.mpiComm(),
+             EXIT_FAILURE,
+             "%s\n",
+             "o_U has invalid size!");
 
   o_relUrst = cfg.o_relUrst;
-  if (!o_relUrst.isInitialized()) {
-    const dlong Nstates = Nsubsteps ? std::max(o_coeffBDF.size(), o_coeffEXT.size()) : 1;
-    o_relUrst = platform->device.malloc<dfloat>(Nstates * meshV->dim * vCubatureOffset);
-  }
+  o_Ue = cfg.o_Ue;
 
   dpdt = cfg.dpdt;
-  dp0thdt = cfg.dp0thdt;
-  alpha0Ref = cfg.alpha0Ref;
 
   dlong sum = 0;
   for (int s = 0; s < NSfields; ++s) {
@@ -147,6 +138,9 @@ scalar_t::scalar_t(scalarConfig_t &cfg, const std::unique_ptr<geomSolver_t> &_ge
   o_prop = platform->device.malloc<dfloat>(2 * fieldOffsetSum);
   o_diff = o_prop.slice(0 * fieldOffsetSum, fieldOffsetSum);
   o_rho = o_prop.slice(1 * fieldOffsetSum, fieldOffsetSum);
+
+  o_namesOffset = alignStride<char>(128);
+  o_names = platform->device.malloc<char>(NSfields * o_namesOffset);
 
   for (int is = 0; is < NSfields; is++) {
     const std::string sid = scalarDigitStr(is);
@@ -163,7 +157,7 @@ scalar_t::scalar_t(scalarConfig_t &cfg, const std::unique_ptr<geomSolver_t> &_ge
       tmp.copyFrom(nullChar, 1, prefixedName.size());
       return tmp;
     }();
-    o_name.push_back(o_tmp);
+    o_names.copyFrom(o_tmp, o_tmp.size(), is * o_namesOffset);
 
     if (options.compareArgs("SCALAR" + sid + " SOLVER", "NONE")) {
       continue;
@@ -252,17 +246,8 @@ scalar_t::scalar_t(scalarConfig_t &cfg, const std::unique_ptr<geomSolver_t> &_ge
   o_compute = platform->device.malloc<dlong>(NSfields, compute.data());
   o_cvodeSolve = platform->device.malloc<dlong>(NSfields, cvodeSolve.data());
 
-  int nFieldsAlloc = anyEllipticSolver ? std::max(o_coeffBDF.size(), o_coeffEXT.size()) : 1;
+  const auto nFieldsAlloc = anyEllipticSolver ? std::max(o_coeffBDF.size(), o_coeffEXT.size()) : 1;
   o_S = platform->device.malloc<dfloat>(nFieldsAlloc * fieldOffsetSum);
-
-  nFieldsAlloc = anyEllipticSolver ? o_coeffEXT.size() : 1;
-  o_ADV = platform->device.malloc<dfloat>(nFieldsAlloc * fieldOffsetSum);
-  o_EXT = platform->device.malloc<dfloat>(nFieldsAlloc * fieldOffsetSum);
-
-  if (anyEllipticSolver) {
-    o_Se = platform->device.malloc<dfloat>(fieldOffsetSum);
-    o_JwF = platform->device.malloc<dfloat>(fieldOffsetSum);
-  }
 
   bool filteringEnabled = false;
   bool avmEnabled = false;
@@ -341,14 +326,46 @@ scalar_t::scalar_t(scalarConfig_t &cfg, const std::unique_ptr<geomSolver_t> &_ge
   verifyBC();
 }
 
+void scalar_t::allocate()
+{
+  {
+    auto alloc = false;
+    for (int is = 0; is < NSfields; is++) {
+      const auto sid = scalarDigitStr(is);
+      if (platform->options.compareArgs("SCALAR" + sid + " INITIAL GUESS", "EXTRAPOLATION")) {
+        alloc = true;
+      }
+    }
+
+    if (alloc) {
+      o_Se = platform->device.malloc<dfloat>(fieldOffsetSum);
+    }
+  }
+
+  if (anyEllipticSolver) {
+    if (platform->hostSpilling()) {
+      h_ADV = platform->memoryPool.reserve<dfloat>(o_coeffEXT.size() * fieldOffsetSum);
+      h_EXT = platform->memoryPool.reserve<dfloat>(o_coeffEXT.size() * fieldOffsetSum);
+    } else {
+      o_ADV = platform->device.malloc<dfloat>(o_coeffEXT.size() * fieldOffsetSum);
+      o_EXT = platform->device.malloc<dfloat>(o_coeffEXT.size() * fieldOffsetSum);
+    }
+  }
+}
+
 void scalar_t::makeAdvection(int is, double time, int tstep)
 {
+  nekrsCheck(o_relUrst->size() < meshV->dim * std::max(vFieldOffset, vCubatureOffset),
+             MPI_COMM_SELF,
+             EXIT_FAILURE,
+             "%s\n",
+             "o_relUrst has invalid size!");
+
   if (Nsubsteps) {
     advectionSubcycling(std::min(tstep, static_cast<int>(o_coeffEXT.size())), time, is);
   } else {
     auto mesh = meshV;
-
-    if (platform->options.compareArgs("ADVECTION TYPE", "CUBATURE")) {
+    if (platform->options.compareArgs("ADVECTION TYPE", "OVERINTEGRATION")) {
       launchKernel("core-strongAdvectionCubatureVolumeScalarHex3D",
                    mesh->Nelements,
                    1, /* nScalars */
@@ -363,7 +380,7 @@ void scalar_t::makeAdvection(int is, double time, int tstep)
                    vFieldOffset,
                    vCubatureOffset,
                    o_S,
-                   o_relUrst,
+                   *o_relUrst,
                    o_rho,
                    o_ADV);
     } else {
@@ -377,7 +394,7 @@ void scalar_t::makeAdvection(int is, double time, int tstep)
                    o_fieldOffsetScan + is,
                    vFieldOffset,
                    o_S,
-                   o_relUrst,
+                   *o_relUrst,
                    o_rho,
                    o_ADV);
     }
@@ -397,6 +414,8 @@ void scalar_t::makeExplicit(int is, double time, int tstep)
                  meshV->Nelements,
                  is,
                  1,
+                 static_cast<int>(false),
+                 mesh->o_Jw,
                  o_fieldOffsetScan,
                  o_applyFilterRT,
                  o_filterRT,
@@ -418,7 +437,7 @@ void scalar_t::makeExplicit(int is, double time, int tstep)
     auto o_EXTi = o_EXT.slice(fieldOffsetScan[is], mesh->Nlocal);
     auto o_rhoi = o_rho.slice(fieldOffsetScan[is], mesh->Nlocal);
 
-    addGJP(mesh, ellipticSolver[is]->o_EToB(), o_rho, vFieldOffset, o_U, o_Si, o_EXTi, tauFactor);
+    addGJP(mesh, ellipticSolver[is]->o_EToB(), o_rho, vFieldOffset, *o_U, o_Si, o_EXTi, tauFactor);
   }
 
   const int movingMesh = platform->options.compareArgs("MOVING MESH", "TRUE");
@@ -515,7 +534,7 @@ void scalar_t::applyAVM()
     const bool makeCont = platform->options.compareArgs("SCALAR" + sid + " REGULARIZATION AVM C0", "TRUE");
 
     auto o_Si = o_S.slice(fieldOffsetScan[scalarIndex], mesh->Nlocal);
-    auto o_eps = avm::viscosity(vFieldOffset, o_U, o_Si, absTol, scalingCoeff, logS0, kappa, makeCont);
+    auto o_eps = avm::viscosity(vFieldOffset, *o_U, o_Si, absTol, scalingCoeff, logS0, kappa, makeCont);
 
     if (verbose) {
       const dfloat maxEps = platform->linAlg->max(mesh->Nlocal, o_eps, platform->comm.mpiComm());
@@ -600,7 +619,7 @@ void scalar_t::applyDirichlet(double time)
 
     for (int sweep = 0; sweep < 2; sweep++) {
       launchKernel("scalar_t::dirichletBC",
-                   o_name[is],
+                   o_names + is * o_namesOffset,
                    mesh->Nelements,
                    _fieldOffset,
                    is,
@@ -612,7 +631,7 @@ void scalar_t::applyDirichlet(double time)
                    mesh->o_vmapM,
                    mesh->o_EToB,
                    o_EToB + is * EToBOffset,
-                   o_Ue,
+                   *o_Ue,
                    o_diff_i,
                    o_rho_i,
                    neknek ? neknek->intValOffset() : 0,
@@ -684,6 +703,10 @@ void scalar_t::setupEllipticSolver()
 
 void scalar_t::makeForcing()
 {
+  if (!o_JwF.isInitialized()) {
+    o_JwF = platform->deviceMemoryPool.reserve<dfloat>(fieldOffsetSum);
+  }
+
   for (int is = 0; is < this->NSfields; is++) {
     if (!compute[is] || cvodeSolve[is]) {
       continue;
@@ -721,12 +744,12 @@ void scalar_t::makeForcing()
     }
   }
 
-  const auto n = std::max(o_coeffEXT.size(), o_coeffBDF.size());
-  for (int s = n; s > 1; s--) {
+  for (int s = o_EXT.size() / fieldOffsetSum; s > 1; s--) {
     o_EXT.copyFrom(o_EXT, fieldOffsetSum, (s - 1) * fieldOffsetSum, (s - 2) * fieldOffsetSum);
-    if (o_ADV.isInitialized()) {
-      o_ADV.copyFrom(o_ADV, fieldOffsetSum, (s - 1) * fieldOffsetSum, (s - 2) * fieldOffsetSum);
-    }
+  }
+
+  for (int s = o_ADV.size() / fieldOffsetSum; s > 1; s--) {
+    o_ADV.copyFrom(o_ADV, fieldOffsetSum, (s - 1) * fieldOffsetSum, (s - 2) * fieldOffsetSum);
   }
 }
 
@@ -750,7 +773,8 @@ void scalar_t::solve(double time, int stage)
     auto o_lhs = platform->deviceMemoryPool.reserve<dfloat>(mesh->Nlocal);
 
     launchKernel("scalar_t::neumannBCHex3D",
-                 o_name[is],
+                 o_names,
+                 o_namesOffset,
                  mesh->Nelements,
                  1,
                  mesh->o_sgeo,
@@ -765,7 +789,7 @@ void scalar_t::solve(double time, int stage)
                  mesh->o_x,
                  mesh->o_y,
                  mesh->o_z,
-                 o_Ue,
+                 *o_Ue,
                  o_S,
                  o_EToB,
                  o_diff,
@@ -822,8 +846,7 @@ void scalar_t::lagSolution()
     return;
   }
 
-  const auto n = std::max(o_coeffEXT.size(), o_coeffBDF.size());
-  for (int s = n; s > 1; s--) {
+  for (int s = o_S.size() / fieldOffsetSum; s > 1; s--) {
     o_S.copyFrom(o_S, fieldOffsetSum, (s - 1) * fieldOffsetSum, (s - 2) * fieldOffsetSum);
   }
 }
@@ -856,49 +879,6 @@ void scalar_t::finalize()
   }
 }
 
-void scalar_t::computeUrst()
-{
-  auto mesh = meshV;
-
-  if (Nsubsteps) {
-    for (int s = std::max(o_coeffBDF.size(), o_coeffEXT.size()); s > 1; s--) {
-      auto lagOffset = mesh->dim * vCubatureOffset;
-      o_relUrst.copyFrom(o_relUrst, lagOffset, (s - 1) * lagOffset, (s - 2) * lagOffset);
-    }
-  }
-
-  const auto relative = geom && Nsubsteps;
-  double flopCount = 0.0;
-  if (platform->options.compareArgs("ADVECTION TYPE", "CUBATURE")) {
-    launchKernel("nrs-UrstCubatureHex3D",
-                 mesh->Nelements,
-                 static_cast<int>(relative),
-                 mesh->o_cubvgeo,
-                 mesh->o_cubInterpT,
-                 vFieldOffset,
-                 vCubatureOffset,
-                 o_U,
-                 (geom) ? geom->o_U : o_NULL,
-                 o_relUrst);
-    flopCount += 6 * mesh->Np * mesh->cubNq;
-    flopCount += 6 * mesh->Nq * mesh->Nq * mesh->cubNq * mesh->cubNq;
-    flopCount += 6 * mesh->Nq * mesh->cubNp;
-    flopCount += 24 * mesh->cubNp;
-    flopCount *= mesh->Nelements;
-  } else {
-    launchKernel("nrs-UrstHex3D",
-                 mesh->Nelements,
-                 static_cast<int>(relative),
-                 mesh->o_vgeo,
-                 vFieldOffset,
-                 o_U,
-                 (geom) ? geom->o_U : o_NULL,
-                 o_relUrst);
-    flopCount += 24 * static_cast<double>(mesh->Nlocal);
-  }
-  platform->flopCounter->add("Urst", flopCount);
-}
-
 void registerScalarKernels(occa::properties kernelInfoBC)
 {
   const bool serial = platform->serial();
@@ -912,7 +892,7 @@ void registerScalarKernels(occa::properties kernelInfoBC)
 
   int N, cubN;
   platform->options.getArgs("POLYNOMIAL DEGREE", N);
-  platform->options.getArgs("CUBATURE POLYNOMIAL DEGREE", cubN);
+  platform->options.getArgs("OVERINTEGRATION POLYNOMIAL DEGREE ", cubN);
   const int Nq = N + 1;
   const int cubNq = cubN + 1;
   const int Np = Nq * Nq * Nq;
@@ -934,9 +914,13 @@ void registerScalarKernels(occa::properties kernelInfoBC)
     fileName = oklpath + kernelName + ".okl";
     platform->kernelRequests.add(section + kernelName, fileName, meshProps);
 
-    kernelName = "neumannBC" + suffix;
-    fileName = oklpath + kernelName + ".okl";
-    platform->kernelRequests.add(section + kernelName, fileName, kernelInfoBC);
+    {
+      auto prop = kernelInfoBC;
+      prop["defines/p_lhs"] = 1;
+      kernelName = "neumannBC" + suffix;
+      fileName = oklpath + kernelName + ".okl";
+      platform->kernelRequests.add(section + kernelName, fileName, prop);
+    }
 
     kernelName = "dirichletBC";
     fileName = oklpath + kernelName + ".okl";
@@ -961,17 +945,8 @@ void registerScalarKernels(occa::properties kernelInfoBC)
       prop["defines/p_MovingMesh"] = movingMesh;
       prop["defines/p_nEXT"] = nEXT;
       prop["defines/p_nBDF"] = nBDF;
-
-      if (Nsubsteps) {
-        prop["defines/p_SUBCYCLING"] = 1;
-      } else {
-        prop["defines/p_SUBCYCLING"] = 0;
-      }
-
-      prop["defines/p_ADVECTION"] = 0;
-      if (platform->options.compareArgs("EQUATION TYPE", "NAVIERSTOKES") && !Nsubsteps) {
-        prop["defines/p_ADVECTION"] = 1;
-      }
+      prop["defines/p_SUBCYCLING"] = (Nsubsteps) ? 1 : 0;
+      prop["defines/p_ADVECTION"] = (platform->options.compareArgs("EQUATION TYPE", "NAVIERSTOKES")) ? 1 : 0;
 
       kernelName = "sumMakef";
       fileName = oklpath + kernelName + ".okl";
@@ -979,5 +954,5 @@ void registerScalarKernels(occa::properties kernelInfoBC)
     }
   }
 
-  registerCvodeKernels();
+  registerCvodeKernels(kernelInfoBC);
 }

@@ -34,11 +34,10 @@ static void removeMean(elliptic_t *elliptic, occa::memory &o_q)
              "%s\n",
              "NULL space handling for Block solver current not supported!");
 
-  const auto dotp = 
-     platform->linAlg->innerProd(elliptic->mesh->Nlocal,
-                                 elliptic->o_invDegree,
-                                 o_q,
-                                 platform->comm.mpiComm());
+  const auto dotp = platform->linAlg->innerProd(elliptic->mesh->Nlocal,
+                                                elliptic->o_invDegree,
+                                                o_q,
+                                                platform->comm.mpiComm());
 
   platform->linAlg->add(elliptic->mesh->Nlocal, -dotp / elliptic->invDegreeSum, o_q);
 }
@@ -60,6 +59,11 @@ elliptic::elliptic(const std::string &name,
 
   solver->fieldOffset = (fieldOffset <= 0) ? alignStride<dfloat>(mesh->Nlocal) : fieldOffset;
   _setup(o_lambda0, o_lambda1);
+
+  if (platform->comm.mpiRank() == 0) {
+    std::cout << "occa peak memory usage: " << platform->device.occaDevice().maxMemoryAllocated() 
+              << " bytes" << std::endl;
+  }
 }
 
 elliptic::elliptic(const std::string &name,
@@ -73,9 +77,15 @@ elliptic::elliptic(const std::string &name,
 
 elliptic::~elliptic()
 {
-  if (solver->precon) delete solver->precon; 
-  if (solver->solutionProjection) delete solver->solutionProjection;
-  if (solver->KSP) delete solver->KSP;
+  if (solver->precon) {
+    delete solver->precon;
+  }
+  if (solver->solutionProjection) {
+    delete solver->solutionProjection;
+  }
+  if (solver->KSP) {
+    delete solver->KSP;
+  }
 #if 0
   if (solver->ogs) delete solver->ogs;
   if (solver->oogs) delete solver->oogs;
@@ -115,7 +125,8 @@ void elliptic::updatePreconditioner()
       }
     }
 
-    if (solver->options.compareArgs("MULTIGRID COARSE SOLVER", "BOOMERAMG")) {
+    if (solver->options.compareArgs("MULTIGRID COARSE SOLVER", "BOOMERAMG") ||
+        solver->options.compareArgs("MULTIGRID COARSE SOLVER", "XXT")) {
       ellipticCoarseFEMGridSetup(elliptic, 1);
     }
   }
@@ -259,9 +270,9 @@ void elliptic::_solve(const occa::memory &o_lambda0,
   elliptic->o_lambda0 = o_lambda0;
   elliptic->o_lambda1 = o_lambda1;
 
-  auto& options = elliptic->options;
-  auto& precon = elliptic->precon;
-  auto& mesh = elliptic->mesh;
+  auto &options = elliptic->options;
+  auto &precon = elliptic->precon;
+  auto &mesh = elliptic->mesh;
 
   const auto maxIter = [&]() {
     auto val = 500;
@@ -374,27 +385,23 @@ void elliptic::_solve(const occa::memory &o_lambda0,
 
   // solve A(x0 + dx) = b
   {
-    auto parseTol = [](const std::string& _s) {
-        auto s = lowerCase(_s);
-        std::regex numRegex(R"([-+]?\d*\.?\d+(?:[eE][-+]?\d+)?)");
-        std::smatch match;
+    auto parseTol = [](const std::string &_s) {
+      auto s = lowerCase(_s);
+      std::regex numRegex(R"([-+]?\d*\.?\d+(?:[eE][-+]?\d+)?)");
+      std::smatch match;
 
-        if (!std::regex_search(s, match, numRegex)) {
-            throw std::runtime_error("No number found in string: " + s);
-        }
+      if (!std::regex_search(s, match, numRegex)) {
+        throw std::runtime_error("No number found in string: " + s);
+      }
 
-        return std::pair<dfloat, bool>(
-            std::stod(match.str()),
-            s.find("+relative") != std::string::npos
-        );
+      return std::pair<dfloat, bool>(std::stod(match.str()), s.find("+relative") != std::string::npos);
     };
 
     if (platform->verbose() && elliptic->nullspace) {
-      const auto dotp =
-         platform->linAlg->innerProd(elliptic->mesh->Nlocal,
-                                     elliptic->o_invDegree,
-                                     o_r,
-                                     platform->comm.mpiComm());
+      const auto dotp = platform->linAlg->innerProd(elliptic->mesh->Nlocal,
+                                                    elliptic->o_invDegree,
+                                                    o_r,
+                                                    platform->comm.mpiComm());
 
       if (platform->comm.mpiRank() == 0) {
         std::cout << "mean(o_r): " << dotp / elliptic->invDegreeSum << std::endl;
@@ -406,6 +413,7 @@ void elliptic::_solve(const occa::memory &o_lambda0,
     elliptic->KSP->relativeTolerance(relative);
 
     elliptic->KSP->solve(tol * std::sqrt(mesh->volume), maxIter, o_r, o_x);
+    o_r.free();
     elliptic->Niter = elliptic->KSP->nIter();
     elliptic->res0Norm = elliptic->KSP->initialResidualNorm();
     elliptic->resNorm = elliptic->KSP->finalResidualNorm();
@@ -422,8 +430,10 @@ void elliptic::_solve(const occa::memory &o_lambda0,
 
   // update solution x <- x + x0
   platform->linAlg->axpbyMany(mesh->Nlocal, elliptic->Nfields, elliptic->fieldOffset, 1.0, o_x0, 1.0, o_x);
+  o_x0.free();
+
   if (elliptic->nullspace) {
-    removeMean(elliptic, o_x); // violates Dirichlet BCs 
+    removeMean(elliptic, o_x); // violates Dirichlet BCs
   }
 
   elliptic->o_lambda0 = nullptr;
@@ -691,7 +701,8 @@ void elliptic::_setup(const occa::memory &o_lambda0, const occa::memory &o_lambd
     }
     elliptic->ogs = ogs;
     elliptic->o_invDegree = elliptic->ogs->o_invDegree;
-    elliptic->invDegreeSum = platform->linAlg->sum(mesh->Nlocal, elliptic->o_invDegree, platform->comm.mpiComm());
+    elliptic->invDegreeSum =
+        platform->linAlg->sum(mesh->Nlocal, elliptic->o_invDegree, platform->comm.mpiComm());
   }
 
   {
@@ -751,7 +762,7 @@ void elliptic::_setup(const occa::memory &o_lambda0, const occa::memory &o_lambd
     }
 
     if (platform->comm.mpiRank() == 0) {
-      printf("testing Ax overlap %.2es %.2es ", nonOverlappedTime, overlappedTime);
+      printf("testing ellipticOperator overlap %.2es %.2es ", nonOverlappedTime, overlappedTime);
       if (elliptic->oogsAx != elliptic->oogs) {
         printf("(overlap enabled)");
       }
@@ -812,15 +823,18 @@ void elliptic::_setup(const occa::memory &o_lambda0, const occa::memory &o_lambd
   };
 
   {
-    elliptic->KSP = linearSolverFactory<dfloat>::create(options.getArgs("SOLVER"),
-                                                        elliptic->name,
-                                                        elliptic->mesh->Nlocal,
-                                                        elliptic->Nfields,
-                                                        elliptic->fieldOffset,
-                                                        elliptic->o_invDegree,
-                                                        elliptic->nullspace,
-                                                        Ax,
-                                                        Pc);
+    elliptic->KSP =
+        linearSolverFactory<dfloat>::create(options.getArgs("SOLVER"),
+                                            elliptic->name,
+                                            elliptic->mesh->Nlocal,
+                                            elliptic->Nfields,
+                                            elliptic->fieldOffset,
+                                            elliptic->o_invDegree,
+                                            elliptic->nullspace,
+                                            Ax,
+                                            options.compareArgs("PRECONDITIONER", "NONE")
+                                                ? std::function<void(const occa::memory &, occa::memory &)>{}
+                                                : Pc);
 
     if (options.compareArgs("SOLVER", "COMBINED")) {
       elliptic->KSP->o_invDiagA = (elliptic->precon) ? elliptic->precon->o_invDiagA : o_NULL;
@@ -871,7 +885,7 @@ void elliptic::Ax(const occa::memory &o_lambda0In,
   auto o_lambda1Save = solver->o_lambda1;
   solver->o_lambda1 = o_lambda1In;
 
-  ellipticAx(solver, solver->mesh->Nelements, solver->mesh->o_elementList, o_q, o_Aq);
+  ellipticAx(solver, solver->mesh->Nelements, solver->mesh->o_elementList, o_q, o_Aq, false);
 
   solver->o_lambda0 = o_lambda0Save;
   solver->o_lambda1 = o_lambda1Save;

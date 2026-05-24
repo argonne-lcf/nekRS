@@ -94,7 +94,11 @@
               const dlong gid = e * p_Np * p_Nvgeo + k * p_Nq * p_Nq + j * p_Nq + i;
               const dfloat scale = (weighted) ? 1.0 : vgeo[gid + p_IJWID * p_Np];
 
+#if p_add
+              NS[id + fieldOffsetScan[scalarId]] -= scale * rhoM * (Uhat * dSdr + Vhat * dSds + What * dSdt);
+#else
               NS[id + fieldOffsetScan[scalarId]] = scale * rhoM * (Uhat * dSdr + Vhat * dSds + What * dSdt);
+#endif
             }
           }
         }

@@ -4,8 +4,6 @@ set_property(GLOBAL PROPERTY RULE_MESSAGES OFF)
 
 set (CMAKE_CXX_STANDARD 17)
 
-set(NEKRS_USE_DFLOAT_FLOAT OFF CACHE BOOL "use dfloat = float")
-
 set(MPI_CXX_SKIP_MPICXX TRUE)
 find_package(MPI REQUIRED)
 
@@ -15,7 +13,7 @@ set(CMAKE_SHARED_LIBRARY_SUFFIX ".so")
 
 set(INCLUDE_DIRS
   ${CASE_DIR}
-  ${GSDIR}/gslib/include
+  ${NEKRS_INSTALL_DIR}/gslib/include
   ${NEKRS_INSTALL_DIR}/occa/include
   ${NEKRS_INSTALL_DIR}/include
   ${NEKRS_INSTALL_DIR}/include/platform
@@ -63,6 +61,10 @@ endif()
 
 if(NEKRS_USE_DFLOAT_FLOAT)
   target_compile_definitions(udf PUBLIC NEKRS_USE_DFLOAT_FLOAT)
+endif()
+
+if(NEKRS_USE_PFLOAT_FLOAT)
+  target_compile_definitions(udf PUBLIC NEKRS_USE_PFLOAT_FLOAT)
 endif()
 
 if(APPLE)

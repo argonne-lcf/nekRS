@@ -129,7 +129,7 @@ typedef struct _MpiStreamWPR
 
 typedef struct _TimeStepsEntry
 {
-    long TimeStep;
+    size_t TimeStep;
     struct _SstData *Data;
     STAILQ_ENTRY(_TimeStepsEntry) entries;
 } *TimeStepsEntry;
@@ -150,7 +150,7 @@ typedef struct _MpiReadRequestMsg
 {
     int NotifyCondition;
     int RequestingRank;
-    long TimeStep;
+    size_t TimeStep;
     size_t Length;
     size_t Offset;
     void *StreamRS;
@@ -162,7 +162,7 @@ typedef struct _MpiReadReplyMsg
     char *Data;
     char *MpiPortName;
     int NotifyCondition;
-    long TimeStep;
+    size_t TimeStep;
     size_t DataLength;
     void *StreamRS;
 } *MpiReadReplyMsg;
@@ -179,7 +179,7 @@ typedef struct _MpiCompletionHandle
 } *MpiCompletionHandle;
 
 static FMField MpiReadRequestList[] = {
-    {"TimeStep", "integer", sizeof(long), FMOffset(MpiReadRequestMsg, TimeStep)},
+    {"TimeStep", "integer", sizeof(size_t), FMOffset(MpiReadRequestMsg, TimeStep)},
     {"Offset", "integer", sizeof(size_t), FMOffset(MpiReadRequestMsg, Offset)},
     {"Length", "integer", sizeof(size_t), FMOffset(MpiReadRequestMsg, Length)},
     {"StreamWPR", "integer", sizeof(void *), FMOffset(MpiReadRequestMsg, StreamWPR)},
@@ -193,7 +193,7 @@ static FMStructDescRec MpiReadRequestStructs[] = {
     {NULL, NULL, 0, NULL}};
 
 static FMField MpiReadReplyList[] = {
-    {"TimeStep", "integer", sizeof(long), FMOffset(MpiReadReplyMsg, TimeStep)},
+    {"TimeStep", "integer", sizeof(size_t), FMOffset(MpiReadReplyMsg, TimeStep)},
     {"StreamRS", "integer", sizeof(void *), FMOffset(MpiReadReplyMsg, StreamRS)},
     {"DataLength", "integer", sizeof(size_t), FMOffset(MpiReadReplyMsg, DataLength)},
     {"NotifyCondition", "integer", sizeof(int), FMOffset(MpiReadReplyMsg, NotifyCondition)},
@@ -418,7 +418,7 @@ static void MpiProvideWriterDataToReader(CP_Services Svcs, DP_RS_Stream RS_Strea
 /**
  * LoadTimeStep
  */
-static char *LoadTimeStep(MpiStreamWR Stream, long TimeStep)
+static char *LoadTimeStep(MpiStreamWR Stream, size_t TimeStep)
 {
     TimeStepsEntry Entry = NULL;
     char *Data = NULL;
@@ -453,7 +453,7 @@ static char *LoadTimeStep(MpiStreamWR Stream, long TimeStep)
  * call returns.  The void* return value will later be passed to a
  * WaitForCompletion call and should represent a completion handle.
  */
-static void *MpiReadRemoteMemory(CP_Services Svcs, DP_RS_Stream Stream_v, int Rank, long TimeStep,
+static void *MpiReadRemoteMemory(CP_Services Svcs, DP_RS_Stream Stream_v, int Rank, size_t TimeStep,
                                  size_t Offset, size_t Length, void *Buffer, void *DP_TimeStepInfo)
 {
     /* DP_RS_Stream is the return from InitReader */
@@ -691,7 +691,7 @@ static void MpiReadReplyHandler(CManager cm, CMConnection conn, void *msg_v, voi
  *
  */
 static void MpiProvideTimeStep(CP_Services Svcs, DP_WS_Stream Stream_v, struct _SstData *Data,
-                               struct _SstData *LocalMetadata, long TimeStep,
+                               struct _SstData *LocalMetadata, size_t TimeStep,
                                void **TimeStepInfoPtr)
 {
     MpiStreamWR Stream = (MpiStreamWR)Stream_v;
@@ -713,7 +713,7 @@ static void MpiProvideTimeStep(CP_Services Svcs, DP_WS_Stream Stream_v, struct _
  * plane that a particular timestep is no longer required and any resources
  * devoted to serving it can be released.
  */
-static void MpiReleaseTimeStep(CP_Services Svcs, DP_WS_Stream Stream_v, long TimeStep)
+static void MpiReleaseTimeStep(CP_Services Svcs, DP_WS_Stream Stream_v, size_t TimeStep)
 {
     MpiStreamWR Stream = (MpiStreamWR)Stream_v;
 
@@ -766,31 +766,42 @@ static void MpiReleaseTimeStep(CP_Services Svcs, DP_WS_Stream Stream_v, long Tim
  */
 static int MpiGetPriority(CP_Services Svcs, void *CP_Stream, struct _SstParams *Params)
 {
+    char *ReasonMsg = NULL;
+    int ReturnValue = 10;
     int IsInitialized = 0;
-    int provided = 0;
-    int IsMPICH = 0;
-#if defined(MPICH)
-    IsMPICH = 1;
-
     MPI_Initialized(&IsInitialized);
     if (IsInitialized)
     {
-        MPI_Query_thread(&provided);
-        // Only enabled when MPI_THREAD_MULTIPLE and using MPICH
-        if (provided == MPI_THREAD_MULTIPLE)
+        int Provided = 0;
+        MPI_Query_thread(&Provided);
+        if (Provided == MPI_THREAD_MULTIPLE)
         {
-            return 100;
+#if defined(ADIOS2_SST_HAVE_MPI_DP_HEURISTICS_PASSED)
+            ReasonMsg = strdup("Heuristics determined good compatibility");
+            ReturnValue = 10;
+#else
+            ReasonMsg = strdup("Heuristics determined poor compatibility");
+            ReturnValue = 0;
+#endif
+        }
+        else
+        {
+            ReasonMsg = strdup("MPI_THREAD_MULTIPLE not supported by MPI");
+            ReturnValue = -1;
         }
     }
-#endif
+    else
+    {
+        ReasonMsg = strdup("MPI_Initialized() failed");
+        ReturnValue = -1;
+    }
 
-    Svcs->verbose(CP_Stream, DPTraceVerbose,
-                  "MPI DP disabled since the following predicate is false: "
-                  "(MPICH=%s AND MPI_initialized=%s AND MPI_THREAD_MULTIPLE=%s)",
-                  IsMPICH ? "true" : "false", IsInitialized ? "true" : "false",
-                  provided == MPI_THREAD_MULTIPLE ? "true" : "false");
+    Svcs->verbose(CP_Stream, DPSummaryVerbose, "mpi_dp priority=%d since: %s.", ReturnValue,
+                  ReasonMsg);
 
-    return -100;
+    free(ReasonMsg);
+
+    return ReturnValue;
 }
 
 /**
@@ -939,9 +950,9 @@ extern CP_DP_Interface LoadMpiDP()
         .initWriter = MpiInitWriter,
         .initWriterPerReader = MpiInitWriterPerReader,
         .provideWriterDataToReader = MpiProvideWriterDataToReader,
-        .readRemoteMemory = MpiReadRemoteMemory,
+        .readRemoteMemory = (CP_DP_ReadRemoteMemoryFunc)MpiReadRemoteMemory,
         .waitForCompletion = MpiWaitForCompletion,
-        .provideTimestep = MpiProvideTimeStep,
+        .provideTimestep = (CP_DP_ProvideTimestepFunc)MpiProvideTimeStep,
         .releaseTimestep = MpiReleaseTimeStep,
         .getPriority = MpiGetPriority,
         .destroyReader = MpiDestroyReader,

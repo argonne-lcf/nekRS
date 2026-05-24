@@ -49,16 +49,16 @@ void linearForcing(dfloat time)
   };
 
   std::vector<dfloat> Uavg(mesh->dim);
-  Uavg[0] = avg(nrs->fluid->o_U.slice(0 * nrs->fieldOffset));
-  Uavg[1] = avg(nrs->fluid->o_U.slice(1 * nrs->fieldOffset));
-  Uavg[2] = avg(nrs->fluid->o_U.slice(2 * nrs->fieldOffset));
+  Uavg[0] = avg(nrs->fluid->o_U.slice(0 * nrs->fluid->fieldOffset));
+  Uavg[1] = avg(nrs->fluid->o_U.slice(1 * nrs->fluid->fieldOffset));
+  Uavg[2] = avg(nrs->fluid->o_U.slice(2 * nrs->fluid->fieldOffset));
 
   auto o_Uprime = [&]() 
   {
     poolDeviceMemory<dfloat> o_Uprime(nrs->fluid->fieldOffsetSum);
     o_Uprime.copyFrom(nrs->fluid->o_U, o_Uprime.size());
     for(int i = 0; i < mesh->dim; i++) {
-      platform->linAlg->add(mesh->Nlocal, -Uavg[i], o_Uprime.slice(i * nrs->fieldOffset)); 
+      platform->linAlg->add(mesh->Nlocal, -Uavg[i], o_Uprime.slice(i * nrs->fluid->fieldOffset)); 
     }
     return o_Uprime; 
   }();
@@ -70,26 +70,18 @@ void linearForcing(dfloat time)
     platform->options.getArgs("FLUID DENSITY", rho);
     const auto nu = mue / rho;
 
-    auto o_gradU = opSEM::strongGradVec(mesh, nrs->fieldOffset, nrs->fluid->o_U);
-
-    static poolDeviceMemory<dfloat> o_invAJwJw;
-    if (!o_invAJwJw.isInitialized()) {
-      o_invAJwJw.resize(mesh->Nlocal);
-      platform->linAlg->axmyz(mesh->Nlocal, 1.0, mesh->o_invAJw, mesh->o_Jw, o_invAJwJw);
-    } 
-    platform->linAlg->axmyMany(mesh->Nlocal, mesh->dim * mesh->dim, nrs->fieldOffset, 0, 1.0, mesh->o_invAJw, o_gradU);
-    nrs->qqt->startFinish("+", o_gradU, nrs->fieldOffset);
+    auto o_gradU = opSEM::strongGradVec(mesh, nrs->fluid->fieldOffset, nrs->fluid->o_U);
  
     poolDeviceMemory<dfloat> o_eps(mesh->Nlocal);
-    platform->linAlg->magSqrTensor(mesh->Nlocal, nrs->fieldOffset, o_gradU, o_eps);
+    platform->linAlg->magSqrTensor(mesh->Nlocal, nrs->fluid->fieldOffset, o_gradU, o_eps);
     platform->linAlg->scale(mesh->Nlocal, nu, o_eps);
     return avg(o_eps);
   }();
 
   const auto kVolAvg = [&]()
   {
-    poolDeviceMemory<dfloat> o_k(nrs->fieldOffset);
-    kEnergy(mesh->Nlocal, nrs->fieldOffset, o_Uprime, o_k);
+    poolDeviceMemory<dfloat> o_k(nrs->fluid->fieldOffset);
+    kEnergy(mesh->Nlocal, nrs->fluid->fieldOffset, o_Uprime, o_k);
     return avg(o_k);
   }();
 
@@ -97,7 +89,7 @@ void linearForcing(dfloat time)
 
   // add explicit contribtion
   for(int i = 0; i < mesh->dim; i++) {
-    auto o_ext = nrs->fluid->o_EXT.slice(i * nrs->fieldOffset, mesh->Nlocal);
+    auto o_ext = nrs->fluid->o_EXT.slice(i * nrs->fluid->fieldOffset, mesh->Nlocal);
     platform->linAlg->fill(mesh->Nlocal, -A*Uavg[i], o_ext); 
   }
 
@@ -147,11 +139,11 @@ void UDF_Setup()
 
     auto [x, y, z] = mesh->xyzHost();
 
-    std::vector<dfloat> U(mesh->dim * nrs->fieldOffset, 0.0);
+    std::vector<dfloat> U(mesh->dim * nrs->fluid->fieldOffset, 0.0);
     for (int n = 0; n < mesh->Nlocal; n++) {
-      U[n + 0 * nrs->fieldOffset] =  eps * beta  * sin(alpha * x[n]) * cos(beta * z[n]);
-      U[n + 1 * nrs->fieldOffset] =  eps         * sin(alpha * x[n]) * sin(beta * z[n]);
-      U[n + 2 * nrs->fieldOffset] = -eps * alpha * cos(alpha * x[n]) * sin(beta * z[n]);
+      U[n + 0 * nrs->fluid->fieldOffset] =  eps * beta  * sin(alpha * x[n]) * cos(beta * z[n]);
+      U[n + 1 * nrs->fluid->fieldOffset] =  eps         * sin(alpha * x[n]) * sin(beta * z[n]);
+      U[n + 2 * nrs->fluid->fieldOffset] = -eps * alpha * cos(alpha * x[n]) * sin(beta * z[n]);
     }
     nrs->fluid->o_U.copyFrom(U.data(), U.size());
   }

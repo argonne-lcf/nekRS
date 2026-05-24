@@ -24,7 +24,7 @@ static void flops(mesh_t *mesh, int Nfields)
   const auto nEXT = 3;
   const auto Nelements = meshV->Nelements;
   double flopCount = 0.0; // per elem basis
-  if (platform->options.compareArgs("ADVECTION TYPE", "CUBATURE")) {
+  if (platform->options.compareArgs("ADVECTION TYPE", "OVERINTEGRATION")) {
     flopCount += 6. * cubNp * nEXT;            // extrapolate U(r,s,t) to current time
     flopCount += 6. * cubNp * cubNq * Nfields; // apply Dcub
     flopCount += 3. * Np * Nfields;            // compute NU
@@ -73,7 +73,7 @@ static void applyOperator(int nFields,
 {
   auto run = [&](dlong Nelements, const occa::memory &gatherElementList) {
     if (Nelements) {
-      if (platform->options.compareArgs("ADVECTION TYPE", "CUBATURE")) {
+      if (platform->options.compareArgs("ADVECTION TYPE", "OVERINTEGRATION")) {
         opKernel(Nelements,
                  gatherElementList,
                  meshV->o_cubDiffInterpT,

@@ -423,8 +423,7 @@ void timer_t::print(std::string timerName, long long int DOF)
     }
   }
 
-  auto pos = timerName.rfind("::");
-  const auto start = timerName.substr(0, pos);
+  const auto start = timerName;
 
   std::ios oldState(nullptr);
   oldState.copyfmt(std::cout);

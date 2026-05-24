@@ -26,7 +26,7 @@ void ciSetup(MPI_Comm comm, setupAide &options)
   options.setArgs("FLUID VISCOSITY", std::to_string(1.0 / 10595.0));
   options.setArgs("FLUID DENSITY", std::string("1.0"));
   options.setArgs("END TIME", std::string("0.5"));
-  options.setArgs("ADVECTION TYPE", "CUBATURE+CONVECTIVE");
+  options.setArgs("ADVECTION TYPE", "OVERINTEGRATION+CONVECTIVE");
 
   options.setArgs("DT", std::string("5e-3"));
   options.setArgs("VARIABLE DT", std::string("TRUE"));

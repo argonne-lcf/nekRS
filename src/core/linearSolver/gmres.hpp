@@ -19,7 +19,7 @@ public:
     this->Nlocal = _Nlocal;
     this->Nfields = _Nfields;
 
-    // ensure valid fieldOffset for o_Z/o_V allocation even if Nfields = 1 
+    // ensure valid fieldOffset for o_Z/o_V allocation even if Nfields = 1
     this->fieldOffset = (_fieldOffset <= 0) ? alignStride<T>(this->Nlocal) : _fieldOffset;
 
     o_weight = _o_weight;
@@ -54,7 +54,9 @@ public:
                                                                         this->o_weight,
                                                                         o_r0,
                                                                         platform->comm.mpiComm());
-    if (relTol) tol *= this->r0Norm;
+    if (relTol) {
+      tol *= this->r0Norm;
+    }
 
     nekrsCheck(!std::isfinite(this->r0Norm),
                MPI_COMM_SELF,
@@ -77,9 +79,8 @@ public:
     h_scratch = platform->memoryPool.reserve<T>(o_scratch.size());
 
     {
-      const auto n = (this->Nfields > 1)
-                     ? this->Nfields * static_cast<size_t>(this->fieldOffset)
-                     : this->Nlocal; 
+      const auto n =
+          (this->Nfields > 1) ? this->Nfields * static_cast<size_t>(this->fieldOffset) : this->Nlocal;
 
       o_r = platform->deviceMemoryPool.reserve<double>(n);
       if constexpr (std::is_same_v<T, float>) {
@@ -99,9 +100,8 @@ public:
       o_tmp = platform->deviceMemoryPool.reserve<T>(n);
       o_w = platform->deviceMemoryPool.reserve<T>(n);
 
-
       {
-        const auto offset = this->Nfields * static_cast<size_t>(this->fieldOffset); 
+        const auto offset = this->Nfields * static_cast<size_t>(this->fieldOffset);
         nekrsCheck(offset != alignStride<T>(offset),
                    MPI_COMM_SELF,
                    EXIT_FAILURE,
@@ -266,7 +266,8 @@ private:
       o_wrk.copyTo(h_wrk);
 
       auto wrk = h_wrk.template ptr<double>();
-      for (dlong n = 0; n < h_wrk.size(); ++n) {
+      const auto wrkSize = h_wrk.size();
+      for (dlong n = 0; n < wrkSize; ++n) {
         norm += wrk[n];
       }
     }
@@ -341,6 +342,13 @@ private:
 
     int i = 0;
     for (; i < nRestartVectors; ++i) {
+      double tStart = 0; 
+      if (platform->verbose()) {
+        platform->device.finish();
+        MPI_Barrier(platform->comm.mpiComm());
+        tStart = MPI_Wtime();
+      }
+
       // right preconditioning: z_k = M^{-1} v_k
       auto o_zk = [&]() {
         const auto n = o_w.size();
@@ -355,10 +363,7 @@ private:
       }();
 
       if (removeMean) {
-        const auto dotp = platform->linAlg->innerProd(this->Nlocal,
-                                                      o_weight,
-                                                      o_zk,
-                                                      platform->comm.mpiComm());
+        const auto dotp = platform->linAlg->innerProd(this->Nlocal, o_weight, o_zk, platform->comm.mpiComm());
 
         platform->linAlg->add(o_zk.size(), -dotp / weightSum, o_zk);
       }
@@ -367,29 +372,29 @@ private:
 
       // 1 pass classical Gram-Schmidt (project new solution vector o_w onto o_V)
       {
-#if USE_WEIGHTED_INNER_PROD_MULTI_DEVICE
-        platform->linAlg->weightedInnerProdMulti<T>(this->Nlocal,
-                                                    (i + 1),
-                                                    this->Nfields,
-                                                    this->fieldOffset,
-                                                    o_weight,
-                                                    o_V,
-                                                    o_w,
-                                                    platform->comm.mpiComm(),
-                                                    o_y);
-        o_y.copyTo(h_y, (i + 1));
-#else
-        platform->linAlg->weightedInnerProdMulti<T>(this->Nlocal,
-                                                    (i + 1),
-                                                    this->Nfields,
-                                                    this->fieldOffset,
-                                                    o_weight,
-                                                    o_V,
-                                                    o_w,
-                                                    platform->comm.mpiComm(),
-                                                    h_y.template ptr<T>());
-        o_y.copyFrom(h_y, (i + 1));
-#endif
+        if (platform->device.deviceAtomic) {
+          platform->linAlg->weightedInnerProdMulti<T>(this->Nlocal,
+                                                      (i + 1),
+                                                      this->Nfields,
+                                                      this->fieldOffset,
+                                                      o_weight,
+                                                      o_V,
+                                                      o_w,
+                                                      platform->comm.mpiComm(),
+                                                      o_y);
+          o_y.copyTo(h_y, (i + 1));
+        } else {
+          platform->linAlg->weightedInnerProdMulti<T>(this->Nlocal,
+                                                      (i + 1),
+                                                      this->Nfields,
+                                                      this->fieldOffset,
+                                                      o_weight,
+                                                      o_V,
+                                                      o_w,
+                                                      platform->comm.mpiComm(),
+                                                      h_y.template ptr<T>());
+          o_y.copyFrom(h_y, (i + 1));
+        }
 
         // orthogonalize o_w against previous o_V
         gsOrthoKernel(Nblock, this->Nlocal, this->fieldOffset, (i + 1), o_weight, o_y, o_V, o_w, o_scratch);
@@ -398,7 +403,7 @@ private:
         platform->flopCounter->add("gramSchmidt", flopCount);
       }
 
-      // normalize  
+      // normalize
       auto nw = [&]() {
         dfloat norm = 0;
         if (platform->serial()) {
@@ -406,7 +411,8 @@ private:
         } else {
           o_scratch.copyTo(h_scratch);
           auto scratch = h_scratch.template ptr<T>();
-          for (int k = 0; k < h_scratch.size(); ++k) {
+          const auto scratchSize = h_scratch.size();
+          for (int k = 0; k < scratchSize; ++k) {
             norm += scratch[k];
           }
         }
@@ -472,8 +478,11 @@ private:
         }
 
         const auto iter = iter0 + i + 1;
-        if (platform->verbose() && platform->comm.mpiRank() == 0) {
-          printf("it %d r norm %.15e\n", iter, this->rNorm);
+
+        if (platform->verbose()) {
+          if (platform->comm.mpiRank() == 0) {
+            printf("it %d r norm %.15e elapsed %gs\n", iter, this->rNorm, MPI_Wtime() - tStart);
+          }
         }
 
         if (this->rNorm < tol || iter == maxIter) {

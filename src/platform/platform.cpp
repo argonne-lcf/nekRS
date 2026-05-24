@@ -203,6 +203,8 @@ platform_t::platform_t(setupAide &_options, MPI_Comm _commg, MPI_Comm _comm)
     kernelInfo["includes"] += "math.h";
   }
 
+  _hostSpilling = false;
+
   const std::string floatingPointType = static_cast<std::string>(kernelInfo["defines/dfloat"]);
   if (floatingPointType.find("float") != std::string::npos) {
     kernelInfo["defines/FP32"] = 1;
