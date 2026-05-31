@@ -27,10 +27,13 @@ BUILD_DIR=${path_to_code}/${which_build}
 #.. NOTE: change the location of NEKRS_HOME to a directory that you have access to.
 #.. ^^^^
 export NEKRS_SOURCE_DIR=${PWD}                       #.. this is where we are
-export NEKRS_BRANCH_DIR=${OLDPWD}                    #.. this is where we were, one step above
+echo ${NEKRS_SOURCE_DIR}
+export NEKRS_BRANCH_DIR=${NEKRS_SOURCE_DIR%/*}       #.. this is where we were, one step above
+echo ${NEKRS_BRANCH_DIR}
 export NEKRS_HOME=${NEKRS_BRANCH_DIR}/.local/nekrs   #.. we install stuff in the .local directory, one step above
                                                      #.. from where we are now, i.e., one step above ${NEKRS_SOURCE_DIR}
                                                      #.. that is, .local is located in ${NEKRS_BRANCH_DIR}
+echo ${NEKRS_HOME}
 #...
 export INSTALL_DIR=${NEKRS_HOME}
 
