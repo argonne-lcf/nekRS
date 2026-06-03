@@ -2,6 +2,7 @@
 set -e -a
 
 #... load the necessary modules here ...
+#... Building with the AMD compiler  ...
 module reset
 module load PrgEnv-amd
 module load craype-accel-amd-gfx90a
