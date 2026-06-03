@@ -1,0 +1,43 @@
+#!/bin/bash
+set -e -a
+
+: ${ONEAPI_SDK:="oneapi/release/2025.3.1"}
+
+#... load the necessary modules here ...
+module reload
+module load ${ONEAPI_SDK}
+module load cmake
+module list
+#...
+
+#... set some environment variables
+export CC=mpicc
+export CXX=mpic++
+export FC=mpif77
+
+#.. ===
+path_to_code=`pwd`
+build_date=$(date '+%Y-%m-%d')
+which_build=RBK_built.on.${build_date}
+BUILD_DIR=${path_to_code}/${which_build}
+
+#.. NOTE: change the location of NEKRS_HOME to a directory that you have access to.
+#.. ^^^^
+export NEKRS_SOURCE_DIR=${PWD}                       #.. this is where we are
+echo ${NEKRS_SOURCE_DIR}
+export NEKRS_BRANCH_DIR=${NEKRS_SOURCE_DIR%/*}       #.. this is where we were, one step above
+echo ${NEKRS_BRANCH_DIR}
+export NEKRS_HOME=${NEKRS_BRANCH_DIR}/.local/nekrs   #.. we install stuff in the .local directory, one step above
+                                                     #.. from where we are now, i.e., one step above ${NEKRS_SOURCE_DIR}
+                                                     #.. that is, .local is located in ${NEKRS_BRANCH_DIR}
+echo ${NEKRS_HOME}
+#...
+export INSTALL_DIR=${NEKRS_HOME}
+
+#...
+cmake -S . -B ${BUILD_DIR} -DCMAKE_INSTALL_PREFIX=${INSTALL_DIR}  -Wfatal-errors && \
+cmake --build ${BUILD_DIR} --parallel 8 && \
+cmake --install ${BUILD_DIR}
+
+#...
+ln -fsn ${which_build} current
