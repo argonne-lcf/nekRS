@@ -33,6 +33,7 @@ set(ELLIPTIC_SOURCES
         ${ELLIPTIC_SOURCE_DIR}/MG/MGSolver.cpp
         ${ELLIPTIC_SOURCE_DIR}/ellipticZeroMean.cpp
         ${ELLIPTIC_SOURCE_DIR}/box2/crs_xxt.cpp
+        ${ELLIPTIC_SOURCE_DIR}/box2/crs_box_asm1.cpp
         ${ELLIPTIC_SOURCE_DIR}/box2/crs_box.cpp
         ${ELLIPTIC_SOURCE_DIR}/box2/nekrs_crs.cpp)
 

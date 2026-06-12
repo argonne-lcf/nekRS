@@ -26,9 +26,14 @@ struct box {
   buffer bfr; /* Buffers for gslib */
 };
 
+// Fetch neighbors API.
+void fetch_nbrs_v3(unsigned *nei, slong *vids, double *mat, sint *wids,
+                          unsigned nv, unsigned ndim, unsigned nw,
+                          unsigned max_ne, MPI_Comm comm);
+
 void box_debug(const int verbose, const char *fmt, ...);
 
-// ASM1: CHOLMOD, redundant API interface
+// ASM1: CHOLMOD, redundant API interface.
 struct cholmod_csr;
 struct cholmod_csr *sparse_cholmod_factor(uint n, const uint *Arp,
                                           const uint *Aj, const void *A,
