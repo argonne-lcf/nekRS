@@ -13,6 +13,7 @@ typedef enum {
 typedef struct {
   gs_dom dom;
   jl_algo_t algo;
+  /* Does the system has a null space? */
   unsigned null_space;
   /* Size of overlap */
   unsigned nw;

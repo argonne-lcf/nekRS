@@ -16,21 +16,14 @@
   }
 
 struct box {
-  jl_opts opts;
-  /* User size, compressed size, Schwarz size and 1D dofs */
-  uint un, cn, sn, ncr;
-  /* Schwarz/XXT work arrays on CPU */
-  void *sx, *srhs;
-  /* Pointer to the asm1 solver */
-  void *asm1;
-  /* Pointer to the asm2 solver */
-  void *asm2;
-  /* RAS */
-  struct gs_data *gsh;
-  /* communicators */
-  struct comm global, local;
-  /* Work buffers for gslib */
-  buffer bfr;
+  jl_opts opts; /* User configurable options */
+  uint un, cn, sn, ncr; /* User size, compressed size, Schwarz size and 1D dofs */
+  void *sx, *srhs; /* Schwarz/XXT work arrays on CPU */
+  void *asm1; /* Pointer to the asm1 solver */
+  void *asm2; /* Pointer to the asm2 solver */
+  struct gs_data *gsh; /* dssum */
+  struct comm global; /* communicators */
+  buffer bfr; /* Buffers for gslib */
 };
 
 void box_debug(const int verbose, const char *fmt, ...);
