@@ -13,9 +13,8 @@
 
 #include <parRSB.h>
 
-#include "nekrs_crs.hpp"
 #include "crs_box_impl.hpp"
-
+#include "nekrs_crs.hpp"
 
 #if 0
   // 8. Setup the Frontier array.
@@ -94,16 +93,14 @@ static void asm1_setup2(struct box *box) {
   assert(null_space == 0);
 
   // Setup ASM1 solver.
-  box->asm1 = (void *)crs_xxt_setup(box->sn, tmp_vtx, nnz, ia, ja, va, box->opts.dom,
-      null_space, lc);
+  box->asm1 = (void *)crs_xxt_setup(box->sn, tmp_vtx, nnz, ia, ja, va,
+                                    box->opts.dom, null_space, lc);
 
   // Setup the crs_dsavg which basically average the solution of original
   // parRSB domains.
   slong *gs_vtx = tcalloc(slong, box->sn);
-  for (uint i = 0; i < box->un; i++)
-    gs_vtx[i] = tmp_vtx[i];
-  for (uint i = box->un; i < box->sn; i++)
-    gs_vtx[i] = -tmp_vtx[i];
+  for (uint i = 0; i < box->un; i++) gs_vtx[i] = tmp_vtx[i];
+  for (uint i = box->un; i < box->sn; i++) gs_vtx[i] = -tmp_vtx[i];
   box->gsh = gs_setup((const slong *)gs_vtx, box->sn, gc, 0, gs_auto, 0);
 
   free(tmp_vtx), free(gs_vtx), free(ia), free(ja);

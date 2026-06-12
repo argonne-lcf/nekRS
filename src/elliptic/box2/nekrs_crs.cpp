@@ -1,7 +1,7 @@
 #include "crs_box.hpp"
 
 //////////////////////////////////////////////////////////////////////////////////////
-// Helper functions                                                                 //
+// Helper functions //
 //////////////////////////////////////////////////////////////////////////////////////
 static int gen_crs_basis(dfloat *b, int j_, dfloat *z, int Nq, int Np) {
   dfloat *zr = (dfloat *)calloc(Nq, sizeof(dfloat));
@@ -22,12 +22,10 @@ static int gen_crs_basis(dfloat *b, int j_, dfloat *z, int Nq, int Np) {
   memcpy(zt, z0, Nq * sizeof(dfloat));
 
   int jj = j_ + 1;
-  if (jj % 2 == 0)
-    memcpy(zr, z1, Nq * sizeof(dfloat));
+  if (jj % 2 == 0) memcpy(zr, z1, Nq * sizeof(dfloat));
   if (jj == 3 || jj == 4 || jj == 7 || jj == 8)
     memcpy(zs, z1, Nq * sizeof(dfloat));
-  if (jj > 4)
-    memcpy(zt, z1, Nq * sizeof(dfloat));
+  if (jj > 4) memcpy(zt, z1, Nq * sizeof(dfloat));
 
   for (int k = 0; k < Nq; k++) {
     for (int j = 0; j < Nq; j++) {
@@ -49,8 +47,7 @@ static int get_local_crs_galerkin(double *a, int nc, mesh_t *mf,
   size_t size = nelt * Np;
 
   dfloat *b = tcalloc(dfloat, nc * Np);
-  for (int j = 0; j < nc; j++)
-    gen_crs_basis(b, j, mf->gllz, mf->Nq, mf->Np);
+  for (int j = 0; j < nc; j++) gen_crs_basis(b, j, mf->gllz, mf->Nq, mf->Np);
 
   dfloat *u = tcalloc(dfloat, size), *w = tcalloc(dfloat, size);
 
@@ -66,7 +63,8 @@ static int get_local_crs_galerkin(double *a, int nc, mesh_t *mf,
 
     o_u.copyFrom(u);
     platform->copyDfloatToPfloatKernel(mf->Nlocal, o_u, o_upf);
-    ellipticAx(ef, mf->Nelements, mf->o_elementList, o_upf, o_wpf, pfloatString);
+    ellipticAx(ef, mf->Nelements, mf->o_elementList, o_upf, o_wpf,
+               pfloatString);
     platform->copyPfloatToDfloatKernel(mf->Nlocal, o_wpf, o_w);
     o_w.copyTo(w);
 
@@ -105,14 +103,12 @@ void jl_setup_aux(uint *ntot_, ulong **gids_, uint *nnz_, uint **ia_,
 
   uint ntot = *ntot_ = nelt * nc;
   ulong *gids = *gids_ = tcalloc(ulong, ntot);
-  for (int j = 0; j < nelt * nc; j++)
-    gids[j] = mesh->globalIds[j];
+  for (int j = 0; j < nelt * nc; j++) gids[j] = mesh->globalIds[j];
 
   if (elliptic->Nmasked) {
     dlong *mask_ids = (dlong *)calloc(elliptic->Nmasked, sizeof(dlong));
     elliptic->o_maskIds.copyTo(mask_ids, elliptic->Nmasked);
-    for (int n = 0; n < elliptic->Nmasked; n++)
-      gids[mask_ids[n]] = 0;
+    for (int n = 0; n < elliptic->Nmasked; n++) gids[mask_ids[n]] = 0;
     free(mask_ids);
   }
 
@@ -126,7 +122,7 @@ void jl_setup_aux(uint *ntot_, ulong **gids_, uint *nnz_, uint **ia_,
 }
 
 //////////////////////////////////////////////////////////////////////////////////////
-// nekRS interface to coarse solvers                                                //
+// nekRS interface to coarse solvers //
 //////////////////////////////////////////////////////////////////////////////////////
 struct crs {
   uint un, algo;
@@ -141,12 +137,8 @@ static struct crs *crs = NULL;
 static void allocate_work_arrays(struct crs *crs) {
   size_t usize;
   switch (crs->dom) {
-  case gs_double:
-    usize = sizeof(double);
-    break;
-  case gs_float:
-    usize = sizeof(float);
-    break;
+  case gs_double: usize = sizeof(double); break;
+  case gs_float: usize = sizeof(float); break;
   default:
     fprintf(stderr, "%s: unknown gs_dom = %d.\n", __func__, crs->dom);
     MPI_Abort(crs->c.c, EXIT_FAILURE);
@@ -178,25 +170,20 @@ void jl_setup(uint n, const ulong *id, uint nnz, const uint *Ai, const uint *Aj,
   switch (crs->algo) {
   case XXT:
     crs->solver = (void *)crs_xxt_setup(n, id, nnz, Ai, Aj, A, opts->dom,
-        opts->null_space, c);
+                                        opts->null_space, c);
     break;
   case BOX:
     crs->solver = (void *)crs_box_setup2(n, id, nnz, Ai, Aj, A, opts, c);
     break;
-  default:
-    break;
+  default: break;
   }
 }
 
 #define DOMAIN_SWITCH(dom, macro)                                              \
   {                                                                            \
     switch (dom) {                                                             \
-    case gs_double:                                                            \
-      macro(double);                                                           \
-      break;                                                                   \
-    case gs_float:                                                             \
-      macro(float);                                                            \
-      break;                                                                   \
+    case gs_double: macro(double); break;                                      \
+    case gs_float: macro(float); break;                                        \
     }                                                                          \
   }
 
@@ -208,14 +195,9 @@ static void _crs_xxt_solve(occa::memory &o_x, occa::memory &o_rhs) {
 
 void jl_solve2(occa::memory &o_x, occa::memory &o_rhs) {
   switch (crs->algo) {
-  case XXT:
-    _crs_xxt_solve(o_x, o_rhs);
-    break;
-  case BOX:
-    crs_box_solve2(o_x, (struct box *)crs->solver, o_rhs);
-    break;
-  default:
-    break;
+  case XXT: _crs_xxt_solve(o_x, o_rhs); break;
+  case BOX: crs_box_solve2(o_x, (struct box *)crs->solver, o_rhs); break;
+  default: break;
   }
 }
 
@@ -223,14 +205,9 @@ void jl_free() {
   if (crs == NULL) return;
 
   switch (crs->algo) {
-  case XXT:
-    crs_xxt_free((struct xxt *)crs->solver);
-    break;
-  case BOX:
-    crs_box_free2((struct box *)crs->solver);
-    break;
-  default:
-    break;
+  case XXT: crs_xxt_free((struct xxt *)crs->solver); break;
+  case BOX: crs_box_free2((struct box *)crs->solver); break;
+  default: break;
   }
 
   comm_free(&(crs->c));

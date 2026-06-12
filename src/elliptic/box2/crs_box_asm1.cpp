@@ -1,5 +1,5 @@
-#include <gslib.h>
 #include <err.h>
+#include <gslib.h>
 
 static void sfree(void *p, const char *file, unsigned line) {
   if (p) free(p);
@@ -38,8 +38,8 @@ static int binary_search(ulong eid, struct eid_t *pe, uint n) {
 }
 
 void fetch_nbrs_v3(unsigned *nei, slong *vids, double *mat, sint *wids,
-                          unsigned nv, unsigned ndim, unsigned nw,
-                          unsigned max_ne, MPI_Comm comm) {
+                   unsigned nv, unsigned ndim, unsigned nw, unsigned max_ne,
+                   MPI_Comm comm) {
   const size_t ne = *nei;
   // 1. Find neighbor elements of input elements based on vertex connectivity.
   struct vtx_t {

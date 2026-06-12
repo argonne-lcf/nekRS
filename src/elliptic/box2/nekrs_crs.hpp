@@ -5,10 +5,7 @@
 #include <gslib.h>
 #include <platform.hpp>
 
-typedef enum {
-  XXT = 0,
-  BOX
-} jl_algo_t;
+typedef enum { XXT = 0, BOX } jl_algo_t;
 
 typedef struct {
   gs_dom dom;

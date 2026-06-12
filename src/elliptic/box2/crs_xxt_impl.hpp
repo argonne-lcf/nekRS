@@ -10,8 +10,7 @@
 #define tensor_dot SUFFIXED_NAME(tensor_dot)
 T tensor_dot(const T *a, const T *b, uint n) {
   T sum = 0;
-  for (; n; --n)
-    sum += *a++ * *b++;
+  for (; n; --n) sum += *a++ * *b++;
   return sum;
 }
 
@@ -60,8 +59,7 @@ static void factor_symbolic(uint n, const uint *Arp, const uint *Aj,
     visit[i] = i, parent[i] = n;
     for (; p != pe; ++p) {
       uint j = Aj[p];
-      if (j >= i)
-        break;
+      if (j >= i) break;
       for (; visit[j] != i; j = parent[j]) {
         ++nz, visit[j] = i;
         if (parent[j] == n) {
@@ -81,10 +79,8 @@ static void factor_symbolic(uint n, const uint *Arp, const uint *Aj,
     visit[i] = i;
     for (; p != pe; ++p) {
       uint j = Aj[p];
-      if (j >= i)
-        break;
-      for (; visit[j] != i; j = parent[j])
-        Ljr[count++] = j, visit[j] = i;
+      if (j >= i) break;
+      for (; visit[j] != i; j = parent[j]) Ljr[count++] = j, visit[j] = i;
     }
     sortv(Ljr, Ljr, count, sizeof(uint), buf);
     Lrp[i + 1] = Lrp[i] + count;
@@ -134,8 +130,7 @@ static void factor_numeric(uint n, const uint *Arp, const uint *Aj, const T *A,
     for (p = Arp[i], pe = Arp[i + 1]; p != pe; ++p) {
       uint j = Aj[p];
       if (j >= i) {
-        if (j == i)
-          a = A[p];
+        if (j == i) a = A[p];
         break;
       }
       y[j] = -A[p];
@@ -145,8 +140,7 @@ static void factor_numeric(uint n, const uint *Arp, const uint *Aj, const T *A,
       T lij, yj = y[j];
       for (q = Lrp[j], qe = Lrp[j + 1]; q != qe; ++q) {
         uint k = Lj[q];
-        if (visit[k] == i)
-          yj += L[q] * y[k];
+        if (visit[k] == i) yj += L[q] * y[k];
       }
       y[j] = yj;
       L[p] = lij = D[j] * yj;
@@ -165,16 +159,13 @@ static void sparse_cholesky_solve(T *x, const struct sparse_cholesky *fac,
   const T *L = fac->L, *D = fac->D;
   for (i = 0; i < n; ++i) {
     T xi = b[i];
-    for (p = Lrp[i], pe = Lrp[i + 1]; p != pe; ++p)
-      xi += L[p] * x[Lj[p]];
+    for (p = Lrp[i], pe = Lrp[i + 1]; p != pe; ++p) xi += L[p] * x[Lj[p]];
     x[i] = xi;
   }
-  for (i = 0; i < n; ++i)
-    x[i] *= D[i];
+  for (i = 0; i < n; ++i) x[i] *= D[i];
   for (i = n; i;) {
     T xi = x[--i];
-    for (p = Lrp[i], pe = Lrp[i + 1]; p != pe; ++p)
-      x[Lj[p]] += L[p] * xi;
+    for (p = Lrp[i], pe = Lrp[i + 1]; p != pe; ++p) x[Lj[p]] += L[p] * xi;
   }
 }
 
@@ -302,8 +293,7 @@ static void locate_proc(struct xxt *data) {
     ++level;
     odd = (odd << 1) | (n & 1);
     c <<= 1, n >>= 1;
-    if (id >= base + n)
-      c |= 1, base += n, n += (odd & 1);
+    if (id >= base + n) c |= 1, base += n, n += (odd & 1);
   }
   data->pcoord = c;
   data->nsep = level + 1;
@@ -340,10 +330,8 @@ static void discover_sep_sizes(struct xxt *data, struct array *dofa,
   buffer_reserve(buf, 2 * ns * sizeof(float));
   v = (float *)buf->ptr, recv = v + ns;
 
-  for (i = 0; i < ns; ++i)
-    v[i] = 0;
-  for (j = 0; j < n; ++j)
-    v[dof[j].level] += 1 / (float)dof[j].count;
+  for (i = 0; i < ns; ++i) v[i] = 0;
+  for (j = 0; j < n; ++j) v[dof[j].level] += 1 / (float)dof[j].count;
 
   /* fan-in */
   for (lvl = 0; lvl < nl; ++lvl) {
@@ -353,8 +341,7 @@ static void discover_sep_sizes(struct xxt *data, struct array *dofa,
       comm_send(&data->comm, v + lvl + 1, s * sizeof(float), -other - 1, s);
     } else {
       comm_recv(&data->comm, recv + lvl + 1, s * sizeof(float), other, s);
-      for (i = lvl + 1; i < ns; ++i)
-        v[i] += recv[i];
+      for (i = lvl + 1; i < ns; ++i) v[i] += recv[i];
     }
   }
   /* fan-out */
@@ -389,16 +376,13 @@ static ulong *unique_nonzero(ulong *A, ulong *Aend) {
   else {
     ulong *end = Aend - 1, last = *end, *p = A, *q = A, v = 0;
     *end = 1;
-    while (*q == 0)
-      ++q; /*  *q==0 => q!=end since *end==0 */
+    while (*q == 0) ++q; /*  *q==0 => q!=end since *end==0 */
     *end = 0;
     while (q != end) {
       v = *q++, *p++ = v;
-      while (*q == v)
-        ++q; /*  *q==v => q!=end since *end==0 */
+      while (*q == v) ++q; /*  *q==v => q!=end since *end==0 */
     }
-    if (last != v)
-      *p++ = last;
+    if (last != v) *p++ = last;
     return p;
   }
 }
@@ -428,24 +412,21 @@ static void init_sep_ids(struct xxt *data, struct array *dofa, ulong *xid) {
   unsigned s = 1;
   uint i, size;
   const struct dof *dof = (const struct dof *)dofa->ptr;
-  if (ns == 1)
-    return;
+  if (ns == 1) return;
   size = sep_size[s];
   for (i = data->ln; i < n; ++i) {
     unsigned si = dof[i].level;
     while (s != si) {
       memset(xid, 0, size * sizeof(ulong));
       xid += size;
-      if (++s != ns)
-        size = data->sep_size[s];
+      if (++s != ns) size = data->sep_size[s];
     }
     *xid++ = dof[i].id, --size;
   }
   while (s != ns) {
     memset(xid, 0, size * sizeof(ulong));
     xid += size;
-    if (++s != ns)
-      size = data->sep_size[s];
+    if (++s != ns) size = data->sep_size[s];
   }
 }
 
@@ -458,12 +439,10 @@ static void find_perm_x2c(uint ln, uint cn, const struct array *dofc, uint xn,
   dof += ln;
   while (dof != dof_end) {
     ulong v = dof->id;
-    while (*xid != v)
-      ++xid, *perm++ = -1;
+    while (*xid != v) ++xid, *perm++ = -1;
     *perm++ = i++, ++dof, ++xid;
   }
-  while (xid != xid_end)
-    ++xid, *perm++ = -1;
+  while (xid != xid_end) ++xid, *perm++ = -1;
 }
 
 /* sets: perm_x2c */
@@ -479,8 +458,7 @@ static sint *discover_sep_ids(struct xxt *data, struct array *dofa,
 
   size = 0;
   for (lvl = 1; lvl < ns; ++lvl)
-    if (sep_size[lvl] > size)
-      size = sep_size[lvl];
+    if (sep_size[lvl] > size) size = sep_size[lvl];
   xid = tmalloc(ulong, 2 * xn + 2 * size), recv = xid + xn, work = recv + xn;
 
   init_sep_ids(data, dofa, xid);
@@ -497,8 +475,7 @@ static sint *discover_sep_ids(struct xxt *data, struct array *dofa,
         merge_sep_ids(data, p, recv, work, lvl + 1, buf);
       }
       ss = data->sep_size[lvl + 1];
-      if (ss >= size || lvl == nl - 1)
-        break;
+      if (ss >= size || lvl == nl - 1) break;
       p += ss, size -= ss;
     }
     /* fan-out */
@@ -508,8 +485,7 @@ static sint *discover_sep_ids(struct xxt *data, struct array *dofa,
         comm_recv(&data->comm, p, size * sizeof(ulong), -other - 1, size);
       else
         comm_send(&data->comm, p, size * sizeof(ulong), other, size);
-      if (lvl == 0)
-        break;
+      if (lvl == 0) break;
       ss = data->sep_size[lvl];
       p -= ss, size += ss, --lvl;
     }
@@ -529,8 +505,7 @@ static void apply_QQt(struct xxt *data, T *v, uint n, uint tag) {
   unsigned lvl, nsend = 0;
   uint size = n, ss;
 
-  if (n == 0 || nl == 0)
-    return;
+  if (n == 0 || nl == 0) return;
 
   tag = tag * 2 + 0;
   /* fan-in */
@@ -541,12 +516,10 @@ static void apply_QQt(struct xxt *data, T *v, uint n, uint tag) {
     } else {
       uint i;
       comm_recv(&data->comm, recv, size * sizeof(T), other, tag);
-      for (i = 0; i < size; ++i)
-        p[i] += recv[i];
+      for (i = 0; i < size; ++i) p[i] += recv[i];
     }
     ss = data->sep_size[lvl + 1];
-    if (ss >= size || lvl == nl - 1)
-      break;
+    if (ss >= size || lvl == nl - 1) break;
     p += ss, size -= ss;
   }
   /* fan-out */
@@ -558,13 +531,11 @@ static void apply_QQt(struct xxt *data, T *v, uint n, uint tag) {
       comm_isend(&data->req[nsend++], &data->comm, p, size * sizeof(T), other,
                  tag);
     }
-    if (lvl == 0)
-      break;
+    if (lvl == 0) break;
     ss = data->sep_size[lvl];
     p -= ss, size += ss, --lvl;
   }
-  if (nsend)
-    comm_wait(data->req, nsend);
+  if (nsend) comm_wait(data->req, nsend);
 }
 
 #define sum SUFFIXED_NAME(sum)
@@ -575,8 +546,7 @@ static double sum(struct xxt *data, double v, uint n, uint tag) {
   uint size = n, ss;
 
   tag = tag * 2 + 1;
-  if (n == 0 || nl == 0)
-    return v;
+  if (n == 0 || nl == 0) return v;
   /* fan-in */
   for (lvl = 0; lvl < nl; ++lvl) {
     sint other = data->pother[lvl];
@@ -587,8 +557,7 @@ static double sum(struct xxt *data, double v, uint n, uint tag) {
       v += r;
     }
     ss = data->sep_size[lvl + 1];
-    if (ss >= size || lvl == nl - 1)
-      break;
+    if (ss >= size || lvl == nl - 1) break;
     size -= ss;
   }
   /* fan-out */
@@ -600,13 +569,11 @@ static double sum(struct xxt *data, double v, uint n, uint tag) {
       comm_isend(&data->req[nsend++], &data->comm, &v, sizeof(double), other,
                  tag);
     }
-    if (lvl == 0)
-      break;
+    if (lvl == 0) break;
     ss = data->sep_size[lvl];
     size += ss, --lvl;
   }
-  if (nsend)
-    comm_wait(data->req, nsend);
+  if (nsend) comm_wait(data->req, nsend);
   return v;
 }
 
@@ -623,8 +590,7 @@ static uint unique_ids(uint n, const ulong *id, sint *perm, buffer *buf) {
     if (v == 0)
       perm[j] = -1;
     else {
-      if (v != last)
-        last = v, ++un;
+      if (v != last) last = v, ++un;
       perm[j] = un - 1;
     }
   }
@@ -656,37 +622,29 @@ static void discover_dofs(struct xxt *data, uint n, const ulong *id,
   array_init(struct dof, dofa, cn), dofa->n = cn, dof = (struct dof *)dofa->ptr;
   buffer_reserve(buf, cn * sizeof(ulong)), bid = (ulong *)buf->ptr;
   for (i = 0; i < n; ++i)
-    if (perm[i] >= 0)
-      bid[perm[i]] = dof[perm[i]].id = id[i];
+    if (perm[i] >= 0) bid[perm[i]] = dof[perm[i]].id = id[i];
 
   gsh = gs_setup((const slong *)bid, cn, comm, 0, gs_crystal_router, 0);
   v = tmalloc(sint, cn);
 
-  for (i = 0; i < cn; ++i)
-    v[i] = pcoord;
+  for (i = 0; i < cn; ++i) v[i] = pcoord;
   gs(v, gs_sint, gs_bpr, 0, gsh, buf);
-  for (i = 0; i < cn; ++i)
-    dof[i].level = ns - 1 - lg((uint)v[i]);
+  for (i = 0; i < cn; ++i) dof[i].level = ns - 1 - lg((uint)v[i]);
 
-  for (i = 0; i < cn; ++i)
-    v[i] = 1;
+  for (i = 0; i < cn; ++i) v[i] = 1;
   gs(v, gs_sint, gs_add, 0, gsh, buf);
-  for (i = 0; i < cn; ++i)
-    dof[i].count = v[i];
+  for (i = 0; i < cn; ++i) dof[i].count = v[i];
 
   free(v);
   gs_free(gsh);
 
-  if (!cn)
-    return;
+  if (!cn) return;
   buffer_reserve(buf, 2 * cn * sizeof(uint));
   p = sortp(buf, 0, &dof[0].level, cn, sizeof(struct dof));
   pi = p + cn;
-  for (i = 0; i < cn; ++i)
-    pi[p[i]] = i;
+  for (i = 0; i < cn; ++i) pi[p[i]] = i;
   for (i = 0; i < n; ++i)
-    if (perm[i] >= 0)
-      perm[i] = pi[perm[i]];
+    if (perm[i] >= 0) perm[i] = pi[perm[i]];
   sarray_permute_buf(struct dof, dof, cn, buf);
 }
 
@@ -697,8 +655,7 @@ static void apply_p_Als(T *vl, struct xxt *data, const T *vs, uint ns) {
   const T *A = data->A_sl.A;
   uint i, p, pe;
   for (i = 0; i < ns; ++i)
-    for (p = Arp[i], pe = Arp[i + 1]; p != pe; ++p)
-      vl[Aj[p]] += A[p] * vs[i];
+    for (p = Arp[i], pe = Arp[i + 1]; p != pe; ++p) vl[Aj[p]] += A[p] * vs[i];
 }
 
 /* vs -= A_sl * vl */
@@ -708,8 +665,7 @@ static void apply_m_Asl(T *vs, uint ns, struct xxt *data, const T *vl) {
   const T *A = data->A_sl.A;
   uint i, p, pe;
   for (i = 0; i < ns; ++i)
-    for (p = Arp[i], pe = Arp[i + 1]; p != pe; ++p)
-      vs[i] -= A[p] * vl[Aj[p]];
+    for (p = Arp[i], pe = Arp[i + 1]; p != pe; ++p) vs[i] -= A[p] * vl[Aj[p]];
 }
 
 /* returns a column of S : vs = -S(0:ei-1,ei) */
@@ -721,16 +677,13 @@ static void apply_S_col(T *vs, struct xxt *data, struct csr_mat *A_ss, uint ei,
              *Asl_j = data->A_sl.Aj, *Ass_j = A_ss->Aj;
   const T *Ass = A_ss->A, *Asl = data->A_sl.A;
   uint i, p, pe;
-  for (i = 0; i < ei; ++i)
-    vs[i] = 0;
+  for (i = 0; i < ei; ++i) vs[i] = 0;
   for (p = Ass_rp[ei], pe = Ass_rp[ei + 1]; p != pe; ++p) {
     uint j = Ass_j[p];
-    if (j >= ei)
-      break;
+    if (j >= ei) break;
     vs[j] = -Ass[p];
   }
-  for (i = 0; i < ln; ++i)
-    vl[i] = 0;
+  for (i = 0; i < ln; ++i) vl[i] = 0;
   for (p = Asl_rp[ei], pe = Asl_rp[ei + 1]; p != pe; ++p)
     vl[Asl_j[p]] = -Asl[p];
   sparse_cholesky_solve(vl, &data->fac_A_ll, vl);
@@ -748,14 +701,12 @@ static void apply_S(T *Svs, uint ns, struct xxt *data, struct csr_mat *A_ss,
     T sum = 0;
     for (p = Ass_rp[i], pe = Ass_rp[i + 1]; p != pe; ++p) {
       uint j = Ass_j[p];
-      if (j >= ns)
-        break;
+      if (j >= ns) break;
       sum += Ass[p] * vs[j];
     }
     Svs[i] = sum;
   }
-  for (i = 0; i < ln; ++i)
-    vl[i] = 0;
+  for (i = 0; i < ln; ++i) vl[i] = 0;
   apply_p_Als(vl, data, vs, ns);
   sparse_cholesky_solve(vl, &data->fac_A_ll, vl);
   apply_m_Asl(Svs, ns, data, vl);
@@ -767,8 +718,7 @@ static void apply_Xt(T *vx, uint nx, const struct xxt *data, const T *vs) {
   const T *X = data->X;
   const uint *Xp = data->Xp;
   uint i;
-  for (i = 0; i < nx; ++i)
-    vx[i] = tensor_dot(vs, X + Xp[i], Xp[i + 1] - Xp[i]);
+  for (i = 0; i < nx; ++i) vx[i] = tensor_dot(vs, X + Xp[i], Xp[i + 1] - Xp[i]);
 }
 
 /* vs = X * vx */
@@ -778,14 +728,12 @@ static void apply_X(T *vs, uint ns, const struct xxt *data, const T *vx,
   const T *X = data->X;
   const uint *Xp = data->Xp;
   uint i, j;
-  for (i = 0; i < ns; ++i)
-    vs[i] = 0;
+  for (i = 0; i < ns; ++i) vs[i] = 0;
   for (i = 0; i < nx; ++i) {
     const T v = vx[i];
     const T *x = X + Xp[i];
     uint n = Xp[i + 1] - Xp[i];
-    for (j = 0; j < n; ++j)
-      vs[j] += x[j] * v;
+    for (j = 0; j < n; ++j) vs[j] += x[j] * v;
   }
 }
 
@@ -793,13 +741,11 @@ static void apply_X(T *vs, uint ns, const struct xxt *data, const T *vx,
 static void allocate_X(struct xxt *data, sint *perm_x2c) {
   uint xn = data->xn;
   uint i, h = 0;
-  if (data->null_space && xn)
-    --xn;
+  if (data->null_space && xn) --xn;
   data->Xp = tmalloc(uint, xn + 1);
   data->Xp[0] = 0;
   for (i = 0; i < xn; ++i) {
-    if (perm_x2c[i] != -1)
-      ++h;
+    if (perm_x2c[i] != -1) ++h;
     data->Xp[i + 1] = data->Xp[i] + h;
   }
   data->X = tmalloc(T, data->Xp[xn]);
@@ -817,16 +763,14 @@ static void orthogonalize(struct xxt *data, struct csr_mat *A_ss,
   buffer_reserve(buf, (ln + 2 * sn + xn) * sizeof(T));
   vl = (T *)buf->ptr, vs = vl + ln, Svs = vs + sn, vx = Svs + sn;
 
-  if (data->null_space && xn)
-    --xn;
+  if (data->null_space && xn) --xn;
   for (i = 0; i < xn; ++i) {
     uint ns = data->Xp[i + 1] - data->Xp[i];
     sint ui = perm_x2c[i];
     T ytsy, *x;
 
     if (ui == -1) {
-      for (j = 0; j < i; ++j)
-        vx[j] = 0;
+      for (j = 0; j < i; ++j) vx[j] = 0;
     } else {
       ui -= ln;
       apply_S_col(vs, data, A_ss, ui, vl);
@@ -834,8 +778,7 @@ static void orthogonalize(struct xxt *data, struct csr_mat *A_ss,
     }
     apply_QQt(data, vx, i, xn - i);
     apply_X(vs, ns, data, vx, i);
-    if (ui != -1)
-      vs[ui] = 1;
+    if (ui != -1) vs[ui] = 1;
     apply_S(Svs, ns, data, A_ss, vs, vl);
     ytsy = tensor_dot(vs, Svs, ns);
     ytsy = sum(data, ytsy, i + 1, xn - (i + 1));
@@ -844,8 +787,7 @@ static void orthogonalize(struct xxt *data, struct csr_mat *A_ss,
     else
       ytsy = 1 / sqrt(ytsy);
     x = &data->X[data->Xp[i]];
-    for (j = 0; j < ns; ++j)
-      x[j] = ytsy * vs[j];
+    for (j = 0; j < ns; ++j) x[j] = ytsy * vs[j];
   }
 }
 
@@ -859,8 +801,7 @@ static void condense_matrix(struct array *mat, uint nr, struct csr_mat *out,
 
   p = (struct yale_mat *)mat->ptr;
   for (k = 0; k + 1 < nz; ++k, ++p)
-    if (p[0].i == p[1].i && p[0].j == p[1].j)
-      break;
+    if (p[0].i == p[1].i && p[0].j == p[1].j) break;
   if (++k < nz) {
     uint i = p->i, j = p->j;
     q = p + 1;
@@ -877,8 +818,7 @@ static void condense_matrix(struct array *mat, uint nr, struct csr_mat *out,
   out->Arp = tmalloc(uint, nr + 1 + mat->n);
   out->Aj = out->Arp + nr + 1;
   T *A = out->A = tmalloc(T, nz);
-  for (k = 0; k < nr; ++k)
-    out->Arp[k] = 0;
+  for (k = 0; k < nr; ++k) out->Arp[k] = 0;
   for (p = (struct yale_mat *)mat->ptr, k = 0; k < nz; ++k, ++p)
     out->Arp[p->i]++, out->Aj[k] = p->j, A[k] = p->v;
   nz = 0;
@@ -904,8 +844,7 @@ static void separate_matrix(uint nz, const uint *Ai, const uint *Aj,
       mss = (struct yale_mat *)mat_ss.ptr;
   for (k = 0; k < nz; ++k) {
     sint i = perm[Ai[k]], j = perm[Aj[k]];
-    if (i < 0 || j < 0 || A[k] == 0)
-      continue;
+    if (i < 0 || j < 0 || A[k] == 0) continue;
     if ((uint)i < ln) {
       if ((uint)j < ln)
         n = mat_ll.n++, mll[n].i = i, mll[n].j = j, mll[n].v = A[k];
@@ -950,12 +889,10 @@ struct xxt *crs_xxt_setup(uint n, const ulong *id, uint nz, const uint *Ai,
     uint i;
     double count = 0;
     struct dof *dof = (struct dof *)dofa.ptr;
-    for (i = 0; i < data->cn; ++i)
-      count += 1 / (double)dof[i].count;
+    for (i = 0; i < data->cn; ++i) count += 1 / (double)dof[i].count;
     count = 1 / sum(data, count, data->xn, 0);
     data->share_weight = tcalloc(T, data->cn);
-    for (i = 0; i < data->cn; ++i)
-      data->share_weight[i] = count / dof[i].count;
+    for (i = 0; i < data->cn; ++i) data->share_weight[i] = count / dof[i].count;
   }
   array_free(&dofa);
 
@@ -1025,31 +962,26 @@ void crs_xxt_solve(T *x, struct xxt *data, const T *b) {
   double t = MPI_Wtime();
   T *vl = data->vl, *vc = data->vc, *vx = data->vx;
   uint i;
-  for (i = 0; i < cn; ++i)
-    vc[i] = 0;
+  for (i = 0; i < cn; ++i) vc[i] = 0;
   for (i = 0; i < un; ++i) {
     sint p = data->perm_u2c[i];
-    if (p >= 0)
-      vc[p] += b[i];
+    if (p >= 0) vc[p] += b[i];
   }
   local_time += MPI_Wtime() - t;
 
   if (xn > 0 && (!data->null_space || xn > 1)) {
-    if (data->null_space)
-      --xn;
+    if (data->null_space) --xn;
 
     t = MPI_Wtime();
 #if defined(ENABLE_BOX_BLAS)
     if (sizeof(T) == sizeof(double)) {
       cblas_dgemv(CblasRowMajor, CblasNoTrans, ln, ln, 1.0, A_ll_inv, ln,
                   (double *)vc, 1, 0.0, y_inv, 1);
-      for (uint i = 0; i < ln; ++i)
-        vc[i] = y_inv[i];
+      for (uint i = 0; i < ln; ++i) vc[i] = y_inv[i];
     } else {
       cblas_sgemv(CblasRowMajor, CblasNoTrans, ln, ln, 1.0, A_ll_inv_f32, ln,
                   (float *)vc, 1, 0.0, y_inv_f32, 1);
-      for (uint i = 0; i < ln; ++i)
-        vc[i] = y_inv_f32[i];
+      for (uint i = 0; i < ln; ++i) vc[i] = y_inv_f32[i];
     }
 #elif defined(ENABLE_BOX_XXT_CHOLMOD)
     sparse_cholmod_solve(vc, fac_A_ll, vc);
@@ -1075,8 +1007,7 @@ void crs_xxt_solve(T *x, struct xxt *data, const T *b) {
     xxt_time += MPI_Wtime() - t;
 
     t = MPI_Wtime();
-    for (i = 0; i < ln; ++i)
-      vl[i] = 0;
+    for (i = 0; i < ln; ++i) vl[i] = 0;
     apply_p_Als(vl, data, vc + ln, sn);
     local_time += MPI_Wtime() - t;
 
@@ -1085,13 +1016,11 @@ void crs_xxt_solve(T *x, struct xxt *data, const T *b) {
     if (sizeof(T) == sizeof(double)) {
       cblas_dgemv(CblasRowMajor, CblasNoTrans, ln, ln, 1.0, A_ll_inv, ln,
                   (double *)vl, 1, 0.0, y_inv, 1);
-      for (uint i = 0; i < ln; ++i)
-        vl[i] = y_inv[i];
+      for (uint i = 0; i < ln; ++i) vl[i] = y_inv[i];
     } else {
       cblas_sgemv(CblasRowMajor, CblasNoTrans, ln, ln, 1.0, A_ll_inv_f32, ln,
                   (float *)vl, 1, 0.0, y_inv_f32, 1);
-      for (uint i = 0; i < ln; ++i)
-        vl[i] = y_inv_f32[i];
+      for (uint i = 0; i < ln; ++i) vl[i] = y_inv_f32[i];
     }
 #elif defined(ENABLE_BOX_XXT_CHOLMOD)
     sparse_cholmod_solve(vl, fac_A_ll, vl);
@@ -1101,21 +1030,18 @@ void crs_xxt_solve(T *x, struct xxt *data, const T *b) {
     cholesky_time += MPI_Wtime() - t;
 
     t = MPI_Wtime();
-    for (i = 0; i < ln; ++i)
-      vc[i] -= vl[i];
+    for (i = 0; i < ln; ++i) vc[i] -= vl[i];
     local_time += MPI_Wtime() - t;
   } else {
 #if defined(ENABLE_BOX_BLAS)
     if (sizeof(T) == sizeof(double)) {
       cblas_dgemv(CblasRowMajor, CblasNoTrans, ln, ln, 1.0, A_ll_inv, ln,
                   (double *)vc, 1, 0.0, y_inv, 1);
-      for (uint i = 0; i < ln; ++i)
-        vc[i] = y_inv[i];
+      for (uint i = 0; i < ln; ++i) vc[i] = y_inv[i];
     } else {
       cblas_sgemv(CblasRowMajor, CblasNoTrans, ln, ln, 1.0, A_ll_inv_f32, ln,
                   (float *)vc, 1, 0.0, y_inv_f32, 1);
-      for (uint i = 0; i < ln; ++i)
-        vc[i] = y_inv_f32[i];
+      for (uint i = 0; i < ln; ++i) vc[i] = y_inv_f32[i];
     }
 #elif defined(ENABLE_BOX_XXT_CHOLMOD)
     sparse_cholmod_solve(vc, fac_A_ll, vc);
@@ -1131,11 +1057,9 @@ void crs_xxt_solve(T *x, struct xxt *data, const T *b) {
   }
   if (data->null_space) {
     T s = 0;
-    for (i = 0; i < cn; ++i)
-      s += data->share_weight[i] * vc[i];
+    for (i = 0; i < cn; ++i) s += data->share_weight[i] * vc[i];
     s = sum(data, s, data->xn, 0);
-    for (i = 0; i < cn; ++i)
-      vc[i] -= s;
+    for (i = 0; i < cn; ++i) vc[i] -= s;
   }
 
   t = MPI_Wtime();
@@ -1154,16 +1078,14 @@ void crs_xxt_stats(struct xxt *data) {
   if (data->comm.id == 0) {
     unsigned s;
     printf("xxt: separator sizes on %d =", (int)data->comm.id);
-    for (s = 0; s < data->nsep; ++s)
-      printf(" %d", (int)data->sep_size[s]);
+    for (s = 0; s < data->nsep; ++s) printf(" %d", (int)data->sep_size[s]);
     printf("\n");
     printf("xxt: shared dofs on %d = %d\n", (int)data->comm.id, (int)data->sn);
   }
 
   a = data->ln;
   comm_allreduce(&data->comm, gs_int, gs_max, &a, 1, &b);
-  if (data->comm.id == 0)
-    printf("xxt: max non-shared dofs = %d\n", a);
+  if (data->comm.id == 0) printf("xxt: max non-shared dofs = %d\n", a);
   in[0] = data->ln;
   comm_scan(out, &data->comm, gs_long, gs_add, in, 1, buf);
   if (data->comm.id == 0)
@@ -1171,20 +1093,16 @@ void crs_xxt_stats(struct xxt *data) {
 
   a = data->sn;
   comm_allreduce(&data->comm, gs_int, gs_max, &a, 1, &b);
-  if (data->comm.id == 0)
-    printf("xxt: max shared dofs = %d\n", a);
+  if (data->comm.id == 0) printf("xxt: max shared dofs = %d\n", a);
   in[0] = data->sn;
   comm_scan(out, &data->comm, gs_long, gs_add, in, 1, buf);
-  if (data->comm.id == 0)
-    printf("xxt: total shared dofs = %lld\n", out[1][0]);
+  if (data->comm.id == 0) printf("xxt: total shared dofs = %lld\n", out[1][0]);
 
   xcol = data->xn;
-  if (xcol && data->null_space)
-    --xcol;
+  if (xcol && data->null_space) --xcol;
   a = xcol;
   comm_allreduce(&data->comm, gs_int, gs_max, &a, 1, &b);
-  if (data->comm.id == 0)
-    printf("xxt: max X cols = %d\n", a);
+  if (data->comm.id == 0) printf("xxt: max X cols = %d\n", a);
   in[0] = data->xn;
   comm_scan(out, &data->comm, gs_long, gs_add, in, 1, buf);
   if (data->comm.id == 0)
@@ -1193,8 +1111,7 @@ void crs_xxt_stats(struct xxt *data) {
 
   a = data->Xp[xcol];
   comm_allreduce(&data->comm, gs_int, gs_max, &a, 1, &b);
-  if (data->comm.id == 0)
-    printf("xxt: max X nnz = %d\n", a);
+  if (data->comm.id == 0) printf("xxt: max X nnz = %d\n", a);
   in[0] = data->Xp[xcol];
   comm_scan(out, &data->comm, gs_long, gs_add, in, 1, buf);
   if (data->comm.id == 0) {
@@ -1211,8 +1128,7 @@ void crs_xxt_free(struct xxt *data) {
   free(data->req);
   free(data->sep_size);
   free(data->perm_u2c);
-  if (data->null_space)
-    free(data->share_weight);
+  if (data->null_space) free(data->share_weight);
   sparse_cholesky_free(&data->fac_A_ll);
   free(data->A_sl.Arp);
   free(data->A_sl.A);

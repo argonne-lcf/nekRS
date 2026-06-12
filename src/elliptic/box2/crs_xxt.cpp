@@ -1,10 +1,10 @@
 #include <cassert>
-#include <cstdlib>
 #include <cfloat>
 #include <climits>
 #include <cmath>
 #include <cstddef>
 #include <cstdio>
+#include <cstdlib>
 #include <cstring>
 
 #include "crs_box_impl.hpp"
@@ -35,8 +35,7 @@ static unsigned lg(uint v) {
 #define BITS(i) ((UINT_BITS + (1 << (i)) - 1) >> (i))
 #define MASK(i) ((((uint)1 << BITS(i)) - 1) << BITS(i))
 #define CHECK(i)                                                               \
-  if ((BITS(i) != 1) && (v & MASK(i)))                                         \
-  v >>= BITS(i), r += BITS(i)
+  if ((BITS(i) != 1) && (v & MASK(i))) v >>= BITS(i), r += BITS(i)
   CHECK(1);
   CHECK(2);
   CHECK(3);
@@ -46,8 +45,7 @@ static unsigned lg(uint v) {
   CHECK(7);
   CHECK(8);
   CHECK(9); /* this covers up to 1024-bit uints */
-  if (v & 2)
-    ++r;
+  if (v & 2) ++r;
   return r;
 #undef UINT_BITS
 #undef BITS
@@ -135,12 +133,8 @@ void crs_xxt_solve(void *x, struct xxt *xxt, const void *b) {
 
 void crs_xxt_stats(struct xxt *xxt) {
   switch (xxt->dom) {
-  case gs_double:
-    crs_xxt_stats_double((struct xxt_double *)xxt->solver);
-    break;
-  case gs_float:
-    crs_xxt_stats_float((struct xxt_float *)xxt->solver);
-    break;
+  case gs_double: crs_xxt_stats_double((struct xxt_double *)xxt->solver); break;
+  case gs_float: crs_xxt_stats_float((struct xxt_float *)xxt->solver); break;
   default:
     fprintf(stderr, "Domain %u is not supported.\n", xxt->dom);
     exit(EXIT_FAILURE);
@@ -158,12 +152,8 @@ void crs_xxt_times(double *cholesky_time_, double *local_time_,
 
 void crs_xxt_free(struct xxt *xxt) {
   switch (xxt->dom) {
-  case gs_double:
-    crs_xxt_free_double((struct xxt_double *)xxt->solver);
-    break;
-  case gs_float:
-    crs_xxt_free_float((struct xxt_float *)xxt->solver);
-    break;
+  case gs_double: crs_xxt_free_double((struct xxt_double *)xxt->solver); break;
+  case gs_float: crs_xxt_free_float((struct xxt_float *)xxt->solver); break;
   default:
     fprintf(stderr, "Domain %u is not supported.\n", xxt->dom);
     exit(EXIT_FAILURE);
