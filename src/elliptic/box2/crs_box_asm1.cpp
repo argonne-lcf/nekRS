@@ -1,9 +1,5 @@
 #include "crs_box.hpp"
-
-static void sfree(void *p, const char *file, unsigned line) {
-  if (p) free(p);
-}
-#define tfree(p) sfree(p, __FILE__, __LINE__)
+#include "crs_xxt.hpp"
 
 struct elem_t {
   ulong eid, vid[8];
@@ -173,7 +169,7 @@ void fetch_nbrs_v3(unsigned *nei, slong *vids, double *mat, sint *wids,
         if (binary_search(nbrs[s], (eid_t *)fronta.ptr, fronta.n) == -1) {
           struct eid_t et = {.eid = nbrs[s]};
           array_cat(struct eid_t, &fronta, &et, 1);
-          // FIXME: This is bad. Fix it.
+          // FIXME: This is bad.
           sarray_sort(struct eid_t, fronta.ptr, fronta.n, eid, 1, &bfr);
 
           struct req_t rt = {.eid = nbrs[s], .p = proc[s]};
@@ -238,7 +234,7 @@ void fetch_nbrs_v3(unsigned *nei, slong *vids, double *mat, sint *wids,
   }
   array_free(&respns);
   array_free(&fronta), array_free(&inputa);
-  tfree(offs), tfree(proc), tfree(nbrs);
+  free(offs), free(proc), free(nbrs);
 
   // 5. Now we have the element ids of the extended domain. We need to bring
   // other data in now. First we will put input data into an array and then
@@ -309,11 +305,96 @@ void fetch_nbrs_v3(unsigned *nei, slong *vids, double *mat, sint *wids,
     }
   }
   array_free(&extended);
-  tfree(elist), tfree(wlist), tfree(plist);
+  free(elist), free(wlist), free(plist);
 
   buffer_free(&bfr), crystal_free(&cr), comm_free(&c);
 
   return;
 }
 
-#undef tfree
+static void setup_asm1(unsigned *ne_, slong **vtx_, double **mat_, sint **wids_,
+                       sint **front_, unsigned nv, unsigned nd, unsigned nw,
+                       MPI_Comm comm, buffer *bfr) {
+  const uint max_ne = 5 * (*ne_) + 200;
+  slong *vtx = *vtx_ = tcalloc(slong, nv * max_ne);
+  double *mat = *mat_ = tcalloc(double, nv * nv * max_ne);
+  sint *wids = *wids_ = tcalloc(sint, max_ne);
+  fetch_nbrs_v3(ne_, vtx, mat, wids, nv, nd, nw, max_ne, comm);
+
+  // Setup the frontier array.
+  unsigned ne = *ne_;
+  sint *front = *front_ = tcalloc(sint, ne * nv);
+  for (uint e = 0; e < ne; e++) {
+    if (wids[e] == nw) {
+      for (unsigned v = 0; v < nv; v++) front[e * nv + v] = 1;
+    } else {
+      for (unsigned v = 0; v < nv; v++) front[e * nv + v] = 0;
+    }
+  }
+
+  // Make sure frontier values are consistent.
+  struct comm c, lc;
+  comm_init(&c, comm);
+  comm_split(&c, c.id, c.id, &lc);
+
+  struct gs_data *gsh = gs_setup(vtx, ne * nv, &lc, 0, gs_pairwise, 0);
+  gs(front, gs_int, gs_min, 0, gsh, bfr);
+  gs_free(gsh);
+
+  comm_free(&c), comm_free(&lc);
+}
+
+void crs_box_setup_asm1(struct box *box) {
+  const struct comm *const c = &box->c;
+  const uint nw = box->opts.nw;
+  const uint nv = box->ncr;
+  const uint nd = (nv == 8) ? 3 : 2;
+
+  uint ne = box->un / nv;
+  slong *vtx = 0;
+  double *va = 0;
+  sint *wids = 0, *front = 0;
+  setup_asm1(&ne, &vtx, &va, &wids, &front, nv, nd, nw, c->c, &box->bfr);
+  box->sn = ne * nv;
+
+  const uint nnz = box->sn * nv;
+  uint *ia = tcalloc(uint, nnz);
+  uint *ja = tcalloc(uint, nnz);
+  for (uint e = 0; e < ne; e++) {
+    for (uint j = 0; j < nv; j++) {
+      for (uint i = 0; i < nv; i++) {
+        ia[e * nv * nv + j * nv + i] = e * nv + i;
+        ja[e * nv * nv + j * nv + i] = e * nv + j;
+      }
+    }
+  }
+
+  // TODO: Check for null_space == 0
+  ulong *tmp_vtx = tcalloc(ulong, ne);
+  for (uint i = 0; i < box->sn; i++) {
+    tmp_vtx[i] = vtx[i];
+    if (front[i] == 1) tmp_vtx[i] = 0;
+  }
+
+  // Setup an isolated comm for each MPI process.
+  struct comm lc;
+  MPI_Comm local;
+  MPI_Comm_split(c->c, c->id, c->id, &local);
+  comm_init(&lc, local);
+  MPI_Comm_free(&local);
+
+  // Setup ASM1 solver.
+  box->asm1 = (void *)crs_xxt_setup(box->sn, tmp_vtx, nnz, ia, ja, va,
+                                    jl_dom_to_gs_dom(box->opts.dom),
+                                    0 /* null space */, &lc);
+  comm_free(&lc);
+
+  // Setup the crs_dsavg which basically average the solution of original
+  // domains.
+  slong *gs_vtx = tcalloc(slong, box->sn);
+  for (uint i = 0; i < box->un; i++) gs_vtx[i] = tmp_vtx[i];
+  for (uint i = box->un; i < box->sn; i++) gs_vtx[i] = -tmp_vtx[i];
+  box->gsh = gs_setup((const slong *)gs_vtx, box->sn, c, 0, gs_auto, 0);
+
+  free(tmp_vtx), free(gs_vtx), free(ia), free(ja);
+}
