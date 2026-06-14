@@ -7,12 +7,11 @@
 #include <cstdlib>
 #include <cstring>
 
-#include "crs_box_impl.hpp"
-
 #if defined(ENABLE_BLAS)
 #include <cblas.h>
 #include <lapacke.h>
 #endif
+#include "crs_xxt.hpp"
 
 struct cholmod_csr *fac_A_ll = NULL;
 double *A_ll_inv = NULL, *y_inv = NULL;

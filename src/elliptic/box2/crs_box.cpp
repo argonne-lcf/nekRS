@@ -9,12 +9,20 @@
 #include <cstring>
 #include <unistd.h>
 
-#include <nekInterfaceAdapter.hpp>
+#include "crs_box.hpp"
+#include "crs_xxt.hpp"
 
-#include <parRSB.h>
-
-#include "crs_box_impl.hpp"
-#include "nekrs_crs.hpp"
+struct box {
+  jl_opts opts; /* User configurable options */
+  uint un, cn, sn,
+      ncr;         /* User size, compressed size, Schwarz size and 1D dofs */
+  void *sx, *srhs; /* Schwarz/XXT work arrays on CPU */
+  void *asm1;      /* Pointer to the asm1 solver */
+  void *asm2;      /* Pointer to the asm2 solver */
+  struct gs_data *gsh; /* dssum */
+  struct comm global;  /* communicators */
+  buffer bfr;          /* Buffers for gslib */
+};
 
 #if 0
   // 8. Setup the Frontier array.
@@ -46,17 +54,11 @@ static inline void allocate_work_arrays(struct box *box) {
 static inline void setup_comms(struct box *box, const struct comm *c) {
   // Setup global comm.
   comm_dup(&box->global, c);
-
-  // Setup local comm (one per each rank).
-  MPI_Comm local;
-  MPI_Comm_split(c->c, c->id, 1, &local);
-  comm_init(&box->local, local);
-  MPI_Comm_free(&local);
 }
 
 static void asm1_setup2(struct box *box) {
   const double tol = 1e-12;
-  struct comm *lc = &box->local, *gc = &box->global;
+  struct comm *gc = &box->global;
   buffer *bfr = &box->bfr;
 
   const uint nw = box->opts.nw;
@@ -69,7 +71,7 @@ static void asm1_setup2(struct box *box) {
   double *va = tcalloc(double, nv * nv * max_ne);
   // Copy data to vtx and va.
   sint *wids = tcalloc(sint, max_ne);
-  parrsb_fetch_nbrs_v3(&ne, vtx, va, wids, nv, nd, nw, max_ne, gc->c);
+  fetch_nbrs_v3(&ne, vtx, va, wids, nv, nd, nw, max_ne, gc->c);
 
   box->sn = ne * nv;
   const uint nnz = box->sn * nv;
@@ -92,12 +94,15 @@ static void asm1_setup2(struct box *box) {
   }
   assert(null_space == 0);
 
+  // FIXME: init lc;
+  struct comm *lc;
   // Setup ASM1 solver.
-  box->asm1 = (void *)crs_xxt_setup(box->sn, tmp_vtx, nnz, ia, ja, va,
-                                    box->opts.dom, null_space, lc);
+  box->asm1 =
+      (void *)crs_xxt_setup(box->sn, tmp_vtx, nnz, ia, ja, va,
+                            jl_dom_to_gs_dom(box->opts.dom), null_space, lc);
 
   // Setup the crs_dsavg which basically average the solution of original
-  // parRSB domains.
+  // domains.
   slong *gs_vtx = tcalloc(slong, box->sn);
   for (uint i = 0; i < box->un; i++) gs_vtx[i] = tmp_vtx[i];
   for (uint i = box->un; i < box->sn; i++) gs_vtx[i] = -tmp_vtx[i];
@@ -123,7 +128,7 @@ struct box *crs_box_setup2(uint n, const ulong *id, uint nnz, const uint *Ai,
 
 void crs_box_solve2(occa::memory &o_x, struct box *box, occa::memory &o_rhs) {
   buffer *bfr = &box->bfr;
-  const gs_dom dom = box->opts.dom;
+  const gs_dom dom = jl_dom_to_gs_dom(box->opts.dom);
 
   o_rhs.copyTo(box->srhs, box->un);
   gs(box->srhs, dom, gs_add, 0, box->gsh, bfr);
@@ -137,6 +142,6 @@ void crs_box_free2(struct box *box) {
   crs_xxt_free((struct xxt *)box->asm1);
   gs_free(box->gsh);
   buffer_free(&box->bfr);
-  comm_free(&box->local), comm_free(&box->global);
+  comm_free(&box->global);
   free(box->sx), free(box->srhs);
 }

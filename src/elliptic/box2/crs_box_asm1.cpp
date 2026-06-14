@@ -1,5 +1,4 @@
-#include <err.h>
-#include <gslib.h>
+#include "crs_box.hpp"
 
 static void sfree(void *p, const char *file, unsigned line) {
   if (p) free(p);
@@ -142,11 +141,11 @@ void fetch_nbrs_v3(unsigned *nei, slong *vids, double *mat, sint *wids,
     et.e = e;
     array_cat(struct eid_t, &fronta, &et, 1);
   }
-  sarray_sort(struct eid_t, fronta.ptr, fronta.n, eid, 1, &bfr);
+  sarray_sort(struct eid_t, (eid_t *)fronta.ptr, fronta.n, eid, 1, &bfr);
 
   struct array inputa;
   array_init(struct eid_t, &inputa, ne);
-  array_cat(struct eid_t, &inputa, fronta.ptr, fronta.n);
+  array_cat(struct eid_t, &inputa, (eid_t *)fronta.ptr, fronta.n);
 
   // 4. Update the frontier by finding new neighbor elements from the previous
   // frontier.
@@ -171,7 +170,7 @@ void fetch_nbrs_v3(unsigned *nei, slong *vids, double *mat, sint *wids,
     // Find all the new elements appearing in the map in last wave.
     for (uint i = fs; i < fe; i++) {
       for (uint s = offs[i], e = offs[i + 1]; s < e; s++) {
-        if (binary_search(nbrs[s], fronta.ptr, fronta.n) == -1) {
+        if (binary_search(nbrs[s], (eid_t *)fronta.ptr, fronta.n) == -1) {
           struct eid_t et = {.eid = nbrs[s]};
           array_cat(struct eid_t, &fronta, &et, 1);
           // FIXME: This is bad. Fix it.

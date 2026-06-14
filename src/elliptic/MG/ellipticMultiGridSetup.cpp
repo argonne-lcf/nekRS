@@ -32,6 +32,133 @@
 
 #include "nekrs_crs.hpp"
 
+//////////////////////////////////////////////////////////////////////////////////////
+// Helper functions for jl coarse solver                                            //
+//////////////////////////////////////////////////////////////////////////////////////
+static int gen_crs_basis(dfloat *b, int j_, dfloat *z, int Nq, int Np) {
+  dfloat *zr = (dfloat *)calloc(Nq, sizeof(dfloat));
+  dfloat *zs = (dfloat *)calloc(Nq, sizeof(dfloat));
+  dfloat *zt = (dfloat *)calloc(Nq, sizeof(dfloat));
+  dfloat *z0 = (dfloat *)calloc(Nq, sizeof(dfloat));
+  dfloat *z1 = (dfloat *)calloc(Nq, sizeof(dfloat));
+  if (zr == NULL || zs == NULL || zt == NULL || z0 == NULL || z1 == NULL)
+    return 1;
+
+  for (int i = 0; i < Nq; i++) {
+    z0[i] = 0.5 * (1 - z[i]);
+    z1[i] = 0.5 * (1 + z[i]);
+  }
+
+  memcpy(zr, z0, Nq * sizeof(dfloat));
+  memcpy(zs, z0, Nq * sizeof(dfloat));
+  memcpy(zt, z0, Nq * sizeof(dfloat));
+
+  int jj = j_ + 1;
+  if (jj % 2 == 0) memcpy(zr, z1, Nq * sizeof(dfloat));
+  if (jj == 3 || jj == 4 || jj == 7 || jj == 8)
+    memcpy(zs, z1, Nq * sizeof(dfloat));
+  if (jj > 4) memcpy(zt, z1, Nq * sizeof(dfloat));
+
+  for (int k = 0; k < Nq; k++) {
+    for (int j = 0; j < Nq; j++) {
+      for (int i = 0; i < Nq; i++) {
+        int n = i + Nq * j + Nq * Nq * k + j_ * Np;
+        b[n] = zr[i] * zs[j] * zt[k];
+      }
+    }
+  }
+
+  free(zr), free(zs), free(zt), free(z0), free(z1);
+
+  return 0;
+}
+
+static int get_local_crs_galerkin(double *a, int nc, mesh_t *mf,
+                                  elliptic_t *ef) {
+  size_t nelt = mf->Nelements, Np = mf->Np;
+  size_t size = nelt * Np;
+
+  dfloat *b = (dfloat *)calloc(nc * Np, sizeof(dfloat));
+  for (int j = 0; j < nc; j++) gen_crs_basis(b, j, mf->gllz, mf->Nq, mf->Np);
+
+  dfloat *u = (dfloat *)calloc(size, sizeof(dfloat));
+  dfloat *w = (dfloat *)calloc(size, sizeof(dfloat));
+
+  occa::memory o_u = platform->device.malloc<dfloat>(size, u);
+  occa::memory o_w = platform->device.malloc<dfloat>(size, w);
+  occa::memory o_upf = platform->device.malloc<pfloat>(size);
+  occa::memory o_wpf = platform->device.malloc<pfloat>(size);
+
+  int i, j, k, e;
+  for (j = 0; j < nc; j++) {
+    for (e = 0; e < nelt; e++)
+      memcpy(&u[e * Np], &b[j * Np], Np * sizeof(dfloat));
+
+    o_u.copyFrom(u);
+    platform->copyDfloatToPfloatKernel(mf->Nlocal, o_u, o_upf);
+    ellipticAx(ef, mf->Nelements, mf->o_elementList, o_upf, o_wpf,
+               pfloatString);
+    platform->copyPfloatToDfloatKernel(mf->Nlocal, o_wpf, o_w);
+    o_w.copyTo(w);
+
+    for (e = 0; e < nelt; e++)
+      for (i = 0; i < nc; i++) {
+        a[i + j * nc + e * nc * nc] = 0.0;
+        for (k = 0; k < Np; k++)
+          a[i + j * nc + e * nc * nc] += b[k + i * Np] * w[k + e * Np];
+      }
+  }
+
+  free(b), free(w), free(u);
+  o_u.free(), o_w.free(), o_upf.free(), o_wpf.free();
+
+  return 0;
+}
+
+static void set_mat_ij(uint *ia, uint *ja, int nc, int nelt) {
+  uint i, j, e;
+  for (e = 0; e < nelt; e++) {
+    for (j = 0; j < nc; j++) {
+      for (i = 0; i < nc; i++) {
+        ia[i + j * nc + nc * nc * e] = e * nc + i;
+        ja[i + j * nc + nc * nc * e] = e * nc + j;
+      }
+    }
+  }
+}
+
+void jl_setup_aux(uint *ntot_, ulong **gids_, uint *nnz_, uint **ia_,
+                  uint **ja_, double **a_, elliptic_t *elliptic,
+                  elliptic_t *ellipticf) {
+  mesh_t *mesh = elliptic->mesh, *meshf = ellipticf->mesh;
+  assert(mesh->Nelements == meshf->Nelements);
+  uint nelt = meshf->Nelements, nc = mesh->Np;
+
+  uint ntot = *ntot_ = nelt * nc;
+  ulong *gids = *gids_ = (ulong *)calloc(ntot, sizeof(ulong));
+  for (int j = 0; j < nelt * nc; j++) gids[j] = mesh->globalIds[j];
+
+  if (elliptic->Nmasked) {
+    dlong *mask_ids = (dlong *)calloc(elliptic->Nmasked, sizeof(dlong));
+    elliptic->o_maskIds.copyTo(mask_ids, elliptic->Nmasked);
+    for (int n = 0; n < elliptic->Nmasked; n++) gids[mask_ids[n]] = 0;
+    free(mask_ids);
+  }
+
+  // Set coarse matrix
+  uint nnz = *nnz_ = nc * nc * nelt;
+  double *a = *a_ = (double *)calloc(nnz, sizeof(double));
+  get_local_crs_galerkin(a, nc, meshf, ellipticf);
+
+  uint *ia = *ia_ = (uint *)calloc(nnz, sizeof(uint));
+  uint *ja = *ja_ = (uint *)calloc(nnz, sizeof(uint));
+  set_mat_ij(ia, ja, nc, nelt);
+}
+
+
+//////////////////////////////////////////////////////////////////////////////////////
+// ellipticMulriGridSetup                                                           //
+//////////////////////////////////////////////////////////////////////////////////////
 void ellipticMultiGridSetup(elliptic_t *elliptic_)
 {
   if (platform->comm.mpiRank == 0) {
@@ -253,7 +380,7 @@ void ellipticMultiGridSetup(elliptic_t *elliptic_)
         jl_opts opts;
         opts.algo =  xxt ? XXT : BOX;
         opts.null_space = elliptic->nullspace;
-        opts.dom = gs_float;
+        opts.dom = jl_float32;
         opts.nw = 1;
         jl_setup(num_total, gids, nnz, ia, ja, a, &opts, platform->comm.mpiComm);
 
