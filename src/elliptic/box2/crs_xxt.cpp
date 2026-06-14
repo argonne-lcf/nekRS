@@ -73,7 +73,7 @@ static double local_time = 0;
 #define T double
 #define SUFFIX _double
 #define gs_domain gs_double
-#include "crs_xxt_impl.hpp"
+#include "crs_xxt.impl"
 #undef T
 #undef SUFFIX
 #undef gs_domain
@@ -81,7 +81,7 @@ static double local_time = 0;
 #define T float
 #define SUFFIX _float
 #define gs_domain gs_float
-#include "crs_xxt_impl.hpp"
+#include "crs_xxt.impl"
 #undef T
 #undef SUFFIX
 #undef gs_domain
