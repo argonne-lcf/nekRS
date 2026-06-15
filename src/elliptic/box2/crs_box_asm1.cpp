@@ -32,9 +32,9 @@ static int binary_search(ulong eid, struct eid_t *pe, uint n) {
   return -1;
 }
 
-static void fetch_nbrs_v3(uint *ne_, slong *vids, double *mat, sint *wids,
-                          uint nv, uint ndim, uint nw, uint max_ne,
-                          MPI_Comm comm, buffer *bfr) {
+static void fetch_nbrs_v3(uint *ne_, slong *vids, double *mat, uint nv,
+                          uint ndim, uint nw, uint max_ne, MPI_Comm comm,
+                          buffer *bfr) {
   // 1. Find neighbor elements of input elements based on vertex connectivity.
   struct vtx_t {
     ulong vid;
@@ -104,9 +104,9 @@ static void fetch_nbrs_v3(uint *ne_, slong *vids, double *mat, sint *wids,
     e = s + 1;
     while (e < vtx2e.n && pv[s].eid == pv[e].eid) e++;
 
-    uint s0 = offs[cnt];
     // Check if `max_nbrs` is large enough.
-    if (s0 + e - s > max_nbrs) {
+    uint s0 = offs[cnt];
+    if ((s0 + e - s) > max_nbrs) {
       fprintf(stderr, "Try max_nbrs larger than %d\n", s0 + e - s);
       fflush(stderr);
       exit(EXIT_FAILURE);
@@ -126,7 +126,7 @@ static void fetch_nbrs_v3(uint *ne_, slong *vids, double *mat, sint *wids,
   // 3. Put all local elements in frontier array and sort by element id.
   // We will keep updating this and the map as we update the frontier.
   struct array fronta;
-  array_init(struct eid_t, &fronta, 3 * ne / 2);
+  array_init(struct eid_t, &fronta, (3 * ne) / 2);
 
   struct eid_t et;
   for (uint e = 0; e < ne; e++) {
@@ -291,7 +291,6 @@ static void fetch_nbrs_v3(uint *ne_, slong *vids, double *mat, sint *wids,
   for (uint i = 0; i < fe; i++) {
     // Sanity check.
     assert(elist[i] == pe[i].eid);
-    wids[i] = wlist[i];
     for (uint v = 0; v < nv; v++) {
       vids[i * nv + v] = pe[i].vid[v];
       for (uint j = 0; j < nv; j++)
@@ -299,44 +298,31 @@ static void fetch_nbrs_v3(uint *ne_, slong *vids, double *mat, sint *wids,
     }
   }
   array_free(&extended);
-  free(elist), free(wlist), free(plist);
+  free(elist), free(plist);
 
-  crystal_free(&cr), comm_free(&c);
-}
-
-static void setup_asm1(uint *ne_, slong **vtx_, double **mat_, uint nv, uint nd,
-                       uint nw, const struct comm *c, buffer *bfr) {
-  const uint max_ne = 5 * (*ne_) + 200;
-  slong *vtx = *vtx_ = tcalloc(slong, nv * max_ne);
-  double *mat = *mat_ = tcalloc(double, nv * nv * max_ne);
-  sint *wids = tcalloc(sint, max_ne);
-  fetch_nbrs_v3(ne_, vtx, mat, wids, nv, nd, nw, max_ne, c->c, bfr);
-
-  // Setup the frontier array.
-  uint ne = *ne_;
-  uint ndof = ne * nv;
+  // 8. Setup the Dirichlet BCs.
+  uint ndof = fe * nv;
   sint *front = tcalloc(sint, ndof);
-  for (uint e = 0; e < ne; e++) {
-    if (wids[e] == nw)
+  for (uint e = 0; e < fe; e++) {
+    if (wlist[e] == nw)
       for (uint v = 0; v < nv; v++) front[e * nv + v] = 1;
     else
       for (uint v = 0; v < nv; v++) front[e * nv + v] = 0;
   }
 
-  // Make sure frontier values are consistent.
   struct comm lc;
-  comm_split(c, c->id, c->id, &lc);
-  struct gs_data *gsh = gs_setup(vtx, ndof, &lc, 0, gs_pairwise, 0);
+  comm_split(&c, c.id, c.id, &lc);
+  struct gs_data *gsh = gs_setup(vids, ndof, &lc, 0, gs_pairwise, 0);
   gs(front, gs_int, gs_min, 0, gsh, bfr);
   gs_free(gsh), comm_free(&lc);
 
   uint null_space = 1;
-  for (uint i = 0; i < ndof; i++) {
-    if (front[i] == 1) null_space = vtx[i] = 0;
-  }
+  for (uint i = 0; i < ndof; i++)
+    if (front[i] == 1) null_space = vids[i] = 0;
   assert(null_space == 0);
+  free(wlist), free(front);
 
-  free(wids), free(front);
+  crystal_free(&cr), comm_free(&c);
 }
 
 void crs_box_setup_asm1(struct box *box) {
@@ -346,9 +332,11 @@ void crs_box_setup_asm1(struct box *box) {
   const uint nw = box->opts.nw;
 
   uint sne = box->un / nv;
-  slong *vtx = 0;
-  double *va = 0;
-  setup_asm1(&sne, &vtx, &va, nv, nd, nw, c, &box->bfr);
+  uint mne = 5 * sne + 200;
+  slong *vtx = tcalloc(slong, nv * mne);
+  double *va = tcalloc(double, nv * nv * mne);
+  fetch_nbrs_v3(&sne, vtx, va, nv, nd, nw, mne, c->c, &box->bfr);
+
   box->sn = sne * nv;
 
   const uint nnz = box->sn * nv;
