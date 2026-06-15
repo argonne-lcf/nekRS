@@ -32,10 +32,9 @@ static int binary_search(ulong eid, struct eid_t *pe, uint n) {
   return -1;
 }
 
-void fetch_nbrs_v3(unsigned *nei, slong *vids, double *mat, sint *wids,
-                   unsigned nv, unsigned ndim, unsigned nw, unsigned max_ne,
-                   MPI_Comm comm) {
-  const size_t ne = *nei;
+static void fetch_nbrs_v3(uint *ne_, slong *vids, double *mat, sint *wids,
+                          uint nv, uint ndim, uint nw, uint max_ne,
+                          MPI_Comm comm, buffer *bfr) {
   // 1. Find neighbor elements of input elements based on vertex connectivity.
   struct vtx_t {
     ulong vid;
@@ -44,31 +43,28 @@ void fetch_nbrs_v3(unsigned *nei, slong *vids, double *mat, sint *wids,
     uint p, np;
   };
 
+  const size_t ne = *ne_;
   struct array vtxs;
   array_init(struct vtx_t, &vtxs, ne * nv);
 
   struct comm c;
   comm_init(&c, comm);
+  struct crystal cr;
+  crystal_init(&cr, &c);
 
   struct vtx_t vt = {.np = c.id};
   for (uint e = 0; e < ne; e++) {
-    for (unsigned v = 0; v < nv; v++) {
+    for (uint v = 0; v < nv; v++) {
       vt.vid = vids[e * nv + v], vt.p = vt.vid % c.np;
       array_cat(struct vtx_t, &vtxs, &vt, 1);
     }
   }
 
-  struct crystal cr;
-  crystal_init(&cr, &c);
   sarray_transfer(struct vtx_t, &vtxs, p, 1, &cr);
-
-  buffer bfr;
-  buffer_init(&bfr, 1024);
-  sarray_sort(struct vtx_t, vtxs.ptr, vtxs.n, vid, 1, &bfr);
+  sarray_sort(struct vtx_t, vtxs.ptr, vtxs.n, vid, 1, bfr);
 
   struct array vtx2e;
   array_init(struct vtx_t, &vtx2e, vtxs.n);
-
   struct vtx_t *pv = (struct vtx_t *)vtxs.ptr;
   uint s = 0, e;
   while (s < vtxs.n) {
@@ -86,7 +82,7 @@ void fetch_nbrs_v3(unsigned *nei, slong *vids, double *mat, sint *wids,
   array_free(&vtxs);
 
   sarray_transfer(struct vtx_t, &vtx2e, p, 0, &cr);
-  sarray_sort_2(struct vtx_t, vtx2e.ptr, vtx2e.n, seq, 0, nid, 1, &bfr);
+  sarray_sort_2(struct vtx_t, vtx2e.ptr, vtx2e.n, seq, 0, nid, 1, bfr);
 
   // 2. Build element to neighbor map and element to processor map for input
   // elements.
@@ -137,7 +133,7 @@ void fetch_nbrs_v3(unsigned *nei, slong *vids, double *mat, sint *wids,
     et.e = e;
     array_cat(struct eid_t, &fronta, &et, 1);
   }
-  sarray_sort(struct eid_t, (eid_t *)fronta.ptr, fronta.n, eid, 1, &bfr);
+  sarray_sort(struct eid_t, (eid_t *)fronta.ptr, fronta.n, eid, 1, bfr);
 
   struct array inputa;
   array_init(struct eid_t, &inputa, ne);
@@ -162,7 +158,7 @@ void fetch_nbrs_v3(unsigned *nei, slong *vids, double *mat, sint *wids,
   array_init(struct res_t, &respns, rqsts.n * 10);
 
   uint fs = 0, fe = ne;
-  for (unsigned w = 1; w <= nw; w++) {
+  for (uint w = 1; w <= nw; w++) {
     // Find all the new elements appearing in the map in last wave.
     for (uint i = fs; i < fe; i++) {
       for (uint s = offs[i], e = offs[i + 1]; s < e; s++) {
@@ -170,8 +166,7 @@ void fetch_nbrs_v3(unsigned *nei, slong *vids, double *mat, sint *wids,
           struct eid_t et = {.eid = nbrs[s]};
           array_cat(struct eid_t, &fronta, &et, 1);
           // FIXME: This is bad.
-          sarray_sort(struct eid_t, fronta.ptr, fronta.n, eid, 1, &bfr);
-
+          sarray_sort(struct eid_t, fronta.ptr, fronta.n, eid, 1, bfr);
           struct req_t rt = {.eid = nbrs[s], .p = proc[s]};
           array_cat(struct req_t, &rqsts, &rt, 1);
         }
@@ -180,7 +175,7 @@ void fetch_nbrs_v3(unsigned *nei, slong *vids, double *mat, sint *wids,
 
     // Get the neighbors of the new elements.
     sarray_transfer(struct req_t, &rqsts, p, 1, &cr);
-    sarray_sort(struct req_t, rqsts.ptr, rqsts.n, eid, 1, &bfr);
+    sarray_sort(struct req_t, rqsts.ptr, rqsts.n, eid, 1, bfr);
 
     struct req_t *pr = (struct req_t *)rqsts.ptr;
     for (uint i = 0; i < rqsts.n; i++) {
@@ -200,7 +195,7 @@ void fetch_nbrs_v3(unsigned *nei, slong *vids, double *mat, sint *wids,
     }
 
     sarray_transfer(struct res_t, &respns, p, 1, &cr);
-    sarray_sort_2(struct res_t, respns.ptr, respns.n, eid, 1, nid, 1, &bfr);
+    sarray_sort_2(struct res_t, respns.ptr, respns.n, eid, 1, nid, 1, bfr);
 
     // Update the map with the new elements and their neighbors.
     struct res_t *prs = (struct res_t *)respns.ptr;
@@ -232,8 +227,7 @@ void fetch_nbrs_v3(unsigned *nei, slong *vids, double *mat, sint *wids,
     }
     rqsts.n = respns.n = 0;
   }
-  array_free(&respns);
-  array_free(&fronta), array_free(&inputa);
+  array_free(&respns), array_free(&fronta), array_free(&inputa);
   free(offs), free(proc), free(nbrs);
 
   // 5. Now we have the element ids of the extended domain. We need to bring
@@ -245,14 +239,14 @@ void fetch_nbrs_v3(unsigned *nei, slong *vids, double *mat, sint *wids,
   struct elem_t elmt;
   for (uint i = 0; i < ne; i++) {
     elmt.p = c.id;
-    for (unsigned v = 0; v < nv; v++) {
+    for (uint v = 0; v < nv; v++) {
       elmt.vid[v] = vids[i * nv + v];
-      for (unsigned j = 0; j < nv; j++)
+      for (uint j = 0; j < nv; j++)
         elmt.mat[v * nv + j] = mat[i * nv * nv + v * nv + j];
     }
     array_cat(struct elem_t, &original, &elmt, 1);
   }
-  sarray_sort(struct elem_t, original.ptr, original.n, eid, 1, &bfr);
+  sarray_sort(struct elem_t, original.ptr, original.n, eid, 1, bfr);
 
   // 6. Now we are sending the requests to bring in the data for the extended
   // domain. Code doesn't distinguish between original and extended element
@@ -264,7 +258,7 @@ void fetch_nbrs_v3(unsigned *nei, slong *vids, double *mat, sint *wids,
   assert(rqsts.n == fe);
 
   sarray_transfer(struct req_t, &rqsts, p, 1, &cr);
-  sarray_sort(struct req_t, rqsts.ptr, rqsts.n, eid, 1, &bfr);
+  sarray_sort(struct req_t, rqsts.ptr, rqsts.n, eid, 1, bfr);
 
   struct array extended;
   array_init(struct elem_t, &extended, rqsts.n);
@@ -277,9 +271,9 @@ void fetch_nbrs_v3(unsigned *nei, slong *vids, double *mat, sint *wids,
     assert(j < ne && po[j].eid == pr[i].eid);
 
     elmt.eid = po[j].eid, elmt.p = pr[i].p, elmt.seq = pr[i].seq;
-    for (unsigned v = 0; v < nv; v++) {
+    for (uint v = 0; v < nv; v++) {
       elmt.vid[v] = po[j].vid[v];
-      for (unsigned k = 0; k < nv; k++)
+      for (uint k = 0; k < nv; k++)
         elmt.mat[v * nv + k] = po[j].mat[v * nv + k];
     }
     array_cat(struct elem_t, &extended, &elmt, 1);
@@ -290,90 +284,83 @@ void fetch_nbrs_v3(unsigned *nei, slong *vids, double *mat, sint *wids,
 
   // 7. We have all the data now. Let's sort them by original element ids and
   // set the Fortran array correctly.
-  sarray_sort(struct elem_t, extended.ptr, extended.n, seq, 0, &bfr);
+  sarray_sort(struct elem_t, extended.ptr, extended.n, seq, 0, bfr);
   struct elem_t *pe = (struct elem_t *)extended.ptr;
-  *nei = fe;
+  *ne_ = fe;
   assert(fe < max_ne);
   for (uint i = 0; i < fe; i++) {
     // Sanity check.
     assert(elist[i] == pe[i].eid);
     wids[i] = wlist[i];
-    for (unsigned v = 0; v < nv; v++) {
+    for (uint v = 0; v < nv; v++) {
       vids[i * nv + v] = pe[i].vid[v];
-      for (unsigned j = 0; j < nv; j++)
+      for (uint j = 0; j < nv; j++)
         mat[i * nv * nv + v * nv + j] = pe[i].mat[v * nv + j];
     }
   }
   array_free(&extended);
   free(elist), free(wlist), free(plist);
 
-  buffer_free(&bfr), crystal_free(&cr), comm_free(&c);
-
-  return;
+  crystal_free(&cr), comm_free(&c);
 }
 
-static void setup_asm1(unsigned *ne_, slong **vtx_, double **mat_, sint **wids_,
-                       sint **front_, unsigned nv, unsigned nd, unsigned nw,
-                       MPI_Comm comm, buffer *bfr) {
+static void setup_asm1(uint *ne_, slong **vtx_, double **mat_, uint nv, uint nd,
+                       uint nw, const struct comm *c, buffer *bfr) {
   const uint max_ne = 5 * (*ne_) + 200;
   slong *vtx = *vtx_ = tcalloc(slong, nv * max_ne);
   double *mat = *mat_ = tcalloc(double, nv * nv * max_ne);
-  sint *wids = *wids_ = tcalloc(sint, max_ne);
-  fetch_nbrs_v3(ne_, vtx, mat, wids, nv, nd, nw, max_ne, comm);
+  sint *wids = tcalloc(sint, max_ne);
+  fetch_nbrs_v3(ne_, vtx, mat, wids, nv, nd, nw, max_ne, c->c, bfr);
 
   // Setup the frontier array.
-  unsigned ne = *ne_;
-  sint *front = *front_ = tcalloc(sint, ne * nv);
+  uint ne = *ne_;
+  uint ndof = ne * nv;
+  sint *front = tcalloc(sint, ndof);
   for (uint e = 0; e < ne; e++) {
-    if (wids[e] == nw) {
-      for (unsigned v = 0; v < nv; v++) front[e * nv + v] = 1;
-    } else {
-      for (unsigned v = 0; v < nv; v++) front[e * nv + v] = 0;
-    }
+    if (wids[e] == nw)
+      for (uint v = 0; v < nv; v++) front[e * nv + v] = 1;
+    else
+      for (uint v = 0; v < nv; v++) front[e * nv + v] = 0;
   }
 
   // Make sure frontier values are consistent.
-  struct comm c, lc;
-  comm_init(&c, comm);
-  comm_split(&c, c.id, c.id, &lc);
-
-  struct gs_data *gsh = gs_setup(vtx, ne * nv, &lc, 0, gs_pairwise, 0);
+  struct comm lc;
+  comm_split(c, c->id, c->id, &lc);
+  struct gs_data *gsh = gs_setup(vtx, ndof, &lc, 0, gs_pairwise, 0);
   gs(front, gs_int, gs_min, 0, gsh, bfr);
-  gs_free(gsh);
+  gs_free(gsh), comm_free(&lc);
 
-  comm_free(&c), comm_free(&lc);
+  uint null_space = 1;
+  for (uint i = 0; i < ndof; i++) {
+    if (front[i] == 1) null_space = vtx[i] = 0;
+  }
+  assert(null_space == 0);
+
+  free(wids), free(front);
 }
 
 void crs_box_setup_asm1(struct box *box) {
-  const struct comm *const c = &box->c;
-  const uint nw = box->opts.nw;
+  const struct comm *const c = &(box->c);
   const uint nv = box->ncr;
   const uint nd = (nv == 8) ? 3 : 2;
+  const uint nw = box->opts.nw;
 
-  uint ne = box->un / nv;
+  uint sne = box->un / nv;
   slong *vtx = 0;
   double *va = 0;
-  sint *wids = 0, *front = 0;
-  setup_asm1(&ne, &vtx, &va, &wids, &front, nv, nd, nw, c->c, &box->bfr);
-  box->sn = ne * nv;
+  setup_asm1(&sne, &vtx, &va, nv, nd, nw, c, &box->bfr);
+  box->sn = sne * nv;
 
   const uint nnz = box->sn * nv;
   uint *ia = tcalloc(uint, nnz);
   uint *ja = tcalloc(uint, nnz);
-  for (uint e = 0; e < ne; e++) {
+  for (uint e = 0; e < sne; e++) {
     for (uint j = 0; j < nv; j++) {
       for (uint i = 0; i < nv; i++) {
         ia[e * nv * nv + j * nv + i] = e * nv + i;
         ja[e * nv * nv + j * nv + i] = e * nv + j;
       }
     }
-  }
-
-  // TODO: Check for null_space == 0
-  ulong *tmp_vtx = tcalloc(ulong, ne);
-  for (uint i = 0; i < box->sn; i++) {
-    tmp_vtx[i] = vtx[i];
-    if (front[i] == 1) tmp_vtx[i] = 0;
   }
 
   // Setup an isolated comm for each MPI process.
@@ -383,18 +370,19 @@ void crs_box_setup_asm1(struct box *box) {
   comm_init(&lc, local);
   MPI_Comm_free(&local);
 
-  // Setup ASM1 solver.
-  box->asm1 = (void *)crs_xxt_setup(box->sn, tmp_vtx, nnz, ia, ja, va,
+  // Setup the ASM1 solver.
+  ulong *ids = tcalloc(ulong, box->sn);
+  for (uint i = 0; i < box->sn; i++) ids[i] = vtx[i];
+  box->asm1 = (void *)crs_xxt_setup(box->sn, ids, nnz, ia, ja, va,
                                     jl_dom_to_gs_dom(box->opts.dom),
                                     0 /* null space */, &lc);
+  free(ids);
   comm_free(&lc);
 
   // Setup the crs_dsavg which basically average the solution of original
   // domains.
-  slong *gs_vtx = tcalloc(slong, box->sn);
-  for (uint i = 0; i < box->un; i++) gs_vtx[i] = tmp_vtx[i];
-  for (uint i = box->un; i < box->sn; i++) gs_vtx[i] = -tmp_vtx[i];
-  box->gsh = gs_setup((const slong *)gs_vtx, box->sn, c, 0, gs_auto, 0);
+  for (uint i = box->un; i < box->sn; i++) vtx[i] = -vtx[i];
+  box->gsh = gs_setup((const slong *)vtx, box->sn, c, 0, gs_auto, 0);
 
-  free(tmp_vtx), free(gs_vtx), free(ia), free(ja);
+  free(vtx), free(ia), free(ja), free(va);
 }

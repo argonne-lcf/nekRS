@@ -30,8 +30,10 @@ struct box *crs_box_setup2(uint n, const ulong *id, uint nnz, const uint *Ai,
   // Setup box members.
   buffer_init(&box->bfr, 1024);
   comm_dup(&box->c, c);
+
   // Setup ASM1.
   crs_box_setup_asm1(box);
+
   // Setup ASM2.
   // Allocate work arrays.
   allocate_work_arrays(box);
