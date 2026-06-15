@@ -4,24 +4,12 @@
 struct crs {
   uint un, algo;
   struct comm c;
-  gs_dom dom;
-  void *x, *rhs;
-  void *solver;
+  void *x, *rhs, *solver;
 };
 
 static struct crs *crs = NULL;
 
-static void allocate_work_arrays(struct crs *crs) {
-  size_t usize;
-  switch (crs->dom) {
-  case gs_double: usize = sizeof(double); break;
-  case gs_float: usize = sizeof(float); break;
-  default:
-    fprintf(stderr, "%s: unknown gs_dom = %d.\n", __func__, crs->dom);
-    MPI_Abort(crs->c.c, EXIT_FAILURE);
-    break;
-  }
-
+static void allocate_work_arrays(struct crs *crs, size_t usize) {
   crs->x = (void *)calloc(crs->un, usize);
   crs->rhs = (void *)calloc(crs->un, usize);
 }
@@ -35,34 +23,24 @@ void jl_setup(uint n, const ulong *id, uint nnz, const uint *Ai, const uint *Aj,
   }
 
   crs = (struct crs *)calloc(1, sizeof(struct crs));
+  comm_init(&crs->c, comm);
   crs->un = n;
-  crs->dom = opts->dom;
   crs->algo = opts->algo;
-
-  struct comm *c = &crs->c;
-  comm_init(c, comm);
-
-  allocate_work_arrays(crs);
 
   switch (crs->algo) {
   case XXT:
-    crs->solver = (void *)crs_xxt_setup(n, id, nnz, Ai, Aj, A, crs->dom,
-                                        opts->null_space, c);
+    crs->solver = (void *)crs_xxt_setup(n, id, nnz, Ai, Aj, A, opts->dom,
+                                        opts->null_space, &crs->c);
     break;
   case BOX:
-    crs->solver = (void *)crs_box_setup2(n, id, nnz, Ai, Aj, A, opts, c);
+    crs->solver = (void *)crs_box_setup2(n, id, nnz, Ai, Aj, A, opts, &crs->c);
     break;
   default: break;
   }
-}
 
-#define DOMAIN_SWITCH(dom, macro)                                              \
-  {                                                                            \
-    switch (dom) {                                                             \
-    case gs_double: macro(double); break;                                      \
-    case gs_float: macro(float); break;                                        \
-    }                                                                          \
-  }
+  allocate_work_arrays(crs,
+                       opts->dom == gs_float ? sizeof(float) : sizeof(double));
+}
 
 static void _crs_xxt_solve(occa::memory &o_x, occa::memory &o_rhs) {
   o_rhs.copyTo(crs->rhs, crs->un);
@@ -91,5 +69,3 @@ void jl_free() {
   free(crs->x), free(crs->rhs);
   free(crs), crs = NULL;
 }
-
-#undef DOMAIN_SWITCH
