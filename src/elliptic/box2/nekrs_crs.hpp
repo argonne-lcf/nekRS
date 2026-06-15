@@ -6,11 +6,10 @@
 #include <gslib.h>
 
 typedef enum { XXT = 0, BOX } jl_algo_t;
-typedef enum { jl_float32 = 0, jl_float64 } jl_dom_t;
 
 typedef struct {
-  jl_dom_t dom;
   jl_algo_t algo;
+  gs_dom dom;
   unsigned null_space;
   unsigned nw;
 } jl_opts;

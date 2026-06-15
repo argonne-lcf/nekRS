@@ -23,12 +23,4 @@ void crs_box_free2(struct box *data);
 
 void crs_box_setup_asm1(struct box *box);
 
-static inline gs_dom jl_dom_to_gs_dom(jl_dom_t dom) {
-  switch (dom) {
-  case jl_float32: return gs_float; break;
-  case jl_float64: return gs_double; break;
-  default: break;
-  }
-}
-
 #endif

@@ -28,15 +28,15 @@ static void allocate_work_arrays(struct crs *crs) {
 
 void jl_setup(uint n, const ulong *id, uint nnz, const uint *Ai, const uint *Aj,
               const double *A, const jl_opts *opts, MPI_Comm comm) {
-  if (opts->dom != jl_float32) {
-    fprintf(stderr, "%s: Only jl_float32 is allowed!\n", __func__);
+  if (opts->dom != gs_float) {
+    fprintf(stderr, "%s: Only gs_float is allowed!\n", __func__);
     fflush(stderr);
     MPI_Abort(comm, EXIT_FAILURE);
   }
 
   crs = (struct crs *)calloc(1, sizeof(struct crs));
   crs->un = n;
-  crs->dom = jl_dom_to_gs_dom(opts->dom);
+  crs->dom = opts->dom;
   crs->algo = opts->algo;
 
   struct comm *c = &crs->c;

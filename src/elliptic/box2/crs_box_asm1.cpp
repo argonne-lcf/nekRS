@@ -362,8 +362,7 @@ void crs_box_setup_asm1(struct box *box) {
   ulong *ids = tcalloc(ulong, box->sn);
   for (uint i = 0; i < box->sn; i++) ids[i] = vtx[i];
   box->asm1 = (void *)crs_xxt_setup(box->sn, ids, nnz, ia, ja, va,
-                                    jl_dom_to_gs_dom(box->opts.dom),
-                                    0 /* null space */, &lc);
+                                    box->opts.dom, 0 /* null space */, &lc);
   free(ids);
   comm_free(&lc);
 

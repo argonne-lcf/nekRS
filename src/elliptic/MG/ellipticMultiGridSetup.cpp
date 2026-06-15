@@ -380,7 +380,7 @@ void ellipticMultiGridSetup(elliptic_t *elliptic_)
         jl_opts opts;
         opts.algo =  xxt ? XXT : BOX;
         opts.null_space = elliptic->nullspace;
-        opts.dom = jl_float32;
+        opts.dom = gs_float;
         opts.nw = 1;
         jl_setup(num_total, gids, nnz, ia, ja, a, &opts, platform->comm.mpiComm);
 

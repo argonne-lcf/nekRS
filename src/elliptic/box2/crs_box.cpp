@@ -13,10 +13,8 @@
 #include "crs_xxt.hpp"
 
 static inline void allocate_work_arrays(struct box *box) {
-  uint wsize = box->sn;
-  box->sx = malloc(sizeof(double) * 2 * wsize);
-  box->srhs = (void *)((double *)box->sx + wsize);
-  buffer_init(&box->bfr, 1024);
+  box->sx = tcalloc(double, 2 * box->sn);
+  box->srhs = (void *)((double *)box->sx + box->sn);
 }
 
 struct box *crs_box_setup2(uint n, const ulong *id, uint nnz, const uint *Ai,
@@ -34,7 +32,6 @@ struct box *crs_box_setup2(uint n, const ulong *id, uint nnz, const uint *Ai,
   // Setup ASM1.
   crs_box_setup_asm1(box);
 
-  // Setup ASM2.
   // Allocate work arrays.
   allocate_work_arrays(box);
 
@@ -42,21 +39,20 @@ struct box *crs_box_setup2(uint n, const ulong *id, uint nnz, const uint *Ai,
 }
 
 void crs_box_solve2(occa::memory &o_x, struct box *box, occa::memory &o_rhs) {
-  buffer *bfr = &box->bfr;
-  const gs_dom dom = jl_dom_to_gs_dom(box->opts.dom);
-
   o_rhs.copyTo(box->srhs, box->un);
-  gs(box->srhs, dom, gs_add, 0, box->gsh, bfr);
+  gs(box->srhs, box->opts.dom, gs_add, 0, box->gsh, &box->bfr);
+
   crs_xxt_solve(box->sx, (struct xxt *)box->asm1, box->srhs);
-  gs(box->sx, dom, gs_add, 0, box->gsh, bfr);
+
+  gs(box->sx, box->opts.dom, gs_add, 0, box->gsh, &box->bfr);
   o_x.copyFrom(box->sx, box->un);
 }
 
 void crs_box_free2(struct box *box) {
   if (!box) return;
-  crs_xxt_free((struct xxt *)box->asm1);
-  gs_free(box->gsh);
   free(box->sx), free(box->srhs);
-  buffer_free(&box->bfr);
+  gs_free(box->gsh);
+  crs_xxt_free((struct xxt *)box->asm1), box->asm1 = 0;
   comm_free(&box->c);
+  buffer_free(&box->bfr);
 }
