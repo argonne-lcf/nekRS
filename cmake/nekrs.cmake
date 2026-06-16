@@ -196,31 +196,3 @@ if (NEKRS_BUILD_FLOAT)
   target_include_directories(nekrs-bin-fp32 PRIVATE src/lib src/utils)
   set_target_properties(nekrs-bin-fp32 PROPERTIES LINKER_LANGUAGE CXX OUTPUT_NAME nekrs-fp32)
 endif()
-
-include(FetchContent)
-
-FetchContent_Declare(
-  gs
-  GIT_REPOSITORY https://github.com/thilinarmtb/gslib.git
-  GIT_TAG master
-)
-FetchContent_MakeAvailable(gs)
-
-FetchContent_Declare(
-  parRSB
-  GIT_REPOSITORY https://github.com/thilinarmtb/parRSB.git
-  GIT_TAG master
-)
-FetchContent_MakeAvailable(parRSB)
-
-target_link_libraries(nekrs-lib PRIVATE parRSB::parRSB)
-if (NEKRS_BUILD_FLOAT)
-  target_link_libraries(nekrs-lib-fp32 PRIVATE parRSB::parRSB)
-endif()
-
-if (ENABLE_BOX_ONEMKL)
-  target_link_libraries(nekrs-lib PRIVATE crs_box_onemkl)
-  if (NEKRS_BUILD_FLOAT)
-    target_link_libraries(nekrs-lib-fp32 PRIVATE crs_box_onemkl)
-  endif()
-endif()

@@ -69,13 +69,15 @@ set(PARRSB_SUBTREE ${CMAKE_CURRENT_SOURCE_DIR}/3rd_party/nek5000_parRSB)
 set(PARRSB_DIR ${NEK5000_SOURCE_DIR}/3rd_party/parRSB/parRSB)
 
 FetchContent_Declare(
-  parrsb_content
-  GIT_REPOSITORY https://github.com/thilinarmtb/parRSB.git
-  GIT_TAG reorder_dofs_v2
+  nek5000_parrsb_content
+  URL ${PARRSB_SUBTREE}
   SOURCE_DIR ${PARRSB_DIR}
 )
-FetchContent_MakeAvailable(parrsb_content)
+if (NOT nek5000_parrsb_content_POPULATED)
+  FetchContent_MakeAvailable(nek5000_parrsb_content)
+endif()
 
+set(PARRSB_INCLUDE_DIR ${PARRSB_DIR}/../include)
 set(PARRSB_INCLUDE_DIR ${PARRSB_DIR}/../include PARENT_SCOPE)
 set(PARRSB_LIB_DIR ${PARRSB_DIR}/../lib)
 set(PARRSB_LIB_DIR ${PARRSB_DIR}/../lib PARENT_SCOPE)
