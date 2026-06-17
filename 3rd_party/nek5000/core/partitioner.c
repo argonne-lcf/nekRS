@@ -335,7 +335,7 @@ void fpartmesh(int *nell, long long *el, long long *vl, double *xyz,
   if (*loglevel > 2)
     print_part_stat(vl, nel, nv, cext);
 
-  ierr = parrsb_part_mesh(part, vl, xyz, nel, nv, options, comm.c);
+  ierr = parrsb_part_mesh(part, vl, xyz, NULL, nel, nv, &options, comm.c);
   if (ierr != 0)
     goto err;
 
