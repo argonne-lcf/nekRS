@@ -83,11 +83,6 @@ static void (*nek_meshmetrics_ptr)(void);
 static int (*nek_gllnid_ptr)(int *);
 static int (*nek_gllel_ptr)(int *);
 
-/* box solver */
-static void (*nek_box_crs_setup)(void);
-static void (*nek_box_copy_phi_e)(void);
-static void (*nek_box_crs_solve2)(void);
-
 static std::map<std::string, void *> ptrListData;
 
 void noop_func(void) {}
@@ -654,12 +649,6 @@ void set_usr_handles(const char *session_in, int verbose)
   nek_gllel_ptr = (int (*)(int *))dlsym(handle, fname("gllel"));
   check_error(dlerror());
 
-  /* box solver */
-  nek_box_crs_setup = (void (*)(void))dlsym(handle, fname("nekf_box_crs_setup"));
-  check_error(dlerror());
-  nek_box_copy_phi_e = (void (*)(void))dlsym(handle, fname("nekf_box_copy_phi_e"));
-  check_error(dlerror());
-
 #define postfix(x) x##_ptr
 #define load_or_noop(s)                                                                                      \
   do {                                                                                                       \
@@ -1160,25 +1149,6 @@ int setup(int numberActiveFields)
   nekData.wy = ptr<double>("wy");
   nekData.wz = ptr<double>("wz");
 
-  /* box solver */
-  nekData.box_n = ptr<int>("box_n");
-  nekData.box_nnz = ptr<int>("box_nnz");
-  nekData.box_null_space = ptr<int>("box_null_space");
-  nekData.box_iphi_e = ptr<int>("box_iphi_e");
-  nekData.box_gcrs = ptr<long long>("box_gcrs");
-  nekData.box_a = ptr<double>("box_a");
-  nekData.box_phi_e = ptr<double>("box_phi_e");
-
-  nekData.schwz_ne = ptr<int>("schwz_ne");
-  nekData.schwz_nw = ptr<int>("schwz_nw");
-  nekData.schwz_ncr = ptr<int>("schwz_ncr");
-  nekData.schwz_frontier = ptr<int>("schwz_frontier");
-  nekData.schwz_vtx = ptr<long long>("schwz_vtx");
-  nekData.schwz_eids = ptr<long long>("schwz_eids");
-  nekData.schwz_amat = ptr<double>("schwz_amat");
-  nekData.schwz_mask = ptr<double>("schwz_mask");
-  nekData.schwz_xyz = ptr<double>("schwz_xyz");
-
   nekData.xm1 = ptr<double>("xm1");
   nekData.ym1 = ptr<double>("ym1");
   nekData.zm1 = ptr<double>("zm1");
@@ -1330,19 +1300,6 @@ void recomputeGeometry()
 void printMeshMetrics()
 {
   (*nek_meshmetrics_ptr)();
-}
-
-/* box solver */
-void box_crs_setup() {
-  (*nek_box_crs_setup)();
-}
-
-void box_copy_phi_e() {
-  (*nek_box_copy_phi_e)();
-}
-
-void box_crs_solve2() {
-  (*nek_box_crs_solve2)();
 }
 
 const std::map<std::string, void *> &ptrList()

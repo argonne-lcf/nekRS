@@ -108,25 +108,6 @@ c-----------------------------------------------------------------------
 
       call nekrs_registerPtr('cbc', cbc)
 
-      ! box solver
-      call nekrs_registerPtr('box_n', box_n)
-      call nekrs_registerPtr('box_nnz', box_nnz)
-      call nekrs_registerPtr('box_null_space', box_null_space)
-      call nekrs_registerPtr('box_iphi_e', box_iphi_e(1))
-      call nekrs_registerPtr('box_gcrs', box_gcrs(1))
-      call nekrs_registerPtr('box_a', box_a(1))
-      call nekrs_registerPtr('box_phi_e', box_phi_e(1))
-
-      call nekrs_registerPtr('schwz_ne', schwz_ne)
-      call nekrs_registerPtr('schwz_nw', schwz_nw)
-      call nekrs_registerPtr('schwz_ncr', schwz_ncr)
-      call nekrs_registerPtr('schwz_frontier', schwz_frontier(1))
-      call nekrs_registerPtr('schwz_vtx', schwz_vtx(1))
-      call nekrs_registerPtr('schwz_eids', schwz_eids(1))
-      call nekrs_registerPtr('schwz_amat', schwz_amat(1))
-      call nekrs_registerPtr('schwz_mask', schwz_mask(1))
-      call nekrs_registerPtr('schwz_xyz', schwz_xyz(1))
-
       return
       end
 c-----------------------------------------------------------------------
@@ -1414,51 +1395,5 @@ c-----------------------------------------------------------------------
       call err_chk(ierr,'Error closing restart file, in mfi.$')
 
       return
-      end
-C----------------------------------------------------------------------
-C     box solver
-C----------------------------------------------------------------------
-      subroutine nekf_box_crs_setup()
-      include 'SIZE'
-      include 'TOTAL'
-      include 'NEKINTF'
-
-      integer nxc,nzc,ncr
-      integer ne,nv,nw
-      logical ifdbg
-
-      nxc=2
-      nzc=1
-      if(if3d) then
-        nzc=nxc
-      endif
-
-      schwz_ne=nelv
-      nv=lvrs
-      call nrs_setup_schwarz_mat_mask(schwz_ne,nv,schwz_vtx,nxc,nzc,
-     $  schwz_amat,schwz_mask)
-
-      call nrs_init_elements(schwz_ne,schwz_eids,lvrs,schwz_xyz)
-
-      schwz_nw=0
-      ifdbg=.true.
-      call nrs_find_overlap_elements(schwz_ne,schwz_eids,nv,schwz_vtx,
-     $  schwz_xyz,schwz_amat,schwz_mask,schwz_nw,schwz_frontier,lelmrs,
-     $  ifdbg)
-
-      schwz_ncr=nxc*nxc*nxc
-      call nrs_set_global_crs(box_n,box_gcrs,box_nnz,box_a,
-     $  box_null_space)
-
-      return
-      end
-C----------------------------------------------------------------------
-      subroutine nekf_box_copy_phi_e
-      include 'SIZE'
-      include 'TOTAL'
-      include 'NEKINTF'
-
-      call box_copy_phi_e(box_phi_e,box_iphi_e)
-
       end
 C----------------------------------------------------------------------
