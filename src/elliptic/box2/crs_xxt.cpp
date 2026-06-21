@@ -130,25 +130,6 @@ void crs_xxt_solve(void *x, struct xxt *xxt, const void *b) {
   }
 }
 
-void crs_xxt_stats(struct xxt *xxt) {
-  switch (xxt->dom) {
-  case gs_double: crs_xxt_stats_double((struct xxt_double *)xxt->solver); break;
-  case gs_float: crs_xxt_stats_float((struct xxt_float *)xxt->solver); break;
-  default:
-    fprintf(stderr, "Domain %u is not supported.\n", xxt->dom);
-    exit(EXIT_FAILURE);
-    break;
-  }
-}
-
-void crs_xxt_times(double *cholesky_time_, double *local_time_,
-                   double *xxt_time_, double *qqt_time_) {
-  cholesky_time_[0] = cholesky_time;
-  local_time_[0] = local_time;
-  xxt_time_[0] = xxt_time;
-  qqt_time_[0] = qqt_time;
-}
-
 void crs_xxt_free(struct xxt *xxt) {
   switch (xxt->dom) {
   case gs_double: crs_xxt_free_double((struct xxt_double *)xxt->solver); break;
