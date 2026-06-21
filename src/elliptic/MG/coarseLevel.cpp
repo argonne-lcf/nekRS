@@ -35,7 +35,7 @@ SOFTWARE.
 #include "linAlg.hpp"
 #include "MGSolver.hpp"
 
-#include "nekrs_crs.hpp"
+#include "crs.hpp"
 
 static occa::kernel vectorDotStarKernel;
 

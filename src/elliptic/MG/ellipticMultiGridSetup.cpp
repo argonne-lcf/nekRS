@@ -30,7 +30,7 @@
 #include "ellipticMultiGrid.h"
 #include "ellipticBuildFEM.hpp"
 
-#include "nekrs_crs.hpp"
+#include "crs.hpp"
 
 //////////////////////////////////////////////////////////////////////////////////////
 // Helper functions for jl coarse solver                                            //

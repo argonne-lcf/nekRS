@@ -1,7 +1,7 @@
 #if !defined(_CRS_BOX_HPP_)
 #define _CRS_BOX_HPP_
 
-#include "nekrs_crs.hpp"
+#include "crs.hpp"
 
 struct box {
   jl_opts opts;        /* User configurable options */

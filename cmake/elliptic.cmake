@@ -35,7 +35,7 @@ set(ELLIPTIC_SOURCES
         ${ELLIPTIC_SOURCE_DIR}/box2/crs_xxt.cpp
         ${ELLIPTIC_SOURCE_DIR}/box2/crs_box_asm1.cpp
         ${ELLIPTIC_SOURCE_DIR}/box2/crs_box.cpp
-        ${ELLIPTIC_SOURCE_DIR}/box2/nekrs_crs.cpp)
+        ${ELLIPTIC_SOURCE_DIR}/box2/crs.cpp)
 
 if (ENABLE_BOX_ONEMKL)
   add_library(crs_box_onemkl SHARED "${ELLIPTIC_SOURCE_DIR}/box/crs_box_gpu_onemkl.cpp")

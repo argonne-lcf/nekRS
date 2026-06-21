@@ -1,7 +1,7 @@
 #if !defined(_CRS_XXT_HPP_)
 #define _CRS_XXT_HPP_
 
-#include "nekrs_crs.hpp"
+#include "crs.hpp"
 
 struct xxt;
 struct xxt *crs_xxt_setup(uint n, const ulong *id, uint nz, const uint *Ai,
