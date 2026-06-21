@@ -5,7 +5,7 @@
 
 #include <gslib.h>
 
-typedef enum { XXT = 0, BOX } jl_algo_t;
+typedef enum { XXT = 0, ASM1, ASM2, BOX } jl_algo_t;
 
 typedef struct {
   jl_algo_t algo;

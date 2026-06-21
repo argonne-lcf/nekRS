@@ -369,8 +369,8 @@ void ellipticMultiGridSetup(elliptic_t *elliptic_)
           sizeof(hlong));
 
       int xxt = options.compareArgs("COARSE SOLVER", "XXT");
-      int box = options.compareArgs("COARSE SOLVER", "BOX");
-      if (xxt || box) {
+      int asm1 = options.compareArgs("COARSE SOLVER", "ASM1");
+      if (xxt || asm1) {
         uint num_total, nnz;
         uint *ia, *ja;
         ulong *gids;
@@ -378,7 +378,7 @@ void ellipticMultiGridSetup(elliptic_t *elliptic_)
         jl_setup_aux(&num_total, &gids, &nnz, &ia, &ja, &a, ellipticCoarse, elliptic);
 
         jl_opts opts;
-        opts.algo =  xxt ? XXT : BOX;
+        opts.algo =  xxt ? XXT : ASM1;
         opts.null_space = elliptic->nullspace;
         opts.dom = gs_float;
         opts.nw = 1;

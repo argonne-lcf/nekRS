@@ -325,7 +325,7 @@ static void fetch_nbrs_v3(uint *ne_, slong *vids, double *mat, uint nv,
   crystal_free(&cr), comm_free(&c);
 }
 
-void crs_box_setup_asm1(struct box *box) {
+static void asm1_setup(struct box *box) {
   const struct comm *const c = &(box->c);
   const uint nv = box->ncr;
   const uint nd = (nv == 8) ? 3 : 2;
@@ -372,4 +372,49 @@ void crs_box_setup_asm1(struct box *box) {
   box->gsh = gs_setup((const slong *)vtx, box->sn, c, 0, gs_auto, 0);
 
   free(vtx), free(ia), free(ja), free(va);
+}
+
+static inline void allocate_work_arrays(struct box *box) {
+  box->sx = tcalloc(double, 2 * box->sn);
+  box->srhs = (void *)((double *)box->sx + box->sn);
+}
+
+struct box *crs_asm1_setup(uint n, const ulong *id, uint nnz, const uint *Ai,
+                           const uint *Aj, const double *A, const jl_opts *opts,
+                           const struct comm *c) {
+  struct box *box = tcalloc(struct box, 1);
+  box->un = n;
+  box->ncr = nnz / n;
+  box->opts = *opts;
+
+  // Setup box members.
+  buffer_init(&box->bfr, 1024);
+  comm_dup(&box->c, c);
+
+  // Setup ASM1.
+  asm1_setup(box);
+
+  // Allocate work arrays.
+  allocate_work_arrays(box);
+
+  return box;
+}
+
+void crs_asm1_solve(occa::memory &o_x, struct box *box, occa::memory &o_rhs) {
+  o_rhs.copyTo(box->srhs, box->un);
+  gs(box->srhs, box->opts.dom, gs_add, 0, box->gsh, &box->bfr);
+
+  crs_xxt_solve(box->sx, (struct xxt *)box->asm1, box->srhs);
+
+  gs(box->sx, box->opts.dom, gs_add, 0, box->gsh, &box->bfr);
+  o_x.copyFrom(box->sx, box->un);
+}
+
+void crs_asm1_free(struct box *box) {
+  if (!box) return;
+  free(box->sx), free(box->srhs);
+  gs_free(box->gsh);
+  crs_xxt_free((struct xxt *)box->asm1), box->asm1 = 0;
+  comm_free(&box->c);
+  buffer_free(&box->bfr);
 }

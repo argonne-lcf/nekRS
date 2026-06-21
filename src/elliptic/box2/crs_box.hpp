@@ -15,11 +15,11 @@ struct box {
   buffer bfr;          /* Buffers for gslib */
 };
 
-struct box *crs_box_setup2(uint n, const ulong *id, uint nnz, const uint *Ai,
+struct box *crs_asm1_setup(uint n, const ulong *id, uint nnz, const uint *Ai,
                            const uint *Aj, const double *A, const jl_opts *opts,
                            const struct comm *comm);
-void crs_box_solve2(occa::memory &o_x, struct box *data, occa::memory &o_rhs);
-void crs_box_free2(struct box *data);
+void crs_asm1_solve(occa::memory &o_x, struct box *data, occa::memory &o_rhs);
+void crs_asm1_free(struct box *data);
 
 void crs_box_setup_asm1(struct box *box);
 

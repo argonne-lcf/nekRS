@@ -838,7 +838,7 @@ void parseCoarseSolver(const int rank, setupAide &options, inipp::Ini *ini, std:
       {"cpu"},
       {"device"},
       {"overlap"},
-      {"box"},
+      {"asm1"},
   };
 
   std::vector<std::string> entries = serializeString(p_coarseSolver, '+');
@@ -850,8 +850,8 @@ void parseCoarseSolver(const int rank, setupAide &options, inipp::Ini *ini, std:
   const int amgx = p_coarseSolver.find("amgx") != std::string::npos;
   const int boomer = p_coarseSolver.find("boomeramg") != std::string::npos;
   const int xxt = p_coarseSolver.find("xxt") != std::string::npos;
-  const int box = p_coarseSolver.find("box") != std::string::npos;
-  if ((amgx + boomer + xxt + box) > 1) {
+  const int asm1 = p_coarseSolver.find("asm1") != std::string::npos;
+  if ((amgx + boomer + xxt + asm1) > 1) {
     append_error("Conflicting solver types in coarseSolver!\n");
   }
 
@@ -907,9 +907,9 @@ void parseCoarseSolver(const int rank, setupAide &options, inipp::Ini *ini, std:
     options.setArgs(parSectionName + "COARSE SOLVER", "XXT");
     options.setArgs(parSectionName + "COARSE SOLVER PRECISION", "FP32");
     options.setArgs(parSectionName + "COARSE SOLVER LOCATION", "DEVICE");
-  } else if (box) {
+  } else if (asm1) {
     options.setArgs(parSectionName + "MULTIGRID COARSE SOLVE", "TRUE");
-    options.setArgs(parSectionName + "COARSE SOLVER", "BOX");
+    options.setArgs(parSectionName + "COARSE SOLVER", "ASM1");
     options.setArgs(parSectionName + "COARSE SOLVER PRECISION", "FP32");
     options.setArgs(parSectionName + "COARSE SOLVER LOCATION", "DEVICE");
   } else {
