@@ -4,15 +4,15 @@
 #include "crs.hpp"
 
 struct box {
-  jl_opts opts;        /* User configurable options */
-  uint un, cn, sn;     /* User size, compressed size, Schwarz size */
-  uint ncr;            /* Number of 1D dofs */
-  void *sx, *srhs;     /* Schwarz/XXT work arrays on CPU */
-  void *asm1;          /* Pointer to the asm1 solver */
-  void *asm2;          /* Pointer to the asm2 solver */
-  struct gs_data *gsh; /* dssum */
-  struct comm c;       /* communicators */
-  buffer bfr;          /* Buffers for gslib */
+  jl_opts opts;          /* User configurable options */
+  uint un, cn, sn;       /* User size, compressed size, Schwarz size */
+  uint ncr;              /* Number of 1D dofs */
+  void *sx, *srhs, *sim; /* Schwarz/XXT work arrays on CPU */
+  void *asm1;            /* Pointer to the asm1 solver */
+  void *asm2;            /* Pointer to the asm2 solver */
+  struct gs_data *ras;   /* RAS */
+  struct comm c;         /* communicators */
+  buffer bfr;            /* Buffers for gslib */
 };
 
 struct box *crs_asm1_setup(uint n, const ulong *id, uint nnz, const uint *Ai,
