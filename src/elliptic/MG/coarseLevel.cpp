@@ -161,7 +161,10 @@ void MGSolver_t::coarseLevel_t::setupSolver(
                       useFP32,
                       std::stoi(getenv("NEKRS_GPU_MPI")),
                       cfg);
-  } else if (options.compareArgs("COARSE SOLVER", "XXT") || options.compareArgs("COARSE SOLVER", "BOX")) {
+  } else if (options.compareArgs("COARSE SOLVER", "XXT") ||
+      options.compareArgs("COARSE SOLVER", "ASM1") ||
+      options.compareArgs("COARSE SOLVER", "ASM2") ||
+      options.compareArgs("COARSE SOLVER", "BOX")) {
     // nothing to do
   } else {
     std::string amgSolver;
@@ -192,7 +195,10 @@ MGSolver_t::coarseLevel_t::~coarseLevel_t()
     delete AMGX;
   }
 
-  if (options.compareArgs("COARSE SOLVER", "XXT") || options.compareArgs("COARSE SOLVER", "BOX")) {
+  if (options.compareArgs("COARSE SOLVER", "XXT") ||
+      options.compareArgs("COARSE SOLVER", "ASM1") ||
+      options.compareArgs("COARSE SOLVER", "ASM2") ||
+      options.compareArgs("COARSE SOLVER", "BOX")) {
     jl_free();
   }
 
@@ -220,7 +226,10 @@ void MGSolver_t::coarseLevel_t::solve(occa::memory &o_rhs, occa::memory &o_x)
     const pfloat one = 1.0;
     vectorDotStarKernel(ogs->N, one, zero, o_weight, o_rhs, o_Sx);
 
-    int jl = options.compareArgs("COARSE SOLVER", "XXT") || options.compareArgs("COARSE SOLVER", "BOX");
+    int jl = options.compareArgs("COARSE SOLVER", "XXT") ||
+      options.compareArgs("COARSE SOLVER", "ASM1") ||
+      options.compareArgs("COARSE SOLVER", "ASM2") ||
+      options.compareArgs("COARSE SOLVER", "BOX");
     if (!jl) {
       // masked E->T
       ogsGather(o_Gx, o_Sx, ogsPfloat, ogsAdd, ogs);
@@ -240,7 +249,7 @@ void MGSolver_t::coarseLevel_t::solve(occa::memory &o_rhs, occa::memory &o_x)
     } else if (options.compareArgs("COARSE SOLVER", "AMGX")) {
       AMGX->solve(o_Gx.ptr(), o_xBuffer.ptr());
     } else if (jl) {
-      jl_solve2(o_x, o_Sx);
+      jl_solve(o_x, o_Sx);
     }
 
     if (!jl) {

@@ -48,7 +48,7 @@ static void _crs_xxt_solve(occa::memory &o_x, occa::memory &o_rhs) {
   o_x.copyFrom(crs->x, crs->un);
 }
 
-void jl_solve2(occa::memory &o_x, occa::memory &o_rhs) {
+void jl_solve(occa::memory &o_x, occa::memory &o_rhs) {
   switch (crs->algo) {
   case XXT: _crs_xxt_solve(o_x, o_rhs); break;
   case ASM1: crs_asm1_solve(o_x, (struct box *)crs->solver, o_rhs); break;
