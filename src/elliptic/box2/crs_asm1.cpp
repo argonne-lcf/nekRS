@@ -718,10 +718,9 @@ static void asm1_setup(struct box *box, const ulong *const vtx_,
 
   // Setup the ASM1 solver.
   ulong *ids = tcalloc(ulong, box->sn);
-  for (uint i = 0; i < box->sn; i++) ids[i] = vtx[i];
-  box->asm1 =
-      (void *)crs_xxt_setup(box->sn, ids, nnz, ia, ja, va, box->opts.dom,
-                            box->opts.null_space /* null space */, &lc);
+  for (uint i = 0; i < box->sn; i++) ids[i] = vtx[i] * !(frontier[i]);
+  box->asm1 = (void *)crs_xxt_setup(box->sn, ids, nnz, ia, ja, va,
+                                    box->opts.dom, 0 /* null space */, &lc);
   free(ids);
   comm_free(&lc);
 
@@ -741,7 +740,6 @@ static void asm1_setup(struct box *box, const ulong *const vtx_,
   free(eids), free(vtx), free(xyz);
   free(frontier), free(wids);
   free(ia), free(ja), free(va);
-
 }
 
 struct box *crs_asm1_setup(uint n, const ulong *id, uint nnz, const uint *Ai,
