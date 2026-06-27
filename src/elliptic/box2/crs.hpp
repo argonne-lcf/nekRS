@@ -5,6 +5,9 @@
 
 #include <gslib.h>
 
+typedef float real;
+#define gs_real gs_float
+
 typedef enum { XXT = 0, ASM1, ASM2, BOX } jl_algo_t;
 
 typedef struct {

@@ -33,9 +33,9 @@ static int binary_search(ulong eid, struct eid_t *pe, uint n) {
 }
 
 static inline void allocate_work_arrays(struct box *box) {
-  box->sx = tcalloc(double, 3 * box->sn);
-  box->srhs = (void *)((double *)box->sx + box->sn);
-  box->sim = (void *)((double *)box->srhs + box->sn);
+  box->sx = tcalloc(real, 3 * box->sn);
+  box->srhs = (void *)((real *)box->sx + box->sn);
+  box->sim = (void *)((real *)box->srhs + box->sn);
 }
 
 static void fetch_nbrs_v3(uint *nei, slong *eids, uint nv, slong *vids,
@@ -409,16 +409,16 @@ static void asm1_setup(struct box *box, const ulong *const vtx_,
   // Setup the ASM1 solver.
   ulong *ids = tcalloc(ulong, box->sn);
   for (uint i = 0; i < box->sn; i++) ids[i] = vtx[i] * !(frontier[i]);
-  box->asm1 = (void *)crs_xxt_setup(box->sn, ids, nnz, ia, ja, va,
-                                    box->opts.dom, 0 /* null space */, &lc);
+  box->asm1 = (void *)crs_xxt_setup(box->sn, ids, nnz, ia, ja, va, gs_real,
+                                    0 /* null space */, &lc);
   free(ids);
   comm_free(&lc);
 
   // Setup inverse multiplicity.
   struct gs_data *gsh = gs_setup((const slong *)vtx, box->un, c, 0, gs_auto, 0);
-  double *v = (double *)box->sim;
+  real *v = (real *)box->sim;
   for (uint i = 0; i < box->un; i++) v[i] = 1.0;
-  gs(v, gs_double, gs_add, 0, gsh, &box->bfr);
+  gs(v, gs_real, gs_add, 0, gsh, &box->bfr);
   for (uint i = 0; i < box->un; i++) v[i] = 1.0 / v[i];
   gs_free(gsh);
 
@@ -458,15 +458,14 @@ struct box *crs_asm1_setup(uint n, const ulong *id, uint nnz, const uint *Ai,
 void crs_asm1_solve(occa::memory &o_x, struct box *box, occa::memory &o_rhs) {
   o_rhs.copyTo(box->srhs, box->un);
 
-  gs(box->srhs, box->opts.dom, gs_add, 0, box->ras, &box->bfr);
-  float *rhs = (float *)box->srhs;
-  double *im = (double *)box->sim;
+  gs(box->srhs, gs_real, gs_add, 0, box->ras, &box->bfr);
+  real *rhs = (real *)box->srhs, *im = (real *)box->sim;
   for (uint i = 0; i < box->un; i++) rhs[i] = im[i] * rhs[i];
 
   crs_xxt_solve(box->sx, (struct xxt *)box->asm1, box->srhs);
 
-  gs(box->sx, box->opts.dom, gs_add, 0, box->ras, &box->bfr);
-  float *x = (float *)box->sx;
+  gs(box->sx, gs_real, gs_add, 0, box->ras, &box->bfr);
+  real *x = (real *)box->sx;
   for (uint i = 0; i < box->un; i++) x[i] = im[i] * x[i];
 
   o_x.copyFrom(box->sx, box->un);
