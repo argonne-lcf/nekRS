@@ -15,9 +15,10 @@ static struct crs *crs = NULL;
 static struct xxt_data *xxt_data = NULL;
 
 void jl_setup(uint n, const ulong *id, uint nnz, const uint *Ai, const uint *Aj,
-              const double *A, const jl_opts *opts, MPI_Comm comm) {
-  if (opts->dom != gs_float) {
-    fprintf(stderr, "%s: Only gs_float is allowed!\n", __func__);
+              const double *A, const double *xyz, const jl_opts *opts,
+              MPI_Comm comm) {
+  if (opts->dom != gs_real) {
+    fprintf(stderr, "%s: Invalid precision!\n", __func__);
     fflush(stderr);
     MPI_Abort(comm, EXIT_FAILURE);
   }
@@ -38,7 +39,7 @@ void jl_setup(uint n, const ulong *id, uint nnz, const uint *Ai, const uint *Aj,
     xxt_data->rhs = (void *)calloc(xxt_data->un, sizeof(real));
     break;
   case ASM1:
-    crs->solver = (void *)crs_asm1_setup(n, id, nnz, Ai, Aj, A, opts, &c);
+    crs->solver = (void *)crs_asm1_setup(n, id, nnz, Ai, Aj, A, xyz, opts, &c);
     break;
   default: break;
   }

@@ -18,7 +18,8 @@ typedef struct {
 } jl_opts;
 
 void jl_setup(uint n, const ulong *id, uint nnz, const uint *Ai, const uint *Aj,
-              const double *A, const jl_opts *opts, MPI_Comm comm);
+              const double *A, const double *xyz, const jl_opts *opts,
+              MPI_Comm comm);
 
 void jl_solve(occa::memory &o_x, occa::memory &o_rhs);
 

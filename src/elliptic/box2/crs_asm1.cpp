@@ -433,21 +433,16 @@ static void asm1_setup(struct box *box, const ulong *const vtx_,
 }
 
 struct box *crs_asm1_setup(uint n, const ulong *id, uint nnz, const uint *Ai,
-                           const uint *Aj, const double *A, const jl_opts *opts,
-                           const struct comm *c) {
+                           const uint *Aj, const double *A, const double *xyz,
+                           const jl_opts *opts, const struct comm *c) {
   struct box *box = tcalloc(struct box, 1);
   box->un = n;
   box->ncr = nnz / n;
   box->opts = *opts;
 
-  // Initiailize the buffer.
+  // Initiailize buffer and copy the global communicator.
   buffer_init(&box->bfr, 1024);
-
-  // Copy the global communicator.
   comm_dup(&box->c, c);
-
-  // FIXME: This should be an input.
-  double *xyz = tcalloc(double, box->un * 3);
 
   // Setup ASM1.
   asm1_setup(box, id, xyz, A);

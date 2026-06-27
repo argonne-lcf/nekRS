@@ -16,8 +16,8 @@ struct box {
 };
 
 struct box *crs_asm1_setup(uint n, const ulong *id, uint nnz, const uint *Ai,
-                           const uint *Aj, const double *A, const jl_opts *opts,
-                           const struct comm *comm);
+                           const uint *Aj, const double *A, const double *xyz,
+                           const jl_opts *opts, const struct comm *comm);
 void crs_asm1_solve(occa::memory &o_x, struct box *data, occa::memory &o_rhs);
 void crs_asm1_free(struct box *data);
 

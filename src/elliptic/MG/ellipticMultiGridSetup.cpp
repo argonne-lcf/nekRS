@@ -115,20 +115,8 @@ static int get_local_crs_galerkin(double *a, int nc, mesh_t *mf,
   return 0;
 }
 
-static void set_mat_ij(uint *ia, uint *ja, int nc, int nelt) {
-  uint i, j, e;
-  for (e = 0; e < nelt; e++) {
-    for (j = 0; j < nc; j++) {
-      for (i = 0; i < nc; i++) {
-        ia[i + j * nc + nc * nc * e] = e * nc + i;
-        ja[i + j * nc + nc * nc * e] = e * nc + j;
-      }
-    }
-  }
-}
-
 void jl_setup_aux(uint *ntot_, ulong **gids_, uint *nnz_, uint **ia_,
-                  uint **ja_, double **a_, elliptic_t *elliptic,
+                  uint **ja_, double **a_, double **xyz_, elliptic_t *elliptic,
                   elliptic_t *ellipticf) {
   mesh_t *mesh = elliptic->mesh, *meshf = ellipticf->mesh;
   assert(mesh->Nelements == meshf->Nelements);
@@ -145,6 +133,19 @@ void jl_setup_aux(uint *ntot_, ulong **gids_, uint *nnz_, uint **ia_,
     free(mask_ids);
   }
 
+  // Set coordinates.
+  uint ndim = mesh->dim;
+  uint nv   = (ndim == 3) ? 8 : 4;
+  double *xyz = *xyz_ = (double *)calloc(ntot * ndim, sizeof(double));
+  uint count = 0;
+  for (uint e = 0; e < nelt; e++) {
+    for (uint v = 0; v < nv; v++) {
+      xyz[count++] = mesh->EX[e * nv + v];
+      xyz[count++] = mesh->EY[e * nv + v];
+      xyz[count++] = mesh->EZ[e * nv + v];
+    }
+  }
+
   // Set coarse matrix
   uint nnz = *nnz_ = nc * nc * nelt;
   double *a = *a_ = (double *)calloc(nnz, sizeof(double));
@@ -152,7 +153,15 @@ void jl_setup_aux(uint *ntot_, ulong **gids_, uint *nnz_, uint **ia_,
 
   uint *ia = *ia_ = (uint *)calloc(nnz, sizeof(uint));
   uint *ja = *ja_ = (uint *)calloc(nnz, sizeof(uint));
-  set_mat_ij(ia, ja, nc, nelt);
+  uint i, j, e;
+  for (e = 0; e < nelt; e++) {
+    for (j = 0; j < nc; j++) {
+      for (i = 0; i < nc; i++) {
+        ia[i + j * nc + nc * nc * e] = e * nc + i;
+        ja[i + j * nc + nc * nc * e] = e * nc + j;
+      }
+    }
+  }
 }
 
 
@@ -375,14 +384,16 @@ void ellipticMultiGridSetup(elliptic_t *elliptic_)
         uint *ia, *ja;
         ulong *gids;
         double *a;
-        jl_setup_aux(&num_total, &gids, &nnz, &ia, &ja, &a, ellipticCoarse, elliptic);
+        double *xyz;
+        jl_setup_aux(&num_total, &gids, &nnz, &ia, &ja, &a, &xyz, ellipticCoarse,
+            elliptic);
 
         jl_opts opts;
         opts.algo =  xxt ? XXT : ASM1;
         opts.null_space = elliptic->nullspace;
         opts.dom = gs_float;
         opts.nw = 1;
-        jl_setup(num_total, gids, nnz, ia, ja, a, &opts, platform->comm.mpiComm);
+        jl_setup(num_total, gids, nnz, ia, ja, a, xyz, &opts, platform->comm.mpiComm);
 
         int rank = platform->comm.mpiRank;
         coarseGlobalStarts[rank] = 0;
