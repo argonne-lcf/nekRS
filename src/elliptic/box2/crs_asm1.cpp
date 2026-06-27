@@ -344,29 +344,32 @@ static void fetch_nbrs_v3(uint *nei, slong *eids, uint nv, slong *vids,
   return;
 }
 
-static void asm1_setup(struct box *box, const ulong *const vtx_,
-                       const double *const xyz_, const double *const va_) {
-  const struct comm *const c = &(box->c);
-  const uint nv = box->ncr;
+struct box *crs_asm1_setup(uint n, const ulong *id, uint nnz, const uint *Ai,
+                           const uint *Aj, const double *A, const double *xyz_,
+                           const jl_opts *opts, const struct comm *c) {
+  struct box *box = tcalloc(struct box, 1);
+
+  // Initiailize buffer, options and duplicate the global communicator.
+  buffer_init(&box->bfr, 1024);
+  box->opts = *opts;
+  comm_dup(&box->c, c);
+
+  const uint un = box->un = n;
+  const uint nv = box->ncr = nnz / n;
   const uint nd = (nv == 8) ? 3 : 2;
   const uint nw = box->opts.nw;
-
-  // Set ne.
-  uint ne = box->un / nv;
-  uint mne = 5 * ne + 200;
+  uint ne = un / nv;
+  const uint mne = 5 * ne + 200;
 
   // Setup eids array.
-  slong out[2][1], in[1], wrk[2][1];
-  in[0] = ne;
-  comm_scan(out, c, gs_long, gs_add, in, 1, wrk);
-  ulong e_off = out[0][0];
-
   slong *eids = tcalloc(slong, mne);
-  for (uint e = 0; e < ne; e++) eids[e] = e_off + e;
+  slong out[2][1], in = ne, wrk[2][1];
+  comm_scan(out, c, gs_long, gs_add, &in, 1, wrk);
+  for (uint e = 0; e < ne; e++) eids[e] = out[0][0] + e;
 
   // Setup vtx array.
   slong *vtx = tcalloc(slong, nv * mne);
-  for (uint i = 0; i < box->un; i++) vtx[i] = vtx_[i];
+  for (uint i = 0; i < un; i++) vtx[i] = id[i];
 
   // Setup xyz array.
   double *xyz = tcalloc(double, nd * nv * mne);
@@ -374,7 +377,7 @@ static void asm1_setup(struct box *box, const ulong *const vtx_,
 
   // Setup va array.
   double *va = tcalloc(double, nv * nv * mne);
-  memcpy(va, va_, sizeof(double) * nv * nv * ne);
+  memcpy(va, A, sizeof(double) * nv * nv * ne);
 
   // Setup frontier and wids arrays.
   sint *frontier = tcalloc(sint, nv * mne);
@@ -382,14 +385,14 @@ static void asm1_setup(struct box *box, const ulong *const vtx_,
 
   // Call fetch neighbors.
   fetch_nbrs_v3(&ne, eids, nv, vtx, xyz, va, frontier, nw, wids, c->c, mne);
-  box->sn = ne * nv;
+  const uint sn = box->sn = ne * nv;
 
-  // Allocate work arrays: needs box->sn to be set.
+  // Allocate work arrays: needs sn to be set.
   allocate_work_arrays(box);
 
-  const uint nnz = box->sn * nv;
-  uint *ia = tcalloc(uint, nnz);
-  uint *ja = tcalloc(uint, nnz);
+  const uint snnz = sn * nv;
+  uint *ia = tcalloc(uint, snnz);
+  uint *ja = tcalloc(uint, snnz);
   for (uint e = 0; e < ne; e++) {
     for (uint j = 0; j < nv; j++) {
       for (uint i = 0; i < nv; i++) {
@@ -407,45 +410,29 @@ static void asm1_setup(struct box *box, const ulong *const vtx_,
   MPI_Comm_free(&local);
 
   // Setup the ASM1 solver.
-  ulong *ids = tcalloc(ulong, box->sn);
-  for (uint i = 0; i < box->sn; i++) ids[i] = vtx[i] * !(frontier[i]);
-  box->asm1 = (void *)crs_xxt_setup(box->sn, ids, nnz, ia, ja, va, gs_real,
+  ulong *sid = tcalloc(ulong, sn);
+  for (uint i = 0; i < sn; i++) sid[i] = vtx[i] * !(frontier[i]);
+  box->asm1 = (void *)crs_xxt_setup(sn, sid, snnz, ia, ja, va, gs_real,
                                     0 /* null space */, &lc);
-  free(ids);
+  free(sid);
   comm_free(&lc);
 
   // Setup inverse multiplicity.
-  struct gs_data *gsh = gs_setup((const slong *)vtx, box->un, c, 0, gs_auto, 0);
+  struct gs_data *gsh = gs_setup((const slong *)vtx, un, c, 0, gs_auto, 0);
   real *v = (real *)box->sim;
-  for (uint i = 0; i < box->un; i++) v[i] = 1.0;
+  for (uint i = 0; i < un; i++) v[i] = 1.0;
   gs(v, gs_real, gs_add, 0, gsh, &box->bfr);
-  for (uint i = 0; i < box->un; i++) v[i] = 1.0 / v[i];
+  for (uint i = 0; i < un; i++) v[i] = 1.0 / v[i];
   gs_free(gsh);
 
   // Setup the crs_dsavg which basically average the solution of original
   // domains.
-  for (uint i = box->un; i < box->sn; i++) vtx[i] = -vtx[i];
-  box->ras = gs_setup((const slong *)vtx, box->sn, c, 0, gs_auto, 0);
+  for (uint i = un; i < sn; i++) vtx[i] = -vtx[i];
+  box->ras = gs_setup((const slong *)vtx, sn, c, 0, gs_auto, 0);
 
   free(eids), free(vtx), free(xyz);
   free(frontier), free(wids);
   free(ia), free(ja), free(va);
-}
-
-struct box *crs_asm1_setup(uint n, const ulong *id, uint nnz, const uint *Ai,
-                           const uint *Aj, const double *A, const double *xyz,
-                           const jl_opts *opts, const struct comm *c) {
-  struct box *box = tcalloc(struct box, 1);
-  box->un = n;
-  box->ncr = nnz / n;
-  box->opts = *opts;
-
-  // Initiailize buffer and copy the global communicator.
-  buffer_init(&box->bfr, 1024);
-  comm_dup(&box->c, c);
-
-  // Setup ASM1.
-  asm1_setup(box, id, xyz, A);
 
   return box;
 }
