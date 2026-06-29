@@ -116,8 +116,8 @@ static int get_local_crs_galerkin(double *a, int nc, mesh_t *mf,
 }
 
 void jl_setup_aux(uint *ntot_, ulong **gids_, uint *nnz_, uint **ia_,
-                  uint **ja_, double **a_, double **xyz_, elliptic_t *elliptic,
-                  elliptic_t *ellipticf) {
+                  uint **ja_, double **a_, double **xyz_, double **centroid_,
+                  elliptic_t *elliptic, elliptic_t *ellipticf) {
   mesh_t *mesh = elliptic->mesh, *meshf = ellipticf->mesh;
   assert(mesh->Nelements == meshf->Nelements);
   uint nelt = meshf->Nelements, nc = mesh->Np;
@@ -143,6 +143,60 @@ void jl_setup_aux(uint *ntot_, ulong **gids_, uint *nnz_, uint **ia_,
       xyz[count++] = mesh->EX[e * nv + v];
       xyz[count++] = mesh->EY[e * nv + v];
       xyz[count++] = mesh->EZ[e * nv + v];
+    }
+  }
+
+  // Set element centroids by interpolating the fine-mesh GLL coordinates to the
+  // single GL point at the reference-element center (r,s,t)=(0,0,0). Because this
+  // acts on the actual (curved) node coordinates, it is exact for curved elements.
+  double *centroid = *centroid_ = (double *)calloc(nelt * ndim, sizeof(double));
+  {
+    // Build the 1D interpolation row from the Nq fine GLL nodes to the single
+    // point r=0 (the reference-element center along one axis).
+    //   in : meshf->N          polynomial order N (interpolant has degree N)
+    //        Nq = N+1          number of source nodes (required = N+1)
+    //        meshf->r          source node coordinates on [-1,1] (fine GLL nodes)
+    //        1, &rc            one target point, at rc = 0
+    //   out: w                 1 x Nq row; w[i] is the weight of source node i,
+    //                          i.e. p(0) = sum_i w[i] * f[i] for the degree-N
+    //                          polynomial p interpolating values f at the nodes.
+    int Nq = meshf->Nq, Np = meshf->Np;
+    dfloat rc = 0.0;
+    std::vector<dfloat> w(Nq);
+    InterpolationMatrix1D(meshf->N, Nq, meshf->r, 1, &rc, w.data());
+
+    // Curved GLL coordinates of the fine mesh.
+    auto [x, y, z] = meshf->xyzHost();
+
+    // The tensor-product interpolant evaluated at the center is the triple sum
+    //
+    //   c = \sum_{i,j,k} w_i w_j w_k \, f_{ijk},
+    //
+    // where w is the 1D interpolation row to r=0 and f_{ijk} are the element's
+    // node coordinates. Because the weight factorizes as w_i w_j w_k, this is
+    // equivalent to three sequential 1D contractions (sum-factorization),
+    //
+    //   c = \sum_k w_k \Big( \sum_j w_j \big( \sum_i w_i f_{ijk} \big) \Big),
+    //
+    // which is cheaper when there are many output points. Here there is a single
+    // output point per element, so we apply the fused triple sum directly; the
+    // two forms agree up to floating-point round-off.
+    for (uint e = 0; e < nelt; e++) {
+      double cx = 0, cy = 0, cz = 0;
+      for (int k = 0; k < Nq; k++) {
+        for (int j = 0; j < Nq; j++) {
+          for (int i = 0; i < Nq; i++) {
+            const double wijk = (double)w[i] * w[j] * w[k];
+            const dlong id = e * Np + i + j * Nq + k * Nq * Nq;
+            cx += wijk * x[id];
+            cy += wijk * y[id];
+            cz += wijk * z[id];
+          }
+        }
+      }
+      centroid[e * ndim + 0] = cx;
+      centroid[e * ndim + 1] = cy;
+      centroid[e * ndim + 2] = cz;
     }
   }
 
@@ -356,7 +410,8 @@ void ellipticMultiGridSetup(elliptic_t *elliptic_)
 
         precon->MGSolver->coarseLevel->solvePtr =
             [elliptic,
-             baseLevel](MGSolver_t::coarseLevel_t *coarseLevel, occa::memory &o_rhs, occa::memory &o_x) {
+             baseLevel](MGSolver_t::coarseLevel_t *coarseLevel, occa::memory &o_rhs,
+                 occa::memory &o_x) {
               auto &o_res = baseLevel->o_res;
               baseLevel->smooth(o_rhs, o_x, true);
               baseLevel->residual(o_rhs, o_x, o_res);
@@ -369,7 +424,8 @@ void ellipticMultiGridSetup(elliptic_t *elliptic_)
             };
       } else {
         precon->MGSolver->coarseLevel->solvePtr =
-            [elliptic](MGSolver_t::coarseLevel_t *, occa::memory &o_rhs, occa::memory &o_x) {
+            [elliptic](MGSolver_t::coarseLevel_t *, occa::memory &o_rhs,
+                occa::memory &o_x) {
               elliptic->precon->SEMFEMSolver->run(o_rhs, o_x);
             };
       }
@@ -380,35 +436,36 @@ void ellipticMultiGridSetup(elliptic_t *elliptic_)
       int xxt = options.compareArgs("COARSE SOLVER", "XXT");
       int asm1 = options.compareArgs("COARSE SOLVER", "ASM1");
       if (xxt || asm1) {
-        uint num_total, nnz;
-        uint *ia, *ja;
+        uint n, nnz;
         ulong *gids;
-        double *a;
-        double *xyz;
-        jl_setup_aux(&num_total, &gids, &nnz, &ia, &ja, &a, &xyz, ellipticCoarse,
-            elliptic);
+        uint *ia, *ja;
+        double *va, *xyz, *centroid;
+        jl_setup_aux(&n, &gids, &nnz, &ia, &ja, &va, &xyz, &centroid,
+            ellipticCoarse, elliptic);
 
         jl_opts opts;
         opts.algo =  xxt ? XXT : ASM1;
         opts.null_space = elliptic->nullspace;
         opts.dom = gs_float;
         opts.nw = 1;
-        jl_setup(num_total, gids, nnz, ia, ja, a, xyz, &opts, platform->comm.mpiComm);
+        jl_setup(n, gids, nnz, ia, ja, va, xyz, centroid, &opts,
+            platform->comm.mpiComm);
 
         int rank = platform->comm.mpiRank;
         coarseGlobalStarts[rank] = 0;
-        coarseGlobalStarts[rank + 1] = num_total;
+        coarseGlobalStarts[rank + 1] = n;
 
         precon->MGSolver->coarseLevel->setupSolver(coarseGlobalStarts, 0, 0, 0, 0,
             elliptic->nullspace);
 
-        free(gids), free(ia), free(ja), free(a);
+        free(gids), free(ia), free(ja), free(va), free(xyz), free(centroid);
       } else {
         nonZero_t *coarseA;
         dlong nnzCoarseA;
 
         if (options.compareArgs("GALERKIN COARSE OPERATOR", "TRUE")) {
-          ellipticBuildFEMGalerkinHex3D(ellipticCoarse, elliptic, &coarseA, &nnzCoarseA, coarseGlobalStarts);
+          ellipticBuildFEMGalerkinHex3D(ellipticCoarse, elliptic, &coarseA,
+              &nnzCoarseA, coarseGlobalStarts);
         } else {
           ellipticBuildFEM(ellipticCoarse, &coarseA, &nnzCoarseA, coarseGlobalStarts);
         }

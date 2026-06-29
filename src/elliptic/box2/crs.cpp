@@ -15,8 +15,8 @@ static struct crs *crs = NULL;
 static struct xxt_data *xxt_data = NULL;
 
 void jl_setup(uint n, const ulong *id, uint nnz, const uint *Ai, const uint *Aj,
-              const double *A, const double *xyz, const jl_opts *opts,
-              MPI_Comm comm) {
+              const double *A, const double *xyz, const double *centroid,
+              const jl_opts *opts, MPI_Comm comm) {
   if (opts->dom != gs_real) {
     fprintf(stderr, "%s: Invalid precision!\n", __func__);
     fflush(stderr);
@@ -41,7 +41,8 @@ void jl_setup(uint n, const ulong *id, uint nnz, const uint *Ai, const uint *Aj,
   case ASM1:
   case ASM2:
   case BOX:
-    crs->solver = (void *)crs_box_setup(n, id, nnz, Ai, Aj, A, xyz, opts, &c);
+    crs->solver =
+        (void *)crs_box_setup(n, id, nnz, Ai, Aj, A, xyz, centroid, opts, &c);
     break;
   default: break;
   }
