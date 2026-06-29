@@ -39,7 +39,9 @@ void jl_setup(uint n, const ulong *id, uint nnz, const uint *Ai, const uint *Aj,
     xxt_data->rhs = (void *)calloc(xxt_data->un, sizeof(real));
     break;
   case ASM1:
-    crs->solver = (void *)crs_asm1_setup(n, id, nnz, Ai, Aj, A, xyz, opts, &c);
+  case ASM2:
+  case BOX:
+    crs->solver = (void *)crs_box_setup(n, id, nnz, Ai, Aj, A, xyz, opts, &c);
     break;
   default: break;
   }
@@ -54,7 +56,9 @@ void jl_solve(occa::memory &o_x, occa::memory &o_rhs) {
     crs_xxt_solve(xxt_data->x, (struct xxt *)crs->solver, xxt_data->rhs);
     o_x.copyFrom(xxt_data->x, xxt_data->un);
     break;
-  case ASM1: crs_asm1_solve(o_x, (struct box *)crs->solver, o_rhs); break;
+  case ASM1:
+  case ASM2:
+  case BOX: crs_box_solve(o_x, (struct box *)crs->solver, o_rhs); break;
   default: break;
   }
 }
@@ -67,7 +71,9 @@ void jl_free() {
     crs_xxt_free((struct xxt *)crs->solver);
     free(xxt_data->rhs), free(xxt_data->x), free(xxt_data), xxt_data = NULL;
     break;
-  case ASM1: crs_asm1_free((struct box *)crs->solver); break;
+  case ASM1:
+  case ASM2:
+  case BOX: crs_box_free((struct box *)crs->solver); break;
   default: break;
   }
 

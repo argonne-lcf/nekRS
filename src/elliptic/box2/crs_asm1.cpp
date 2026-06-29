@@ -13,6 +13,14 @@ struct eid_t {
   uint e;
 };
 
+struct asm1 {
+  uint un, sn, cn;       /* User size, Schwarz size,compressed size */
+  void *sx, *srhs, *sim; /* Schwarz/XXT work arrays on CPU */
+  void *solver;          /* Pointer to the asm1 solver */
+  struct gs_data *ras;   /* RAS */
+  buffer bfr;            /* Buffers for gslib */
+};
+
 static int binary_search(ulong eid, struct eid_t *pe, uint n) {
   if (n == 0) return -1;
 
@@ -32,10 +40,10 @@ static int binary_search(ulong eid, struct eid_t *pe, uint n) {
   return -1;
 }
 
-static inline void allocate_work_arrays(struct box *box) {
-  box->sx = tcalloc(real, 3 * box->sn);
-  box->srhs = (void *)((real *)box->sx + box->sn);
-  box->sim = (void *)((real *)box->srhs + box->sn);
+static inline void allocate_work_arrays(struct asm1 *asm1) {
+  asm1->sx = tcalloc(real, 3 * asm1->sn);
+  asm1->srhs = (void *)((real *)asm1->sx + asm1->sn);
+  asm1->sim = (void *)((real *)asm1->srhs + asm1->sn);
 }
 
 static void fetch_nbrs_v3(uint *nei, slong *eids, uint nv, slong *vids,
@@ -344,20 +352,17 @@ static void fetch_nbrs_v3(uint *nei, slong *eids, uint nv, slong *vids,
   return;
 }
 
-struct box *crs_asm1_setup(uint n, const ulong *id, uint nnz, const uint *Ai,
-                           const uint *Aj, const double *A, const double *xyz_,
-                           const jl_opts *opts, const struct comm *c) {
-  struct box *box = tcalloc(struct box, 1);
+void *crs_asm1_setup(uint n, const ulong *const id, uint nnz,
+                     const uint *const Ai, const uint *const Aj,
+                     const double *const A, const double *const xyz_,
+                     const uint nw, const struct comm *const c) {
+  struct asm1 *asm1 = tcalloc(struct asm1, 1);
+  buffer_init(&asm1->bfr, 1024);
 
-  // Initiailize buffer, options and duplicate the global communicator.
-  buffer_init(&box->bfr, 1024);
-  box->opts = *opts;
-  comm_dup(&box->c, c);
-
-  const uint un = box->un = n;
-  const uint nv = box->ncr = nnz / n;
+  const uint un = asm1->un = n;
+  const uint nv = nnz / n;
   const uint nd = (nv == 8) ? 3 : 2;
-  const uint nw = box->opts.nw;
+
   uint ne = un / nv;
   const uint mne = 5 * ne + 200;
 
@@ -385,10 +390,10 @@ struct box *crs_asm1_setup(uint n, const ulong *id, uint nnz, const uint *Ai,
 
   // Call fetch neighbors.
   fetch_nbrs_v3(&ne, eids, nv, vtx, xyz, va, frontier, nw, wids, c->c, mne);
-  const uint sn = box->sn = ne * nv;
+  const uint sn = asm1->sn = ne * nv;
 
   // Allocate work arrays: needs sn to be set.
-  allocate_work_arrays(box);
+  allocate_work_arrays(asm1);
 
   const uint snnz = sn * nv;
   uint *ia = tcalloc(uint, snnz);
@@ -412,52 +417,56 @@ struct box *crs_asm1_setup(uint n, const ulong *id, uint nnz, const uint *Ai,
   // Setup the ASM1 solver.
   ulong *sid = tcalloc(ulong, sn);
   for (uint i = 0; i < sn; i++) sid[i] = vtx[i] * !(frontier[i]);
-  box->asm1 = (void *)crs_xxt_setup(sn, sid, snnz, ia, ja, va, gs_real,
-                                    0 /* null space */, &lc);
+  asm1->solver = (void *)crs_xxt_setup(sn, sid, snnz, ia, ja, va, gs_real,
+                                       0 /* null space */, &lc);
   free(sid);
   comm_free(&lc);
 
   // Setup inverse multiplicity.
   struct gs_data *gsh = gs_setup((const slong *)vtx, un, c, 0, gs_auto, 0);
-  real *v = (real *)box->sim;
+  real *v = (real *)asm1->sim;
   for (uint i = 0; i < un; i++) v[i] = 1.0;
-  gs(v, gs_real, gs_add, 0, gsh, &box->bfr);
+  gs(v, gs_real, gs_add, 0, gsh, &asm1->bfr);
   for (uint i = 0; i < un; i++) v[i] = 1.0 / v[i];
   gs_free(gsh);
 
   // Setup the crs_dsavg which basically average the solution of original
   // domains.
   for (uint i = un; i < sn; i++) vtx[i] = -vtx[i];
-  box->ras = gs_setup((const slong *)vtx, sn, c, 0, gs_auto, 0);
+  asm1->ras = gs_setup((const slong *)vtx, sn, c, 0, gs_auto, 0);
 
   free(eids), free(vtx), free(xyz);
   free(frontier), free(wids);
   free(ia), free(ja), free(va);
 
-  return box;
+  return (void *)asm1;
 }
 
-void crs_asm1_solve(occa::memory &o_x, struct box *box, occa::memory &o_rhs) {
-  o_rhs.copyTo(box->srhs, box->un);
+void crs_asm1_solve(occa::memory &o_x, void *solver, occa::memory &o_rhs) {
+  struct asm1 *asm1 = (struct asm1 *)solver;
 
-  gs(box->srhs, gs_real, gs_add, 0, box->ras, &box->bfr);
-  real *rhs = (real *)box->srhs, *im = (real *)box->sim;
-  for (uint i = 0; i < box->un; i++) rhs[i] = im[i] * rhs[i];
+  o_rhs.copyTo(asm1->srhs, asm1->un);
 
-  crs_xxt_solve(box->sx, (struct xxt *)box->asm1, box->srhs);
+  gs(asm1->srhs, gs_real, gs_add, 0, asm1->ras, &asm1->bfr);
+  real *rhs = (real *)asm1->srhs, *im = (real *)asm1->sim;
+  for (uint i = 0; i < asm1->un; i++) rhs[i] = im[i] * rhs[i];
 
-  gs(box->sx, gs_real, gs_add, 0, box->ras, &box->bfr);
-  real *x = (real *)box->sx;
-  for (uint i = 0; i < box->un; i++) x[i] = im[i] * x[i];
+  crs_xxt_solve(asm1->sx, (struct xxt *)asm1->solver, asm1->srhs);
 
-  o_x.copyFrom(box->sx, box->un);
+  gs(asm1->sx, gs_real, gs_add, 0, asm1->ras, &asm1->bfr);
+  real *x = (real *)asm1->sx;
+  for (uint i = 0; i < asm1->un; i++) x[i] = im[i] * x[i];
+
+  o_x.copyFrom(asm1->sx, asm1->un);
 }
 
-void crs_asm1_free(struct box *box) {
-  if (!box) return;
-  free(box->sx);
-  gs_free(box->ras);
-  crs_xxt_free((struct xxt *)box->asm1), box->asm1 = 0;
-  comm_free(&box->c);
-  buffer_free(&box->bfr);
+void crs_asm1_free(void *solver) {
+  struct asm1 *asm1 = (struct asm1 *)solver;
+  if (!asm1) return;
+
+  free(asm1->sx);
+  gs_free(asm1->ras);
+  crs_xxt_free((struct xxt *)asm1->solver);
+  buffer_free(&asm1->bfr);
+  free(asm1);
 }
