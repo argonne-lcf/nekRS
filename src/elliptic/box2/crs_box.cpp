@@ -13,12 +13,6 @@ struct box *crs_box_setup(uint n, const ulong *id, uint nnz, const uint *Ai,
   if (opts->algo == ASM1 || opts->algo == BOX)
     box->asm1 = crs_asm1_setup(n, id, nnz, Ai, Aj, A, xyz, opts->nw, c);
 
-  uint nv = nnz / nv;
-  uint nd = (nv == 8) ? 3 : 2;
-  uint ne = n / nv;
-  if (opts->algo == ASM2 || opts->algo == BOX)
-    box->asm2 = (void *)crs_asm2_setup(ne, nd, nv, xyz, nbx, nby, nbz, c);
-
   return box;
 }
 
