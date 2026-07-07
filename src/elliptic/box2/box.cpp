@@ -1,4 +1,4 @@
-#include "crs_box.hpp"
+#include "box.hpp"
 
 struct box *crs_box_setup(const uint n, const ulong *const id, const uint nnz,
                           const uint *const Ai, const uint *const Aj,

@@ -11,7 +11,7 @@
 #include <cblas.h>
 #include <lapacke.h>
 #endif
-#include "crs_xxt.hpp"
+#include "xxt.hpp"
 
 struct cholmod_csr *fac_A_ll = NULL;
 double *A_ll_inv = NULL, *y_inv = NULL;
@@ -72,7 +72,7 @@ static double local_time = 0;
 #define T double
 #define SUFFIX _double
 #define gs_domain gs_double
-#include "crs_xxt.impl"
+#include "xxt.imp"
 #undef T
 #undef SUFFIX
 #undef gs_domain
@@ -80,7 +80,7 @@ static double local_time = 0;
 #define T float
 #define SUFFIX _float
 #define gs_domain gs_float
-#include "crs_xxt.impl"
+#include "xxt.imp"
 #undef T
 #undef SUFFIX
 #undef gs_domain

@@ -32,10 +32,10 @@ set(ELLIPTIC_SOURCES
         ${ELLIPTIC_SOURCE_DIR}/MG/level.cpp
         ${ELLIPTIC_SOURCE_DIR}/MG/MGSolver.cpp
         ${ELLIPTIC_SOURCE_DIR}/ellipticZeroMean.cpp
-        ${ELLIPTIC_SOURCE_DIR}/box2/crs_xxt.cpp
-        ${ELLIPTIC_SOURCE_DIR}/box2/crs_asm1.cpp
-        ${ELLIPTIC_SOURCE_DIR}/box2/crs_asm2.cpp
-        ${ELLIPTIC_SOURCE_DIR}/box2/crs_box.cpp
+        ${ELLIPTIC_SOURCE_DIR}/box2/xxt.cpp
+        ${ELLIPTIC_SOURCE_DIR}/box2/asm1.cpp
+        ${ELLIPTIC_SOURCE_DIR}/box2/asm2.cpp
+        ${ELLIPTIC_SOURCE_DIR}/box2/box.cpp
         ${ELLIPTIC_SOURCE_DIR}/box2/crs.cpp)
 
 if (ENABLE_BOX_ONEMKL)
