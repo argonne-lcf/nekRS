@@ -48,11 +48,10 @@ struct res_t {
   uint p, np;
 };
 
-void crs_overlap(uint *nei, slong *eids, uint nv, slong *vids, double *xyz,
+void crs_overlap(uint *nei, uint nd, uint nv, slong *vids, double *xyz,
                  double *mat, sint *frontier, uint nw, sint *wids,
                  MPI_Comm comm, uint max_ne, uint dbg) {
   const size_t ne = *nei;
-  const unsigned ndim = (nv == 8) ? 3 : 2;
 
   struct comm c;
   comm_init(&c, comm);
@@ -62,6 +61,12 @@ void crs_overlap(uint *nei, slong *eids, uint nv, slong *vids, double *xyz,
 
   buffer bfr;
   buffer_init(&bfr, 1024);
+
+  // 0. Setup eids array.
+  slong *eids = tcalloc(slong, max_ne);
+  slong out[2][1], in = ne, wrk[2][1];
+  comm_scan(out, &c, gs_long, gs_add, &in, 1, wrk);
+  for (uint e = 0; e < ne; e++) eids[e] = out[0][0] + e;
 
   // 1. Find neighbor elements of input elements based on vertex connectivity.
   struct array vtxs;
@@ -254,8 +259,8 @@ void crs_overlap(uint *nei, slong *eids, uint nv, slong *vids, double *xyz,
       elmt.vid[v] = vids[i * nv + v];
       for (unsigned j = 0; j < nv; j++)
         elmt.mat[v * nv + j] = mat[i * nv * nv + v * nv + j];
-      for (unsigned d = 0; d < ndim; d++)
-        elmt.xyz[v * ndim + d] = xyz[i * nv * ndim + v * ndim + d];
+      for (unsigned d = 0; d < nd; d++)
+        elmt.xyz[v * nd + d] = xyz[i * nv * nd + v * nd + d];
     }
     array_cat(struct elem_t, &original, &elmt, 1);
   }
@@ -288,8 +293,8 @@ void crs_overlap(uint *nei, slong *eids, uint nv, slong *vids, double *xyz,
       elmt.vid[v] = po[j].vid[v];
       for (unsigned k = 0; k < nv; k++)
         elmt.mat[v * nv + k] = po[j].mat[v * nv + k];
-      for (unsigned d = 0; d < ndim; d++)
-        elmt.xyz[v * ndim + d] = po[j].xyz[v * ndim + d];
+      for (unsigned d = 0; d < nd; d++)
+        elmt.xyz[v * nd + d] = po[j].xyz[v * nd + d];
     }
     array_cat(struct elem_t, &extended, &elmt, 1);
   }
@@ -312,8 +317,8 @@ void crs_overlap(uint *nei, slong *eids, uint nv, slong *vids, double *xyz,
       vids[i * nv + v] = pe[i].vid[v];
       for (unsigned j = 0; j < nv; j++)
         mat[i * nv * nv + v * nv + j] = pe[i].mat[v * nv + j];
-      for (unsigned d = 0; d < ndim; d++)
-        xyz[i * nv * ndim + v * ndim + d] = pe[i].xyz[v * ndim + d];
+      for (unsigned d = 0; d < nd; d++)
+        xyz[i * nv * nd + v * nd + d] = pe[i].xyz[v * nd + d];
     }
   }
   array_free(&extended);
@@ -348,8 +353,8 @@ void crs_overlap(uint *nei, slong *eids, uint nv, slong *vids, double *xyz,
     for (uint i = 0; i < fe; i++) {
       fprintf(fp, "%lld,%d,%d", elist[i], wlist[i], plist[i]);
       for (uint v = 0; v < nv; v++) {
-        for (uint d = 0; d < ndim; d++)
-          fprintf(fp, ",%lf", xyz[i * nv * ndim + v * ndim + d]);
+        for (uint d = 0; d < nd; d++)
+          fprintf(fp, ",%lf", xyz[i * nv * nd + v * nd + d]);
       }
       fprintf(fp, "\n");
     }
@@ -358,6 +363,7 @@ void crs_overlap(uint *nei, slong *eids, uint nv, slong *vids, double *xyz,
 
 free_resources:
   free(elist), free(wlist), free(plist);
+  free(eids);
   buffer_free(&bfr), crystal_free(&cr), comm_free(&c);
 
   return;

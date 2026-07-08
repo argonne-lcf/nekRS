@@ -236,13 +236,12 @@ static void free_asm2_data(struct asm2 *const data) {
   free(data->abox), data->abox = NULL;
 }
 
-struct xxt *crs_asm2_setup(const uint ne, const uint nd, const uint nv,
-                           const double *const xyz,
+struct xxt *crs_asm2_setup(const double *const xyz,
                            const double *const centroid, const double *const A,
                            const uint nbx, const uint nby, const uint nbz,
-                           const struct comm *const c) {
+                           const struct comm *const c, struct box *const box) {
   struct asm2 data;
-  data.ne = ne, data.nd = nd, data.nv = nv;
+  data.ne = box->ne, data.nd = box->nd, data.nv = box->nv;
   data.nbx = nbx, data.nby = nby, data.nbz = nbz;
   data.tol = 1e-2;
 
@@ -268,8 +267,6 @@ struct xxt *crs_asm2_setup(const uint ne, const uint nd, const uint nv,
   return 0;
 }
 
-void crs_asm2_solve(occa::memory &o_x, struct xxt *xxt, occa::memory &o_rhs) {}
-
-void crs_asm2_free(struct xxt *xxt) {}
+void crs_asm2_free(struct box *const box) { crs_xxt_free(box->asm2); }
 
 #undef IDX3

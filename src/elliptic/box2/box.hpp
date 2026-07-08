@@ -4,27 +4,33 @@
 #include "crs.hpp"
 
 struct box {
-  void *asm1;       /* Pointer to the asm1 solver */
-  struct xxt *asm2; /* Pointer to the asm2 solver */
+  uint ne, nd, nv;       /* User input */
+  uint nu, ns, cn;       /* User size, Schwarz size, compressed size */
+  real *sx, *srhs, *sim; /* Schwarz/XXT work arrays on CPU */
+  struct xxt *asm1;      /* Pointer to the asm1 solver */
+  struct xxt *asm2;      /* Pointer to the asm2 solver */
+  struct gs_data *ras;   /* RAS */
+  buffer bfr;
 };
 
-void crs_overlap(uint *nei, slong *eids, uint nv, slong *vids, double *xyz,
+void crs_overlap(uint *nei, uint nd, uint nv, slong *vids, double *xyz,
                  double *mat, sint *frontier, uint nw, sint *wids,
                  MPI_Comm comm, uint max_ne, uint dbg);
 
-void *crs_asm1_setup(uint n, const ulong *const id, uint nnz,
-                     const uint *const Ai, const uint *const Aj,
-                     const double *const A, const double *const coord,
-                     const uint nw, const struct comm *const c);
-void crs_asm1_solve(occa::memory &o_x, void *solver, occa::memory &o_rhs);
-void crs_asm1_free(void *solver);
+/* ASM1 */
+void crs_asm1_setup(slong *const id, const sint *const frontier,
+                    const double *const A, const struct comm *const c,
+                    struct box *const box);
+void crs_asm1_free(struct box *const box);
 
-struct xxt *crs_asm2_setup(const uint ne, const uint nd, const uint nv,
-                           const double *const xyz,
+/* ASM2 */
+struct xxt *crs_asm2_setup(const double *const xyz,
                            const double *const centroid, const double *const A,
                            const uint nbx, const uint nby, const uint nbz,
-                           const struct comm *const c);
+                           const struct comm *const c, struct box *const box);
+void crs_asm2_free(struct box *const box);
 
+/* BOX */
 struct box *crs_box_setup(const uint n, const ulong *const id, const uint nnz,
                           const uint *const Ai, const uint *const Aj,
                           const double *const A, const double *const xyz,
