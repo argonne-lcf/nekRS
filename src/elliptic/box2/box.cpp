@@ -2,21 +2,21 @@
 
 struct box *crs_box_setup(const uint n, const ulong *const id, const uint nnz,
                           const uint *const Ai, const uint *const Aj,
-                          const double *const A, const double *const xyz,
+                          const double *const A, const double *const coord,
                           const double *const centroid,
                           const jl_opts *const opts,
                           const struct comm *const c) {
   struct box *box = tcalloc(struct box, 1);
 
   if (opts->algo == ASM1 || opts->algo == BOX)
-    box->asm1 = crs_asm1_setup(n, id, nnz, Ai, Aj, A, xyz, opts->nw, c);
+    box->asm1 = crs_asm1_setup(n, id, nnz, Ai, Aj, A, coord, opts->nw, c);
 
   uint nv = nnz / n;
   uint ne = n / nv;
   assert(nv == 8);
   uint nd = 3;
   if (opts->algo == ASM2 || opts->algo == BOX) {
-    box->asm2 = crs_asm2_setup(ne, nd, nv, xyz, centroid, A, opts->nbx,
+    box->asm2 = crs_asm2_setup(ne, nd, nv, coord, centroid, A, opts->nbx,
                                opts->nby, opts->nbz, c);
   }
 

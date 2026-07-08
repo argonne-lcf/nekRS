@@ -8,9 +8,13 @@ struct box {
   struct xxt *asm2; /* Pointer to the asm2 solver */
 };
 
+void crs_overlap(uint *nei, slong *eids, uint nv, slong *vids, double *xyz,
+                 double *mat, sint *frontier, uint nw, sint *wids,
+                 MPI_Comm comm, uint max_ne);
+
 void *crs_asm1_setup(uint n, const ulong *const id, uint nnz,
                      const uint *const Ai, const uint *const Aj,
-                     const double *const A, const double *const xyz_,
+                     const double *const A, const double *const coord,
                      const uint nw, const struct comm *const c);
 void crs_asm1_solve(occa::memory &o_x, void *solver, occa::memory &o_rhs);
 void crs_asm1_free(void *solver);
