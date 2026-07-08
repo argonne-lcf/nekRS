@@ -17,8 +17,8 @@ void crs_asm1_free(void *solver);
 
 struct xxt *crs_asm2_setup(const uint ne, const uint nd, const uint nv,
                            const double *const xyz,
-                           const double *const centroid, const uint nbx,
-                           const uint nby, const uint nbz,
+                           const double *const centroid, const double *const A,
+                           const uint nbx, const uint nby, const uint nbz,
                            const struct comm *const c);
 
 struct box *crs_box_setup(const uint n, const ulong *const id, const uint nnz,

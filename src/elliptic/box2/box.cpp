@@ -16,8 +16,8 @@ struct box *crs_box_setup(const uint n, const ulong *const id, const uint nnz,
   assert(nv == 8);
   uint nd = 3;
   if (opts->algo == ASM2 || opts->algo == BOX) {
-    box->asm2 = crs_asm2_setup(ne, nd, nv, xyz, centroid, opts->nby, opts->nby,
-                               opts->nbz, c);
+    box->asm2 = crs_asm2_setup(ne, nd, nv, xyz, centroid, A, opts->nbx,
+                               opts->nby, opts->nbz, c);
   }
 
   return box;

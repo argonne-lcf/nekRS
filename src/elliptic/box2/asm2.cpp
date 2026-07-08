@@ -14,6 +14,9 @@ struct asm2 {
   ulong *lelem_to_gbox;
   uint *gbox_to_lbox;
   double *phi;
+  /* Assembled coarse box operator */
+  uint nbox;    /* Number of active (local) boxes on this rank */
+  double *abox; /* nbox 8x8 matrices, one per active box */
 };
 
 #define IDX3(E, V, D) (nv * nd * E + nd * V + D)
@@ -157,6 +160,67 @@ void find_crs_interp(struct asm2 *const data, const double *const xyz,
       data->phi[e * nv * nv + v * nv + 7] = phi1_r * phi1_s * phi1_t;
     }
   }
+
+  data->nbox = nbox;
+}
+
+/*----------------------------------------------------------------------
+ * assemble_box_system
+ *
+ * Build the structured-grid (box) coarse operator.
+ *
+ * Fortran (nrs_set_global_crs / box_src.f) computes, per element e:
+ *
+ *     Abox(:,:,ilb) += phi_e^T * A_e * phi_e
+ *
+ * where A_e is the 8x8 SEM Galerkin operator for element e (`asem`),
+ * phi_e(iv,jb) is the value of coarse box basis function jb at SEM
+ * vertex iv (already Dirichlet-masked), and ilb is the local index of
+ * the box that element e belongs to.  This mirrors the `asem`/`abox`
+ * accumulation loop in the Fortran.
+ *
+ * Storage note (C vs Fortran):
+ *   - Fortran arrays asem(lcr,lcr,e), phi_e(lcr,lcr,e), abox(lcr,lcr,l)
+ *     are column-major: element (i,j) lives at i + lcr*j.
+ *   - Here `A` arrives in the layout used by crs_asm1_setup(): row-major
+ *     8x8 blocks, A[e*nv*nv + i*nv + j] = A_e(row i, col j).
+ *   - data->phi is row-major with row = SEM vertex, col = box basis:
+ *     phi[e*nv*nv + iv*nv + jb] = phi_e(iv, jb), matching the Fortran
+ *     phi_e(iv,jb) indexing.
+ *   - We store abox row-major as well: abox[l*nv*nv + a*nv + b].
+ *--------------------------------------------------------------------*/
+static void assemble_box_system(struct asm2 *const data,
+                                const double *const A) {
+  const uint ne = data->ne;
+  const uint nv = data->nv;
+  const uint nbox = data->nbox;
+
+  data->abox = tcalloc(double, (size_t)nbox * nv * nv);
+
+  for (uint e = 0; e < ne; e++) {
+    /* Local (compressed) box index for this element; gbox_to_lbox is
+     * 1-based (0 == inactive), so subtract 1 to index abox. */
+    const ulong bg = data->lelem_to_gbox[e];
+    const uint ilb = data->gbox_to_lbox[bg] - 1;
+
+    const double *const Ae = &A[(size_t)e * nv * nv];          /* Ae(i,j) */
+    const double *const phi = &data->phi[(size_t)e * nv * nv]; /* phi(iv,jb) */
+    double *const Ac = &data->abox[(size_t)ilb * nv * nv];     /* Ac(a,b) */
+
+    /* Ac(a,b) += sum_{i,j} phi(i,a) * Ae(i,j) * phi(j,b) */
+    for (uint a = 0; a < nv; a++) {
+      for (uint b = 0; b < nv; b++) {
+        double sum = 0.0;
+        for (uint i = 0; i < nv; i++) {
+          double aij_phi = 0.0;
+          for (uint j = 0; j < nv; j++)
+            aij_phi += Ae[i * nv + j] * phi[j * nv + b];
+          sum += phi[i * nv + a] * aij_phi;
+        }
+        Ac[a * nv + b] += sum;
+      }
+    }
+  }
 }
 
 /*----------------------------------------------------------------------
@@ -169,12 +233,13 @@ static void free_asm2_data(struct asm2 *const data) {
   free(data->lelem_to_gbox), data->lelem_to_gbox = NULL;
   free(data->gbox_to_lbox), data->gbox_to_lbox = NULL;
   free(data->phi), data->phi = NULL;
+  free(data->abox), data->abox = NULL;
 }
 
 struct xxt *crs_asm2_setup(const uint ne, const uint nd, const uint nv,
                            const double *const xyz,
-                           const double *const centroid, const uint nbx,
-                           const uint nby, const uint nbz,
+                           const double *const centroid, const double *const A,
+                           const uint nbx, const uint nby, const uint nbz,
                            const struct comm *const c) {
   struct asm2 data;
   data.ne = ne, data.nd = nd, data.nv = nv;
@@ -195,6 +260,8 @@ struct xxt *crs_asm2_setup(const uint ne, const uint nd, const uint nv,
   }
 
   find_crs_interp(&data, xyz, centroid);
+
+  assemble_box_system(&data, A);
 
   free_asm2_data(&data);
 
