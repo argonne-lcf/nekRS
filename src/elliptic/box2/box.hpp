@@ -10,7 +10,7 @@ struct box {
 
 void crs_overlap(uint *nei, slong *eids, uint nv, slong *vids, double *xyz,
                  double *mat, sint *frontier, uint nw, sint *wids,
-                 MPI_Comm comm, uint max_ne);
+                 MPI_Comm comm, uint max_ne, uint dbg);
 
 void *crs_asm1_setup(uint n, const ulong *const id, uint nnz,
                      const uint *const Ai, const uint *const Aj,

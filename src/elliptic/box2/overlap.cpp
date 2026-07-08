@@ -31,24 +31,41 @@ static int binary_search(ulong eid, struct eid_t *pe, uint n) {
   return -1;
 }
 
+struct vtx_t {
+  ulong vid;
+  ulong eid, nid;
+  uint seq;
+  uint p, np;
+};
+
+struct req_t {
+  ulong eid;
+  uint p, seq;
+};
+
+struct res_t {
+  ulong eid, nid;
+  uint p, np;
+};
+
 void crs_overlap(uint *nei, slong *eids, uint nv, slong *vids, double *xyz,
                  double *mat, sint *frontier, uint nw, sint *wids,
-                 MPI_Comm comm, uint max_ne) {
+                 MPI_Comm comm, uint max_ne, uint dbg) {
   const size_t ne = *nei;
   const unsigned ndim = (nv == 8) ? 3 : 2;
-  // 1. Find neighbor elements of input elements based on vertex connectivity.
-  struct vtx_t {
-    ulong vid;
-    ulong eid, nid;
-    uint seq;
-    uint p, np;
-  };
-
-  struct array vtxs;
-  array_init(struct vtx_t, &vtxs, ne * nv);
 
   struct comm c;
   comm_init(&c, comm);
+
+  struct crystal cr;
+  crystal_init(&cr, &c);
+
+  buffer bfr;
+  buffer_init(&bfr, 1024);
+
+  // 1. Find neighbor elements of input elements based on vertex connectivity.
+  struct array vtxs;
+  array_init(struct vtx_t, &vtxs, ne * nv);
 
   struct vtx_t vt = {.np = c.id};
   for (uint e = 0; e < ne; e++) {
@@ -59,12 +76,7 @@ void crs_overlap(uint *nei, slong *eids, uint nv, slong *vids, double *xyz,
     }
   }
 
-  struct crystal cr;
-  crystal_init(&cr, &c);
   sarray_transfer(struct vtx_t, &vtxs, p, 1, &cr);
-
-  buffer bfr;
-  buffer_init(&bfr, 1024);
   sarray_sort(struct vtx_t, vtxs.ptr, vtxs.n, vid, 1, &bfr);
 
   struct array vtx2e;
@@ -146,16 +158,6 @@ void crs_overlap(uint *nei, slong *eids, uint nv, slong *vids, double *xyz,
 
   // 4. Update the frontier by finding new neighbor elements from the previous
   // frontier.
-  struct req_t {
-    ulong eid;
-    uint p, seq;
-  };
-
-  struct res_t {
-    ulong eid, nid;
-    uint p, np;
-  };
-
   struct array rqsts;
   array_init(struct req_t, &rqsts, ne);
 
@@ -204,7 +206,8 @@ void crs_overlap(uint *nei, slong *eids, uint nv, slong *vids, double *xyz,
     sarray_transfer(struct res_t, &respns, p, 1, &cr);
     sarray_sort_2(struct res_t, respns.ptr, respns.n, eid, 1, nid, 1, &bfr);
 
-    // Update the map with the new elements and their neighbors.
+    // Update the map with the new elements and their neighbors. Update
+    // (elist, plist, wlist) and (proc, nbrs):
     struct res_t *prs = (struct res_t *)respns.ptr;
     fs = fe, s = 0;
     while (s < respns.n) {
@@ -314,7 +317,6 @@ void crs_overlap(uint *nei, slong *eids, uint nv, slong *vids, double *xyz,
     }
   }
   array_free(&extended);
-  free(elist), free(wlist), free(plist);
 
   // 8. Setup the Frontier array.
   for (uint e = 0; e < fe; e++) {
@@ -332,6 +334,30 @@ void crs_overlap(uint *nei, slong *eids, uint nv, slong *vids, double *xyz,
   gs(frontier, gs_int, gs_min, 0, gsh, &bfr);
   gs_free(gsh), comm_free(&lc);
 
+  if (dbg == 1) {
+    char file_name[BUFSIZ];
+    snprintf(file_name, BUFSIZ, "overlap_%06d.txt", c.id);
+
+    FILE *fp = fopen(file_name, "w+");
+    if (!fp) {
+      perror("Unable to open file for writing!");
+      goto free_resources;
+    }
+
+    fprintf(fp, "eid,wid,pid,x1,y1,z1,...x8,y8,z8\n");
+    for (uint i = 0; i < fe; i++) {
+      fprintf(fp, "%lld,%d,%d", elist[i], wlist[i], plist[i]);
+      for (uint v = 0; v < nv; v++) {
+        for (uint d = 0; d < ndim; d++)
+          fprintf(fp, ",%lf", xyz[i * nv * ndim + v * ndim + d]);
+      }
+      fprintf(fp, "\n");
+    }
+    fclose(fp);
+  }
+
+free_resources:
+  free(elist), free(wlist), free(plist);
   buffer_free(&bfr), crystal_free(&cr), comm_free(&c);
 
   return;

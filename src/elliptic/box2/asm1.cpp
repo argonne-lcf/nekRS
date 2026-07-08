@@ -2,7 +2,7 @@
 #include "xxt.hpp"
 
 struct asm1 {
-  uint un, sn, cn;       /* User size, Schwarz size,compressed size */
+  uint un, sn, cn;       /* User size, Schwarz size, compressed size */
   real *sx, *srhs, *sim; /* Schwarz/XXT work arrays on CPU */
   void *solver;          /* Pointer to the asm1 solver */
   struct gs_data *ras;   /* RAS */
@@ -52,7 +52,7 @@ void *crs_asm1_setup(uint n, const ulong *const id, uint nnz,
   sint *wids = tcalloc(sint, mne);
 
   // Call fetch neighbors.
-  crs_overlap(&ne, eids, nv, vtx, xyz, va, frontier, nw, wids, c->c, mne);
+  crs_overlap(&ne, eids, nv, vtx, xyz, va, frontier, nw, wids, c->c, mne, 1);
   const uint sn = asm1->sn = ne * nv;
 
   // Allocate work arrays: needs sn to be set.
