@@ -12,14 +12,25 @@ static struct box *box_init(const uint ne, const uint nd, const uint nv,
   return b;
 }
 
-static void inv_mul_setup(const slong *const id, const struct comm *const c,
-                          struct box *const box) {
-  const uint nu = box->nu;
+static void dssum_setup(slong *const id, const struct comm *const c,
+                        struct box *const box) {
+  const uint nu = box->nu, ns = box->ns;
+
+  // setup inverse multiplicity.
   struct gs_data *gsh = gs_setup(id, nu, c, 0, gs_auto, 0);
   for (uint i = 0; i < nu; i++) box->sim[i] = 1.0;
   gs(box->sim, gs_real, gs_add, 0, gsh, &box->bfr);
   for (uint i = 0; i < nu; i++) box->sim[i] = 1.0 / box->sim[i];
   gs_free(gsh);
+
+  // setup gs to bring in data for RAS.
+  for (uint i = nu; i < ns; i++) id[i] = -id[i];
+  box->ras = gs_setup((const slong *)id, ns, c, 0, gs_auto, 0);
+}
+
+static void dssum(real *v, struct box *const box) {
+  gs(v, gs_real, gs_add, 0, box->ras, &box->bfr);
+  for (uint i = 0; i < box->nu; i++) v[i] = box->sim[i] * v[i];
 }
 
 struct box *crs_box_setup(const uint n, const ulong *const id, const uint nnz,
@@ -55,8 +66,8 @@ struct box *crs_box_setup(const uint n, const ulong *const id, const uint nnz,
 
   struct box *box = box_init(ne, nd, nv, nu, ns);
 
-  // setup inverse multiplicity
-  inv_mul_setup(id_, c, box);
+  // setup dssum
+  dssum_setup(id_, c, box);
 
   // setup asm1
   if (opts->algo == ASM1 || opts->algo == BOX)
@@ -75,13 +86,9 @@ struct box *crs_box_setup(const uint n, const ulong *const id, const uint nnz,
 void crs_box_solve(occa::memory &o_x, struct box *box, occa::memory &o_rhs) {
   o_rhs.copyTo(box->srhs, box->nu);
 
-  gs(box->srhs, gs_real, gs_add, 0, box->ras, &box->bfr);
-  for (uint i = 0; i < box->nu; i++) box->srhs[i] = box->sim[i] * box->srhs[i];
-
+  dssum(box->srhs, box);
   crs_xxt_solve(box->sx, (struct xxt *)box->asm1, box->srhs);
-
-  gs(box->sx, gs_real, gs_add, 0, box->ras, &box->bfr);
-  for (uint i = 0; i < box->nu; i++) box->sx[i] = box->sim[i] * box->sx[i];
+  dssum(box->sx, box);
 
   o_x.copyFrom(box->sx, box->nu);
 }

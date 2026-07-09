@@ -1,7 +1,7 @@
 #include "box.hpp"
 #include "xxt.hpp"
 
-void crs_asm1_setup(slong *const id, const sint *const front,
+void crs_asm1_setup(const slong *const id, const sint *const front,
                     const double *const A, const struct comm *const c,
                     struct box *const box) {
   const uint ns = box->ns, nv = box->nv;
@@ -30,10 +30,6 @@ void crs_asm1_setup(slong *const id, const sint *const front,
                             0 /* null space */, &lc);
   free(masked_ids), free(Ai), free(Aj);
   comm_free(&lc);
-
-  // setup gs to bring in data for RAS.
-  for (uint i = box->nu; i < ns; i++) id[i] = -id[i];
-  box->ras = gs_setup((const slong *)id, ns, c, 0, gs_auto, 0);
 }
 
 void crs_asm1_free(struct box *const box) {

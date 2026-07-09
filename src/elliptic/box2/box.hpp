@@ -18,7 +18,7 @@ void crs_overlap(uint *nei, uint nd, uint nv, slong *vids, double *xyz,
                  MPI_Comm comm, uint max_ne, uint dbg);
 
 /* ASM1 */
-void crs_asm1_setup(slong *const id, const sint *const frontier,
+void crs_asm1_setup(const slong *const id, const sint *const frontier,
                     const double *const A, const struct comm *const c,
                     struct box *const box);
 void crs_asm1_free(struct box *const box);
@@ -40,4 +40,4 @@ struct box *crs_box_setup(const uint n, const ulong *const id, const uint nnz,
 void crs_box_solve(occa::memory &o_x, struct box *box, occa::memory &o_rhs);
 void crs_box_free(struct box *box);
 
-#endif
+#endif // _CRS_BOX_HPP_
