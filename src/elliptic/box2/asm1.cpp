@@ -1,7 +1,7 @@
 #include "box.hpp"
 #include "xxt.hpp"
 
-void crs_asm1_setup(slong *const id, const sint *const frontier,
+void crs_asm1_setup(slong *const id, const sint *const front,
                     const double *const A, const struct comm *const c,
                     struct box *const box) {
   const uint ns = box->ns, nv = box->nv;
@@ -18,7 +18,6 @@ void crs_asm1_setup(slong *const id, const sint *const frontier,
     }
   }
 
-  // Setup ASM1. First, setup an isolated comm for each MPI process.
   struct comm lc;
   MPI_Comm local;
   MPI_Comm_split(c->c, c->id, c->id, &local);
@@ -26,22 +25,14 @@ void crs_asm1_setup(slong *const id, const sint *const frontier,
   MPI_Comm_free(&local);
 
   ulong *masked_ids = tcalloc(ulong, ns);
-  for (uint i = 0; i < ns; i++) masked_ids[i] = id[i] * !frontier[i];
+  for (uint i = 0; i < ns; i++) masked_ids[i] = id[i] * !front[i];
   box->asm1 = crs_xxt_setup(ns, masked_ids, nnz, Ai, Aj, A, gs_real,
                             0 /* null space */, &lc);
   free(masked_ids), free(Ai), free(Aj);
   comm_free(&lc);
 
-  // Setup inverse multiplicity.
-  const uint nu = box->nu;
-  struct gs_data *gsh = gs_setup((const slong *)id, nu, c, 0, gs_auto, 0);
-  for (uint i = 0; i < nu; i++) box->sim[i] = 1.0;
-  gs(box->sim, gs_real, gs_add, 0, gsh, &box->bfr);
-  for (uint i = 0; i < nu; i++) box->sim[i] = 1.0 / box->sim[i];
-  gs_free(gsh);
-
-  // Setup RAS.
-  for (uint i = nu; i < ns; i++) id[i] = -id[i];
+  // setup gs to bring in data for RAS.
+  for (uint i = box->nu; i < ns; i++) id[i] = -id[i];
   box->ras = gs_setup((const slong *)id, ns, c, 0, gs_auto, 0);
 }
 

@@ -1,8 +1,8 @@
 #include "box.hpp"
 #include "xxt.hpp"
 
-static inline struct box *box_init(const uint ne, const uint nd, const uint nv,
-                                   const uint nu, const uint ns) {
+static struct box *box_init(const uint ne, const uint nd, const uint nv,
+                            const uint nu, const uint ns) {
   struct box *b = tcalloc(struct box, 1);
   b->ne = ne, b->nd = nd, b->nv = nv, b->nu = nu, b->ns = ns;
   b->sx = tcalloc(real, b->ns);
@@ -10,6 +10,16 @@ static inline struct box *box_init(const uint ne, const uint nd, const uint nv,
   b->sim = tcalloc(real, b->ns);
   buffer_init(&b->bfr, 1024);
   return b;
+}
+
+static void inv_mul_setup(const slong *const id, const struct comm *const c,
+                          struct box *const box) {
+  const uint nu = box->nu;
+  struct gs_data *gsh = gs_setup(id, nu, c, 0, gs_auto, 0);
+  for (uint i = 0; i < nu; i++) box->sim[i] = 1.0;
+  gs(box->sim, gs_real, gs_add, 0, gsh, &box->bfr);
+  for (uint i = 0; i < nu; i++) box->sim[i] = 1.0 / box->sim[i];
+  gs_free(gsh);
 }
 
 struct box *crs_box_setup(const uint n, const ulong *const id, const uint nnz,
@@ -36,17 +46,21 @@ struct box *crs_box_setup(const uint n, const ulong *const id, const uint nnz,
   double *coord_ = tcalloc(double, nd * nv * mne);
   memcpy(coord_, coord, sizeof(double) * nd * nv * ne);
 
-  // Call fetch neighbors.
-  sint *frontier = tcalloc(sint, nv * mne);
-  sint *wids = tcalloc(sint, mne);
+  // fetch neighbors.
+  sint *front = tcalloc(sint, nv * mne);
+  sint *wid = tcalloc(sint, mne);
   uint se = ne;
-  crs_overlap(&se, nd, nv, id_, coord_, A_, frontier, opts->nw, wids, c->c, mne,
-              0);
+  crs_overlap(&se, nd, nv, id_, coord_, A_, front, opts->nw, wid, c->c, mne, 0);
   const uint ns = se * nv;
 
   struct box *box = box_init(ne, nd, nv, nu, ns);
+
+  // setup inverse multiplicity
+  inv_mul_setup(id_, c, box);
+
+  // setup asm1
   if (opts->algo == ASM1 || opts->algo == BOX)
-    crs_asm1_setup(id_, frontier, A_, c, box);
+    crs_asm1_setup(id_, front, A_, c, box);
 
 #if 0
   if (opts->algo == ASM2 || opts->algo == BOX)
@@ -54,7 +68,7 @@ struct box *crs_box_setup(const uint n, const ulong *const id, const uint nnz,
 #endif
 
   free(id_), free(A_), free(coord_);
-  free(frontier), free(wids);
+  free(front), free(wid);
   return box;
 }
 
