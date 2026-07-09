@@ -19,6 +19,8 @@ struct asm2 {
   double *abox; /* nbox 8x8 matrices, one per active box */
 };
 
+#define MIN(a, b) (((a) <= (b)) ? (a) : (b))
+#define MAX(a, b) (((a) >= (b)) ? (a) : (b))
 #define IDX3(E, V, D) (nv * nd * E + nd * V + D)
 
 /*----------------------------------------------------------------------
@@ -28,8 +30,8 @@ struct asm2 {
  *--------------------------------------------------------------------*/
 static void domain_size(struct asm2 *const data, const double *const xyz,
                         const struct comm *const c) {
-  const uint ne = data->ne, nd = data->nd, nv = data->nv;
-  assert(nd <= 3);
+  const uint ne = data->ne, nv = data->nv;
+  const uint nd = MIN(3, data->nd);
 
   double min[3], max[3], wrk[3];
   for (uint d = 0; d < nd; d++) min[d] = DBL_MAX, max[d] = -DBL_MAX;
@@ -37,8 +39,8 @@ static void domain_size(struct asm2 *const data, const double *const xyz,
   for (uint e = 0; e < ne; e++) {
     for (uint v = 0; v < nv; v++) {
       for (uint d = 0; d < nd; d++) {
-        if (xyz[IDX3(e, v, d)] < min[d]) min[d] = xyz[IDX3(e, v, d)];
-        if (xyz[IDX3(e, v, d)] > max[d]) max[d] = xyz[IDX3(e, v, d)];
+        min[d] = MIN(xyz[IDX3(e, v, d)], min[d]);
+        max[d] = MAX(xyz[IDX3(e, v, d)], max[d]);
       }
     }
   }
@@ -55,12 +57,10 @@ static void domain_size(struct asm2 *const data, const double *const xyz,
 /*----------------------------------------------------------------------
  *  set_crs_box_dims
  *
- *  Size the structured box grid from the global domain extent and fill
- *  the box vertex coordinate table; zero the per-box matrices.
+ *  Calculate the extents of the structured coarse grid and find box
+ *  sizes dx, dy and dz.
  *--------------------------------------------------------------------*/
 static void set_crs_box_dims(struct asm2 *data) {
-  assert(data->nd == 3 && "Only 3D meshes are supported");
-
   const double xmax = data->mnmx[0][1], xmin = data->mnmx[0][0];
   const double ymax = data->mnmx[1][1], ymin = data->mnmx[1][0];
   const double zmax = data->mnmx[2][1], zmin = data->mnmx[2][0];
@@ -85,36 +85,33 @@ static void set_crs_box_dims(struct asm2 *data) {
   data->mnmx[2][0] = z0;
   data->mnmx[2][1] = z1;
 
-  dx = data->dx[0] = (x1 - x0) / data->nbx;
-  dy = data->dx[1] = (y1 - y0) / data->nby;
-  dz = data->dx[2] = (z1 - z0) / data->nbz;
+  data->dx[0] = (x1 - x0) / data->nbx;
+  data->dx[1] = (y1 - y0) / data->nby;
+  data->dx[2] = (z1 - z0) / data->nbz;
 }
 
 /*----------------------------------------------------------------------
  * find_crs_interp
  *
  * Find the coarse box to which each spectral element belongs to and
- * then find the prolongation operator from local elements to coarse
- * boxes.
+ * then find the interpolation operator from coarse box vertices to
+ * Q1 mesh element vertices (phi).
  *--------------------------------------------------------------------*/
 void find_crs_interp(struct asm2 *const data, const double *const xyz,
                      const double *const centroid) {
-  const uint ne = data->ne;
-  const uint nv = data->nv;
-  const uint nd = data->nd;
-  const uint nbx = data->nbx;
-  const uint nby = data->nby;
-  const uint nbz = data->nbz;
-  const ulong nbxyz = (ulong)nbx * (ulong)nby * (ulong)nbz;
+  const uint ne = data->ne, nv = data->nv, nd = data->nd;
+  const uint nbx = data->nbx, nby = data->nby, nbz = data->nbz;
 
   data->lelem_to_gbox = tcalloc(ulong, ne);
   data->phi = tcalloc(double, ne * nv * nv);
+
+  const ulong nbxyz = (ulong)nbx * (ulong)nby * (ulong)nbz;
   data->gbox_to_lbox = tcalloc(uint, nbxyz);
 
   const double x0 = data->mnmx[0][0], dx = data->dx[0];
   const double y0 = data->mnmx[1][0], dy = data->dx[1];
   const double z0 = data->mnmx[2][0], dz = data->dx[2];
-  uint nbox = 0;
+  data->nbox = 0;
   for (uint e = 0; e < ne; e++) {
     double x = centroid[e * nd + 0];
     double y = centroid[e * nd + 1];
@@ -130,7 +127,7 @@ void find_crs_interp(struct asm2 *const data, const double *const xyz,
     ulong bg = ig + nbx * jg + nbx * nby * kg;
 
     data->lelem_to_gbox[e] = bg;
-    if (data->gbox_to_lbox[bg] == 0) data->gbox_to_lbox[bg] = ++nbox;
+    if (data->gbox_to_lbox[bg] == 0) data->gbox_to_lbox[bg] = ++data->nbox;
 
     double xm = x0 + ig * dx, xM = x0 + (ig + 1) * dx;
     double ym = y0 + jg * dy, yM = y0 + (jg + 1) * dy;
@@ -160,34 +157,17 @@ void find_crs_interp(struct asm2 *const data, const double *const xyz,
       data->phi[e * nv * nv + v * nv + 7] = phi1_r * phi1_s * phi1_t;
     }
   }
-
-  data->nbox = nbox;
 }
 
 /*----------------------------------------------------------------------
  * assemble_box_system
  *
  * Build the structured-grid (box) coarse operator.
+ *     Abox(:,:,b) += phi_e^T * A_e * phi_e
  *
- * Fortran (nrs_set_global_crs / box_src.f) computes, per element e:
- *
- *     Abox(:,:,ilb) += phi_e^T * A_e * phi_e
- *
- * where A_e is the 8x8 SEM Galerkin operator for element e (`asem`),
- * phi_e(iv,jb) is the value of coarse box basis function jb at SEM
- * vertex iv (already Dirichlet-masked), and ilb is the local index of
- * the box that element e belongs to.  This mirrors the `asem`/`abox`
- * accumulation loop in the Fortran.
- *
- * Storage note (C vs Fortran):
- *   - Fortran arrays asem(lcr,lcr,e), phi_e(lcr,lcr,e), abox(lcr,lcr,l)
- *     are column-major: element (i,j) lives at i + lcr*j.
- *   - Here `A` arrives in the layout used by crs_asm1_setup(): row-major
- *     8x8 blocks, A[e*nv*nv + i*nv + j] = A_e(row i, col j).
- *   - data->phi is row-major with row = SEM vertex, col = box basis:
- *     phi[e*nv*nv + iv*nv + jb] = phi_e(iv, jb), matching the Fortran
- *     phi_e(iv,jb) indexing.
- *   - We store abox row-major as well: abox[l*nv*nv + a*nv + b].
+ * where A_e is the 8x8 SEM Galerkin operator for element e and phi_e
+ * is the value of coarse box basis function evaluated at the element
+ * vertices.
  *--------------------------------------------------------------------*/
 static void assemble_box_system(struct asm2 *const data,
                                 const double *const A) {
@@ -201,11 +181,11 @@ static void assemble_box_system(struct asm2 *const data,
     /* Local (compressed) box index for this element; gbox_to_lbox is
      * 1-based (0 == inactive), so subtract 1 to index abox. */
     const ulong bg = data->lelem_to_gbox[e];
-    const uint ilb = data->gbox_to_lbox[bg] - 1;
+    const uint lb = data->gbox_to_lbox[bg] - 1;
 
     const double *const Ae = &A[(size_t)e * nv * nv];          /* Ae(i,j) */
     const double *const phi = &data->phi[(size_t)e * nv * nv]; /* phi(iv,jb) */
-    double *const Ac = &data->abox[(size_t)ilb * nv * nv];     /* Ac(a,b) */
+    double *const Ac = &data->abox[(size_t)lb * nv * nv];      /* Ac(a,b) */
 
     /* Ac(a,b) += sum_{i,j} phi(i,a) * Ae(i,j) * phi(j,b) */
     for (uint a = 0; a < nv; a++) {
@@ -248,6 +228,7 @@ struct xxt *crs_asm2_setup(const double *const xyz,
   domain_size(&data, xyz, c);
 
   set_crs_box_dims(&data);
+
   if (c->id == 0) {
     printf("%g %g box domain x %d\n", data.mnmx[0][0], data.mnmx[0][1],
            data.nbx);
@@ -270,3 +251,5 @@ struct xxt *crs_asm2_setup(const double *const xyz,
 void crs_asm2_free(struct box *const box) { crs_xxt_free(box->asm2); }
 
 #undef IDX3
+#undef MAX
+#undef MIN

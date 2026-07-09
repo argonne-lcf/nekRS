@@ -66,17 +66,13 @@ struct box *crs_box_setup(const uint n, const ulong *const id, const uint nnz,
 
   struct box *box = box_init(ne, nd, nv, nu, ns);
 
-  // setup dssum
   dssum_setup(id_, c, box);
 
-  // setup asm1
   if (opts->algo == ASM1 || opts->algo == BOX)
     crs_asm1_setup(id_, front, A_, c, box);
 
-#if 0
   if (opts->algo == ASM2 || opts->algo == BOX)
     crs_asm2_setup(coord, centroid, A, opts->nbx, opts->nby, opts->nbz, c, box);
-#endif
 
   free(id_), free(A_), free(coord_);
   free(front), free(wid);
@@ -96,9 +92,8 @@ void crs_box_solve(occa::memory &o_x, struct box *box, occa::memory &o_rhs) {
 void crs_box_free(struct box *box) {
   if (!box) return;
   crs_asm1_free(box);
-#if 0
   crs_asm2_free(box);
-#endif
+  gs_free(box->ras);
   free(box->sx), free(box->srhs), free(box->sim);
   buffer_free(&box->bfr);
   free(box);

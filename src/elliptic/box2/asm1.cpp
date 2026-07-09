@@ -32,7 +32,4 @@ void crs_asm1_setup(const slong *const id, const sint *const front,
   comm_free(&lc);
 }
 
-void crs_asm1_free(struct box *const box) {
-  gs_free(box->ras);
-  crs_xxt_free(box->asm1);
-}
+void crs_asm1_free(struct box *const box) { crs_xxt_free(box->asm1); }
